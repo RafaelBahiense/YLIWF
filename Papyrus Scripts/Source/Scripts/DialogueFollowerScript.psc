@@ -29,10 +29,6 @@ Event OnInit()
 	SyncSFFFollowerState()
 EndEvent
 
-Event OnPlayerLoadGame()
-	SyncSFFFollowerState()
-EndEvent
-
 Function SFF_SetLastSpeaker(Actor akActor)
 	If !akActor
 		Return
@@ -53,6 +49,7 @@ Actor Function SFF_GetPrimaryFollower()
 	Actor a = pFollowerAlias.GetActorReference()
 	If a && a.IsDead()
 		SFF_SKSE.RestoreFollowerEssential(a)
+		pFollowerAlias.UnregisterForUpdateGameTime()
 		pFollowerAlias.Clear()
 		If SFFLastSpeaker == a
 			SFFLastSpeaker = None
@@ -110,6 +107,7 @@ Int Function SFF_CleanupDeadExtraFollowers()
 					SFFLastSpeaker = None
 				EndIf
 				SFF_SKSE.RestoreFollowerEssential(current)
+				a.UnregisterForUpdateGameTime()
 				a.Clear()
 				removed += 1
 			EndIf
@@ -168,6 +166,23 @@ Bool Function IsManagedFollower(Actor akActor)
 	Return False
 EndFunction
 
+ReferenceAlias Function SFF_GetAliasForActor(Actor akActor)
+	If !akActor
+		Return None
+	EndIf
+
+	If pFollowerAlias.GetActorReference() == akActor
+		Return pFollowerAlias
+	EndIf
+
+	Int idx = SFF_GetExtraAliasIndexByActor(akActor)
+	If idx < 0
+		Return None
+	EndIf
+
+	Return SFFExtraAliases[idx]
+EndFunction
+
 Bool Function SFF_AddExtraFollowerAlias(Actor akActor)
 	If !akActor
 		Return False
@@ -193,27 +208,6 @@ Bool Function SFF_AddExtraFollowerAlias(Actor akActor)
 	Return True
 EndFunction
 
-Bool Function SFF_RemoveExtraFollowerAlias(Actor akActor)
-	If !akActor
-		Return False
-	EndIf
-
-	Int idx = SFF_GetExtraAliasIndexByActor(akActor)
-	If idx < 0
-		Return False
-	EndIf
-
-	ReferenceAlias a = SFFExtraAliases[idx]
-
-	If SFFLastSpeaker == akActor
-		SFFLastSpeaker = None
-	EndIf
-
-	SFF_SKSE.RestoreFollowerEssential(akActor)
-	a.Clear()
-	Return True
-EndFunction
-
 Actor Function SFF_PopFirstExtraFollower()
 	SFF_CleanupDeadExtraFollowers()
 
@@ -227,7 +221,7 @@ Actor Function SFF_PopFirstExtraFollower()
 				If SFFLastSpeaker == current
 					SFFLastSpeaker = None
 				EndIf
-				SFF_SKSE.RestoreFollowerEssential(current)
+				a.UnregisterForUpdateGameTime()
 				a.Clear()
 				Return current
 			EndIf
@@ -276,6 +270,10 @@ EndFunction
 
 Function SyncSFFFollowerState()
 	Actor primary = SFF_GetPrimaryFollower()
+	If !primary
+		SFF_PromoteExtraToPrimaryIfNeeded()
+		primary = SFF_GetPrimaryFollower()
+	EndIf
 
 	iSFFFollowerCount = SFF_GetExtraFollowerCount()
 	If primary
@@ -322,13 +320,13 @@ Function ShowFollowerDismissMessageByType(Int iMessage)
 	EndIf
 EndFunction
 
-Function CleanupDismissedFollowerActor(Actor DismissedFollowerActor, Int iSayLine = 1, Bool abUnregisterPrimaryTimer = False)
+Function CleanupDismissedFollowerActor(Actor DismissedFollowerActor, Int iSayLine = 1, ReferenceAlias akOwnAlias = None)
 	If !DismissedFollowerActor
 		Return
 	EndIf
 
-	If abUnregisterPrimaryTimer
-		pFollowerAlias.UnregisterForUpdateGameTime()
+	If akOwnAlias
+		akOwnAlias.UnregisterForUpdateGameTime()
 	EndIf
 
 	DismissedFollowerActor.StopCombatAlarm()
@@ -358,6 +356,10 @@ Function SFF_PromoteExtraToPrimaryIfNeeded()
 	Actor promoted = SFF_PopFirstExtraFollower()
 	If promoted
 		pFollowerAlias.ForceRefTo(promoted)
+		SFF_SKSE.ApplyFollowerEssential(promoted)
+		If promoted.GetAV("WaitingForPlayer") == 1
+			pFollowerAlias.RegisterForUpdateGameTime(72)
+		EndIf
 		promoted.EvaluatePackage()
 	EndIf
 EndFunction
@@ -404,6 +406,7 @@ Function SetFollower(ObjectReference FollowerRef)
 		EndIf
 
 		PrepareFollowerActor(FollowerActor)
+		SFF_SKSE.ApplyFollowerEssential(FollowerActor)
 
 		If pFollowerAlias.GetActorReference() != CurrentFollowerActor
 			pFollowerAlias.ForceRefTo(CurrentFollowerActor)
@@ -420,6 +423,7 @@ Function SetFollower(ObjectReference FollowerRef)
 
 	PrepareFollowerActor(FollowerActor)
 	pFollowerAlias.ForceRefTo(FollowerActor)
+	SFF_SKSE.ApplyFollowerEssential(FollowerActor)
 	SyncSFFFollowerState()
 EndFunction
 
@@ -438,8 +442,10 @@ EndFunction
 
 Function FollowerWait()
 	SyncSFFFollowerState()
+	SFF_WaitActor(GetDialogueFollowerTarget())
+EndFunction
 
-	Actor FollowerActor = GetDialogueFollowerTarget()
+Function SFF_WaitActor(Actor FollowerActor)
 	If !FollowerActor
 		Return
 	EndIf
@@ -447,8 +453,9 @@ Function FollowerWait()
 	FollowerActor.SetAV("WaitingForPlayer", 1)
 	FollowerActor.EvaluatePackage()
 
-	If SFF_IsPrimaryFollower(FollowerActor)
-		pFollowerAlias.RegisterForUpdateGameTime(72)
+	ReferenceAlias ownAlias = SFF_GetAliasForActor(FollowerActor)
+	If ownAlias
+		ownAlias.RegisterForUpdateGameTime(72)
 	EndIf
 EndFunction
 
@@ -464,8 +471,10 @@ EndFunction
 
 Function FollowerFollow()
 	SyncSFFFollowerState()
+	SFF_FollowActor(GetDialogueFollowerTarget())
+EndFunction
 
-	Actor FollowerActor = GetDialogueFollowerTarget()
+Function SFF_FollowActor(Actor FollowerActor)
 	If !FollowerActor
 		Return
 	EndIf
@@ -473,9 +482,13 @@ Function FollowerFollow()
 	FollowerActor.SetAV("WaitingForPlayer", 0)
 	FollowerActor.EvaluatePackage()
 
+	ReferenceAlias ownAlias = SFF_GetAliasForActor(FollowerActor)
+	If ownAlias
+		ownAlias.UnregisterForUpdateGameTime()
+	EndIf
+
 	If SFF_IsPrimaryFollower(FollowerActor)
 		SetObjectiveDisplayed(10, abDisplayed = False)
-		pFollowerAlias.UnregisterForUpdateGameTime()
 	EndIf
 EndFunction
 
@@ -492,48 +505,52 @@ EndFunction
 
 Function DismissFollower(Int iMessage = 0, Int iSayLine = 1)
 	SyncSFFFollowerState()
+	SFF_DismissActor(GetDialogueFollowerTarget(), iMessage, iSayLine)
+EndFunction
 
-	Actor DismissedFollowerActor = GetDialogueFollowerTarget()
+Function SFF_DismissActor(Actor DismissedFollowerActor, Int iMessage = 0, Int iSayLine = 1)
 	If !DismissedFollowerActor
 		Return
 	EndIf
 
-	Bool wasPrimary = SFF_IsPrimaryFollower(DismissedFollowerActor)
-
-	If DismissedFollowerActor.IsDead()
-		If wasPrimary
-			pFollowerAlias.UnregisterForUpdateGameTime()
-			SFF_SKSE.RestoreFollowerEssential(DismissedFollowerActor)
-			pFollowerAlias.Clear()
-		Else
-			SFF_RemoveExtraFollowerAlias(DismissedFollowerActor)
-		EndIf
-
-		SFF_ClearLastSpeakerIfMatches(DismissedFollowerActor)
-
-		SFF_GetPrimaryFollower()
-		SFF_PromoteExtraToPrimaryIfNeeded()
-		SyncSFFFollowerState()
+	ReferenceAlias ownAlias = SFF_GetAliasForActor(DismissedFollowerActor)
+	If !ownAlias
 		Return
 	EndIf
 
-	ShowFollowerDismissMessageByType(iMessage)
+	Bool wasAlive = !DismissedFollowerActor.IsDead()
 
-	CleanupDismissedFollowerActor(DismissedFollowerActor, iSayLine, wasPrimary)
+	If wasAlive
+		ShowFollowerDismissMessageByType(iMessage)
+		CleanupDismissedFollowerActor(DismissedFollowerActor, iSayLine, ownAlias)
+		ownAlias = SFF_GetAliasForActor(DismissedFollowerActor)
+	EndIf
 
-	If wasPrimary
-		SFF_SKSE.RestoreFollowerEssential(DismissedFollowerActor)
-		pFollowerAlias.Clear()
-	Else
-		SFF_RemoveExtraFollowerAlias(DismissedFollowerActor)
+	SFF_SKSE.RestoreFollowerEssential(DismissedFollowerActor)
+
+	If ownAlias
+		ownAlias.UnregisterForUpdateGameTime()
+		ownAlias.Clear()
 	EndIf
 
 	SFF_ClearLastSpeakerIfMatches(DismissedFollowerActor)
 
-	iFollowerDismiss = 0
+	If wasAlive
+		iFollowerDismiss = 0
+	EndIf
 
-	SFF_GetPrimaryFollower()
-	SFF_PromoteExtraToPrimaryIfNeeded()
+	SyncSFFFollowerState()
+EndFunction
+
+Function SFF_HandleFollowerDeath(ReferenceAlias akAlias, Actor akActor)
+	If akAlias
+		akAlias.UnregisterForUpdateGameTime()
+	EndIf
+
+	If akActor
+		akActor.RemoveFromFaction(pCurrentHireling)
+	EndIf
+
 	SyncSFFFollowerState()
 EndFunction
 

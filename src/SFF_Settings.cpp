@@ -23,12 +23,8 @@ namespace SFF_Settings {
     }
 
     static std::string StripQuotes(std::string s) {
-        s = TrimCopy(s);
-        if (s.size() >= 2 && s.front() == '"' && s.back() == '"') s = s.substr(1, s.size() - 2);
-        std::string out;
-        out.reserve(s.size());
-        for (char c : s) if (c != '"') out.push_back(c);
-        return TrimCopy(out);
+        std::erase(s, '"');
+        return TrimCopy(s);
     }
 
     static bool ParsePluginFormPair(const std::string& input, std::string& outFile, std::uint32_t& outLocalFormID) {
@@ -142,5 +138,6 @@ namespace SFF_Settings {
         BuildPerkListBuffer();
         writeStr("sPerkForms", PerkListBuffer);
         WritePrivateProfileStringA("General", "sPerkForm", nullptr, kIniPath);
+        WritePrivateProfileStringA("General", "iFollowerPerkOption", nullptr, kIniPath);
     }
 }

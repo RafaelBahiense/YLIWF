@@ -31,6 +31,7 @@ namespace SFF_Settings {
     inline void (*SandboxCallback)() = nullptr;
     inline void (*CrossfireCallback)() = nullptr;
     inline void (*HomesCallback)() = nullptr;
+    inline void (*EssentialCallback)() = nullptr;
     void Load(bool force = false);
     void Save();
     void ParsePerkListIntoSpecs(const std::string& raw);

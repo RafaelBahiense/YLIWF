@@ -135,6 +135,7 @@ void __stdcall SFF_UI::RenderSettings() {
         if (ImGuiMCP::Checkbox("##EssCheck", &ess)) {
             SFF_Settings::FollowerEssential = ess;
             changed = true;
+            SFF_Settings::EssentialCallback();
         }
         ImGuiMCP::SameLine();
         ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, ess ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f} : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
@@ -257,6 +258,10 @@ void __stdcall SFF_UI::RenderSettings() {
     ImGuiMCP::SameLine(0.0f, 14.0f);
     if (ImGuiMCP::Button("Reload Settings")) {
         SFF_Settings::Load(true);
+        SFF_Settings::FriendlyFireCallback();
+        SFF_Settings::SandboxCallback();
+        SFF_Settings::HomesCallback();
+        SFF_Settings::EssentialCallback();
         changed = true;
     }
     ImGuiMCP::SameLine();
@@ -264,5 +269,4 @@ void __stdcall SFF_UI::RenderSettings() {
     ImGuiMCP::SetWindowFontScale(1.0f);
 
     if (changed) SFF_Settings::ApplyGateCallback();
-    ImGuiMCP::SameLine();
 }

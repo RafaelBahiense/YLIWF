@@ -1,4 +1,4 @@
-Scriptname SFF_SKSE extends Quest
+Scriptname SFF_SKSE Hidden
 
 Bool Function AddVanillaFollower(Actor a) Global Native
 Int Function GetMaxFollowers() Global Native

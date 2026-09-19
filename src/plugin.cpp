@@ -23,24 +23,37 @@ namespace {
     RE::SpellItem* g_friendlyFireSpell = nullptr;
 
     std::unordered_map<RE::FormID, std::uint8_t> g_essOrig{};
+    std::int32_t g_slotCapacity = 8;
 
     constexpr const char* kRequiredPluginName = "Simple Follower Framework.esp";
 
-    template <class T> T* Cached(T*& slot, std::string_view editorID) {
-        if (!slot) {
-            auto* form = RE::TESForm::LookupByEditorID(editorID);
-            slot = form ? form->As<T>() : nullptr;
+    template <class T> T* ResolveForm(RE::FormID localID, std::string_view plugin, std::string_view editorID) {
+        auto* dh = RE::TESDataHandler::GetSingleton();
+        if (auto* form = dh ? dh->LookupForm<T>(localID, plugin) : nullptr) {
+            return form;
         }
-        return slot;
+        auto* form = RE::TESForm::LookupByEditorID(editorID);
+        return form ? form->As<T>() : nullptr;
+    }
+
+    void ResolveForms() {
+        g_playerFollowerCount = ResolveForm<RE::TESGlobal>(0x0BCC98, "Skyrim.esm", "PlayerFollowerCount");
+        g_currentFollowerFaction = ResolveForm<RE::TESFaction>(0x05C84E, "Skyrim.esm", "CurrentFollowerFaction");
+        g_potentialFollowerFaction = ResolveForm<RE::TESFaction>(0x05C84D, "Skyrim.esm", "PotentialFollowerFaction");
+        g_dialogueFollower = ResolveForm<RE::TESQuest>(0x0750BA, "Skyrim.esm", "DialogueFollower");
+        g_sffCanRecruitMore = ResolveForm<RE::TESGlobal>(0x001, kRequiredPluginName, "SFF_CanRecruitMore");
+        g_sffCurrentFollowerCount = ResolveForm<RE::TESGlobal>(0x002, kRequiredPluginName, "SFF_CurrentFollowerCount");
+        g_sffFollowerSandbox = ResolveForm<RE::TESGlobal>(0x805, kRequiredPluginName, "SFF_FollowerSandbox");
+        g_sffFollowerHomes = ResolveForm<RE::TESGlobal>(0x986, kRequiredPluginName, "SFF_FollowerHomes");
+        g_friendlyFireSpell = ResolveForm<RE::SpellItem>(0x800, kRequiredPluginName, "IvyCompanionsSafeSpell");
     }
 
     void SetAbility(RE::Actor* a, bool want) {
-        auto* spell = Cached(g_friendlyFireSpell, "IvyCompanionsSafeSpell");
-        if (!a || !spell || a->HasSpell(spell) == want) return;
+        if (!a || !g_friendlyFireSpell || a->HasSpell(g_friendlyFireSpell) == want) return;
         if (want) {
-            a->AddSpell(spell);
+            a->AddSpell(g_friendlyFireSpell);
         } else {
-            a->RemoveSpell(spell);
+            a->RemoveSpell(g_friendlyFireSpell);
         }
     }
 
@@ -60,14 +73,6 @@ namespace {
     [[noreturn]] void MessageAndExit(const char* msg) {
         MessageBoxA(nullptr, msg, "SimpleFollowerFramework.dll", MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
         ExitProcess(1);
-    }
-
-    bool IsRequiredPluginLoaded() {
-        auto* dh = RE::TESDataHandler::GetSingleton();
-        if (!dh) return false;
-        if (dh->LookupLoadedModByName(kRequiredPluginName)) return true;
-        if (RE::TESForm::LookupByEditorID("SFF_CurrentFollowerCount")) return true;
-        return false;
     }
 
     bool PluginsTxtExplicitlyDisablesRequiredPlugin() {
@@ -105,11 +110,11 @@ namespace {
     }
 
     void ApplySandbox() {
-        if (auto* glob = Cached(g_sffFollowerSandbox, "SFF_FollowerSandbox")) glob->value = SFF_Settings::FollowerSandbox ? 1.0f : 0.0f;
+        if (g_sffFollowerSandbox) g_sffFollowerSandbox->value = SFF_Settings::FollowerSandbox ? 1.0f : 0.0f;
     }
 
     void ApplyHomes() {
-        if (auto* glob = Cached(g_sffFollowerHomes, "SFF_FollowerHomes")) glob->value = SFF_Settings::FollowerHomes ? 1.0f : 0.0f;
+        if (g_sffFollowerHomes) g_sffFollowerHomes->value = SFF_Settings::FollowerHomes ? 1.0f : 0.0f;
     }
 
     bool HasPerkFromSpec(const std::string& file, std::uint32_t localID) {
@@ -117,8 +122,9 @@ namespace {
         if (!player) return false;
         auto* dh = RE::TESDataHandler::GetSingleton();
         if (!dh) return false;
-        auto* form = dh->LookupForm(localID, file);
-        auto* perk = form ? form->As<RE::BGSPerk>() : nullptr;
+        auto* mod = dh->LookupModByName(file);
+        if (!mod) return false;
+        auto* perk = dh->LookupForm<RE::BGSPerk>(localID & (mod->IsLight() ? 0xFFFu : 0xFFFFFFu), file);
         return perk && player->HasPerk(perk);
     }
 
@@ -150,20 +156,32 @@ namespace {
         return GetSpeechBasedFollowerCap();
     }
 
-    void ApplyFollowerDialogueGate() {
-        auto* followerCount = Cached(g_playerFollowerCount, "PlayerFollowerCount");
-        if (!followerCount) return;
+    std::int32_t GetEffectiveFollowerCap() { return std::min(GetTotalFollowerCapFromSettings(), g_slotCapacity); }
 
-        auto* current = Cached(g_sffCurrentFollowerCount, "SFF_CurrentFollowerCount");
-        const bool canRecruitMore = (current ? std::max(static_cast<int>(current->value), 0) : 0) < GetTotalFollowerCapFromSettings();
-        followerCount->value = canRecruitMore ? 0.0f : 1.0f;
-        if (auto* canRecruit = Cached(g_sffCanRecruitMore, "SFF_CanRecruitMore")) canRecruit->value = canRecruitMore ? 1.0f : 0.0f;
+    void CountFollowerSlots() {
+        if (!g_dialogueFollower) {
+            return;
+        }
+        std::int32_t slots = 1;
+        for (auto* alias : g_dialogueFollower->aliases) {
+            if (alias && std::string_view(alias->aliasName.c_str()).starts_with("ExtraFollower")) {
+                ++slots;
+            }
+        }
+        g_slotCapacity = slots;
     }
 
-    bool IsInServiceEssential(RE::Actor* a) {
-        auto* current = Cached(g_currentFollowerFaction, "CurrentFollowerFaction");
-        return a && current && a->IsInFaction(current) && a->IsPlayerTeammate();
+    void ApplyFollowerDialogueGate(RE::Actor* speaker) {
+        if (!g_playerFollowerCount) return;
+
+        const int count = g_sffCurrentFollowerCount ? std::max(static_cast<int>(g_sffCurrentFollowerCount->value), 0) : 0;
+        const bool canRecruitMore = count < GetEffectiveFollowerCap();
+        const bool hireable = speaker && !speaker->IsDead() && g_potentialFollowerFaction && speaker->IsInFaction(g_potentialFollowerFaction) && !speaker->IsPlayerTeammate() && !(g_currentFollowerFaction && speaker->IsInFaction(g_currentFollowerFaction));
+        g_playerFollowerCount->value = hireable ? (canRecruitMore ? 0.0f : 1.0f) : (count > 0 ? 1.0f : 0.0f);
+        if (g_sffCanRecruitMore) g_sffCanRecruitMore->value = canRecruitMore ? 1.0f : 0.0f;
     }
+
+    bool IsInServiceEssential(RE::Actor* a) { return a && g_currentFollowerFaction && a->IsInFaction(g_currentFollowerFaction) && a->IsPlayerTeammate(); }
 
     void SetBaseFlag(RE::TESNPC* base, RE::ACTOR_BASE_DATA::Flag flag, bool on) {
         if (on) {
@@ -173,13 +191,26 @@ namespace {
         }
     }
 
+    void ApplyOriginalFlags(RE::TESNPC* base, std::uint8_t orig) {
+        SetBaseFlag(base, RE::ACTOR_BASE_DATA::Flag::kEssential, orig & 1);
+        SetBaseFlag(base, RE::ACTOR_BASE_DATA::Flag::kProtected, orig & 2);
+    }
+
     bool RestoreEssentialFlags(RE::TESNPC* base) {
         auto it = g_essOrig.find(base->GetFormID());
         if (it == g_essOrig.end()) return false;
-        SetBaseFlag(base, RE::ACTOR_BASE_DATA::Flag::kEssential, it->second & 1);
-        SetBaseFlag(base, RE::ACTOR_BASE_DATA::Flag::kProtected, it->second & 2);
+        ApplyOriginalFlags(base, it->second);
         g_essOrig.erase(it);
         return true;
+    }
+
+    void RestoreAllEssentialFlags() {
+        for (const auto& [formID, orig] : g_essOrig) {
+            if (auto* base = RE::TESForm::LookupByID<RE::TESNPC>(formID)) {
+                ApplyOriginalFlags(base, orig);
+            }
+        }
+        g_essOrig.clear();
     }
 
     void UpdateEssentialForActor(RE::Actor* a) {
@@ -196,14 +227,14 @@ namespace {
     }
 
     void SyncParty(bool pull) {
-        auto* quest = Cached(g_dialogueFollower, "DialogueFollower");
-        if (!quest) return;
+        if (!g_dialogueFollower) return;
         auto* player = RE::PlayerCharacter::GetSingleton();
-        for (auto* alias : quest->aliases) {
+        for (auto* alias : g_dialogueFollower->aliases) {
             if (!alias || alias->GetVMTypeID() != RE::BGSRefAlias::VMTYPEID) continue;
             auto* a = static_cast<RE::BGSRefAlias*>(alias)->GetActorReference();
             if (!a) continue;
             const bool inService = IsInServiceEssential(a);
+            UpdateEssentialForActor(a);
             ApplyCrossfireForActor(a, SFF_Settings::FollowerCrossfire && inService);
             if (pull && inService && !a->IsOnMount() && a->AsActorValueOwner()->GetActorValue(RE::ActorValue::kWaitingForPlayer) == 0.0f && a->GetParentCell() != player->GetParentCell()) a->MoveTo(player);
         }
@@ -229,17 +260,15 @@ namespace {
 
     bool AddVanillaFollower(RE::StaticFunctionTag*, RE::Actor* a) {
         if (!IsValidActor(a)) return false;
-        auto* potential = Cached(g_potentialFollowerFaction, "PotentialFollowerFaction");
-        auto* current = Cached(g_currentFollowerFaction, "CurrentFollowerFaction");
-        if (!potential || !current || !a->IsInFaction(potential)) return false;
-        if (!a->IsInFaction(current)) a->AddToFaction(current, 0);
+        if (!g_potentialFollowerFaction || !g_currentFollowerFaction || !a->IsInFaction(g_potentialFollowerFaction)) return false;
+        if (!a->IsInFaction(g_currentFollowerFaction)) a->AddToFaction(g_currentFollowerFaction, 0);
         a->EvaluatePackage();
         UpdateEssentialForActor(a);
         ApplyCrossfireForActor(a, SFF_Settings::FollowerCrossfire);
         return true;
     }
 
-    std::int32_t GetMaxFollowers(RE::StaticFunctionTag*) { return GetTotalFollowerCapFromSettings(); }
+    std::int32_t GetMaxFollowers(RE::StaticFunctionTag*) { return GetEffectiveFollowerCap(); }
 
     bool RegisterPapyrus(RE::BSScript::IVirtualMachine* vm) {
         vm->RegisterFunction("AddVanillaFollower", "SFF_SKSE", AddVanillaFollower);
@@ -256,9 +285,11 @@ namespace {
             return &s;
         }
         RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* e, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override {
-            if (e->menuName == "Dialogue Menu" && e->opening) {
-                ApplyFollowerDialogueGate();
-                if (SFF_Settings::FollowerCrossfire) DeferSyncParty();
+            if (e->menuName == "Dialogue Menu") {
+                auto* topics = RE::MenuTopicManager::GetSingleton();
+                auto speaker = (e->opening && topics) ? topics->speaker.get() : nullptr;
+                ApplyFollowerDialogueGate(speaker ? speaker->As<RE::Actor>() : nullptr);
+                if (e->opening && SFF_Settings::FollowerCrossfire) DeferSyncParty();
             }
             return RE::BSEventNotifyControl::kContinue;
         }
@@ -271,28 +302,47 @@ namespace {
             return &s;
         }
         RE::BSEventNotifyControl ProcessEvent(const RE::TESActivateEvent* e, RE::BSTEventSource<RE::TESActivateEvent>*) override {
-            if (e->actionRef.get() == RE::PlayerCharacter::GetSingleton() && e->objectActivated && e->objectActivated->As<RE::Actor>()) ApplyFollowerDialogueGate();
+            if (e->actionRef.get() != RE::PlayerCharacter::GetSingleton() || !e->objectActivated) return RE::BSEventNotifyControl::kContinue;
+            if (auto* actor = e->objectActivated->As<RE::Actor>()) ApplyFollowerDialogueGate(actor);
             return RE::BSEventNotifyControl::kContinue;
         }
     };
 
-    struct TravelSink final : RE::BSTEventSink<RE::TESFastTravelEndEvent> {
-        RE::BSEventNotifyControl ProcessEvent(const RE::TESFastTravelEndEvent*, RE::BSTEventSource<RE::TESFastTravelEndEvent>*) override { DeferSyncParty(true); return RE::BSEventNotifyControl::kContinue; }
-    } g_travelSink;
+    class TravelSink final : public RE::BSTEventSink<RE::TESFastTravelEndEvent> {
+    public:
+        static TravelSink* GetSingleton() {
+            static TravelSink s;
+            return &s;
+        }
+        RE::BSEventNotifyControl ProcessEvent(const RE::TESFastTravelEndEvent*, RE::BSTEventSource<RE::TESFastTravelEndEvent>*) override {
+            DeferSyncParty(true);
+            return RE::BSEventNotifyControl::kContinue;
+        }
+    };
+
     void Install() {
         if (auto* ui = RE::UI::GetSingleton()) ui->AddEventSink<RE::MenuOpenCloseEvent>(MenuSink::GetSingleton());
-        if (auto* events = RE::ScriptEventSourceHolder::GetSingleton()) events->AddEventSink<RE::TESActivateEvent>(ActivateSink::GetSingleton());
-        if (auto* events = RE::ScriptEventSourceHolder::GetSingleton(); events && events->GetEventSource<RE::TESFastTravelEndEvent>()) events->AddEventSink<RE::TESFastTravelEndEvent>(&g_travelSink);
+        auto* events = RE::ScriptEventSourceHolder::GetSingleton();
+        if (!events) return;
+        events->AddEventSink<RE::TESActivateEvent>(ActivateSink::GetSingleton());
+        if (events->GetEventSource<RE::TESFastTravelEndEvent>()) events->AddEventSink<RE::TESFastTravelEndEvent>(TravelSink::GetSingleton());
     }
 
     void OnMessage(SKSE::MessagingInterface::Message* msg) {
         if (msg->type == SKSE::MessagingInterface::kDataLoaded) {
-            if (!IsRequiredPluginLoaded()) MessageAndExit("Missing required plugin in load order:\nSimple Follower Framework.esp\nEnable it in your load order, then relaunch.");
-            ApplyFollowerDialogueGate();
+            ResolveForms();
+            if (!g_sffCurrentFollowerCount) MessageAndExit("Missing required plugin in load order:\nSimple Follower Framework.esp\nEnable it in your load order, then relaunch.");
+            CountFollowerSlots();
+            ApplyFollowerDialogueGate(nullptr);
             Install();
+        } else if (msg->type == SKSE::MessagingInterface::kPreLoadGame) {
+            RestoreAllEssentialFlags();
         } else if (msg->type == SKSE::MessagingInterface::kPostLoadGame || msg->type == SKSE::MessagingInterface::kNewGame) {
+            if (msg->type == SKSE::MessagingInterface::kNewGame) {
+                RestoreAllEssentialFlags();
+            }
             SFF_Settings::Load(true);
-            ApplyFollowerDialogueGate();
+            ApplyFollowerDialogueGate(nullptr);
             ApplyFriendlyFire();
             ApplySandbox();
             ApplyHomes();
@@ -306,10 +356,11 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
     SKSE::Init(skse);
     SFF_Settings::Load();
 
-    SFF_Settings::ApplyGateCallback = []() { ApplyFollowerDialogueGate(); };
+    SFF_Settings::ApplyGateCallback = []() { ApplyFollowerDialogueGate(nullptr); };
     SFF_Settings::FriendlyFireCallback = []() { ApplyFriendlyFire(); };
     SFF_Settings::SandboxCallback = []() { ApplySandbox(); };
     SFF_Settings::HomesCallback = []() { ApplyHomes(); };
+    SFF_Settings::EssentialCallback = []() { DeferSyncParty(); };
     SFF_Settings::CrossfireCallback = []() { DeferSyncParty(); };
 
     if (auto* papyrus = SKSE::GetPapyrusInterface()) papyrus->Register(RegisterPapyrus);

@@ -27,10 +27,3 @@ Event OnDeath(Actor akKiller)
 
 	DialogueFollower.SyncSFFFollowerState()
 EndEvent
-
-Event OnReferenceChanged(ObjectReference akOldRef, ObjectReference akNewRef)
-	Actor newA = akNewRef as Actor
-	If newA
-		SFF_SKSE.ApplyFollowerEssential(newA)
-	EndIf
-EndEvent
