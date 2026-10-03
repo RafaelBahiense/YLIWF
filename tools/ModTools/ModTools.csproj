@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/plugin/**/*.cs" Link="Plugin/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../../src/shared/ModInfo.cs" Link="Shared/ModInfo.cs" />
+    <EmbeddedResource Include="../../mod.json" LogicalName="ModIdentity" />
+    <PackageReference Include="Mutagen.Bethesda.Skyrim" Version="0.54.4" />
+  </ItemGroup>
+  <Target Name="CaptureToolBuildInputs" BeforeTargets="PrepareForBuild">
+    <ItemGroup>
+      <ToolBuildInput Include="@(Compile);ModTools.csproj;packages.lock.json;../../mod.json" />
+    </ItemGroup>
+    <GetFileHash Files="@(ToolBuildInput)" Algorithm="SHA256" MetadataName="InputHash">
+      <Output TaskParameter="Items" ItemName="HashedToolBuildInput" />
+    </GetFileHash>
+    <WriteLinesToFile File="$(IntermediateOutputPath)tool-build-inputs.txt"
+                      Lines="@(HashedToolBuildInput->'%(Identity)|%(InputHash)')"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(IntermediateOutputPath)tool-build-inputs.txt" LogicalName="ToolBuildInputs" />
+    </ItemGroup>
+  </Target>
+</Project>

@@ -1,0 +1,8 @@
+{
+  "displayName": "You Lead, I Will Follow",
+  "shortName": "YLIWF",
+  "pluginFile": "You Lead, I Will Follow.esp",
+  "binaryName": "YouLeadIWillFollow",
+  "scriptPrefix": "YLIWF",
+  "author": "Ivy (original); Me (fork)"
+}

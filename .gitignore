@@ -1,35 +1,74 @@
-# Prerequisites
-*.d
+# Downloaded tools, compiler imports, and machine-local configuration
+/.tools/
 
-# Compiled Object files
+# Build, installation, dependency, and packaging outputs
+/build/
+/install/
+/vcpkg_installed/
+/cmake-build-*/
+bin/
+obj/
+
+# Native compiler outputs
+*.d
 *.slo
 *.lo
 *.o
 *.obj
-
-# Precompiled Headers
 *.gch
 *.pch
-
-# Compiled Dynamic libraries
+*.ifc
 *.so
+*.so.*
 *.dylib
 *.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
 *.lai
 *.la
 *.a
 *.lib
-
-# Executables
 *.exe
 *.out
 *.app
-.vs/*
-build/*
-plugin - Backup.cpp
+*.res
+*.exp
+
+# MSVC debugging and incremental compilation/linking
+*.pdb
+*.ipdb
+*.iobj
+*.ilk
+*.idb
+*.tlog
+*.lastbuildstate
+
+# Compiled Papyrus scripts; editable .psc files remain versioned
+*.pex
+
+# CMake files from accidental in-source builds and local preset overrides
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/CTestTestfile.cmake
+/DartConfiguration.tcl
+/Testing/
+/build.ninja
+/.ninja_deps
+/.ninja_log
+/compile_commands.json
+CMakeUserPresets.json
+
+# IDE state; shared .vscode configuration remains versioned
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Operating-system metadata
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+
+/plugin/**
+/debug-data/**

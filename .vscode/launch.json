@@ -2,9 +2,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "C++ Debugger",
+            "name": "Attach to Skyrim (native)",
             "type": "cppvsdbg",
             "request": "attach",
+            "processId": "${command:pickProcess}",
+            "symbolSearchPath": "${workspaceFolder}/build/native/debug;${workspaceFolder}/build/native/relwithdebinfo"
         }
     ]
 }

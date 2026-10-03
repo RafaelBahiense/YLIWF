@@ -1,0 +1,7 @@
+{
+  "vcpkg": { "repository": "https://github.com/microsoft/vcpkg.git", "revision": "da2be01c400dd3ed102c1198752ef44c76aabe37" },
+  "commonlib": { "revision": "b93280e832f263dbef44e44cbe2936622a02f91a", "url": "https://codeload.github.com/CharmedBaryon/CommonLibSSE-NG/tar.gz/b93280e832f263dbef44e44cbe2936622a02f91a", "sha256": "e5377bf64e7c4fc2cf5cca642cd24212a2f940ea705ea0a75075273aa85a67f5", "folder": "CommonLibSSE-NG-b93280e832f263dbef44e44cbe2936622a02f91a" },
+  "caprica": { "version": "0.3.0", "url": "https://github.com/Orvid/Caprica/releases/download/v0.3.0/Caprica.v0.3.0.7z", "sha256": "0037e54cf3a1021e976278d9a637e8ae541aaf9ebeb8d274b6c2cfe32f4ee559" },
+  "sevenzip": { "version": "26.03", "url": "https://github.com/ip7z/7zip/releases/download/26.03/7zr.exe", "sha256": "ad4c82fadcbdf93c03b4fc440f300509c7d60c5c2f4d183e35d9d70d6957037d" },
+  "skse": { "revision": "25b72352adb6543fa6d0bd3795780672b2e238e0", "version": "2.3.1", "url": "https://codeload.github.com/ianpatt/skse64/zip/25b72352adb6543fa6d0bd3795780672b2e238e0", "sha256": "6130a87af82b13889df0ebd8fc4fc8381441b03b9d02889159cf0b267149c442" }
+}

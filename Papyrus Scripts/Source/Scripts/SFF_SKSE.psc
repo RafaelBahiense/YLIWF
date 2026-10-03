@@ -1,7 +1,0 @@
-Scriptname SFF_SKSE Hidden
-
-Bool Function AddVanillaFollower(Actor a) Global Native
-Int Function GetMaxFollowers() Global Native
-
-Bool Function ApplyFollowerEssential(Actor a) Global Native
-Bool Function RestoreFollowerEssential(Actor a) Global Native

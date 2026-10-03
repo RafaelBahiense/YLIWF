@@ -1,0 +1,7 @@
+#pragma once
+
+#include <string_view>
+
+namespace mod::settings_defaults {
+    inline constexpr std::string_view Ini = R"ini(@MOD_DEFAULT_INI@)ini";
+}

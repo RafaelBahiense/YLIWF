@@ -1,49 +1,31 @@
 {
-    "version": 3,
-    "configurePresets": [
-      {
-        "name": "base",
-        "hidden": true,
-        "generator": "Ninja",
-        "binaryDir": "${sourceDir}/build/${presetName}",
-        "installDir": "${sourceDir}/install/${presetName}",
-        "architecture": {
-          "value": "x64",
-          "strategy": "external"
-        },
-        "cacheVariables": {
-          "CMAKE_CXX_COMPILER": "cl.exe",
-          "CMAKE_CXX_FLAGS": "/permissive- /Zc:preprocessor /EHsc /MP /W4 -DWIN32_LEAN_AND_MEAN -DNOMINMAX -DUNICODE -D_UNICODE",
-          "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-          "VCPKG_OVERLAY_PORTS": {
-            "type": "STRING",
-            "value": "${sourceDir}/cmake/ports/"
-          },
-          "VCPKG_TARGET_TRIPLET": "x64-windows-static",
-          "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake",
-          "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
-          "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-        }
-      },
-        {
-            "name": "debug",
-            "inherits": ["base"],
-            "displayName": "Debug",
-            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
-        },
-      {
-        "name": "release",
-        "inherits": [ "base" ],
-        "displayName": "Release",
-        "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
-      },
-      {
-        "name": "relwithdebuginfo",
-        "inherits": [ "base" ],
-        "displayName": "RelWithDebInfo",
-        "cacheVariables": {
-          "CMAKE_BUILD_TYPE": "RelWithDebInfo"
-        }
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "base", "hidden": true, "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/native/${presetName}",
+      "architecture": { "value": "x64", "strategy": "external" },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
-    ]
+    },
+    { "name": "debug", "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" } },
+    { "name": "release", "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
+    { "name": "relwithdebinfo", "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "relwithdebinfo", "configurePreset": "relwithdebinfo" }
+  ],
+  "testPresets": [
+    { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true } },
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+    { "name": "relwithdebinfo", "configurePreset": "relwithdebinfo", "output": { "outputOnFailure": true } }
+  ]
 }

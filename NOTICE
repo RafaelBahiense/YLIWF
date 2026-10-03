@@ -1,0 +1,38 @@
+You Lead, I Will Follow (YLIWF)
+
+THIS MOD IS NOT MADE, GUARANTEED OR SUPPORTED BY ZENIMAX OR ITS AFFILIATES.
+
+Based on Simple Follower Framework by Ivy / ItzIvy05.
+Original repository: https://github.com/ItzIvy05/SimpleFollowerFramework
+Original release: https://www.nexusmods.com/skyrimspecialedition/mods/174017
+
+Copyright (c) 2026 Ivy and the original contributors, for their contributions.
+Copyright (c) 2026 Rafael Bahiense, for fork contributions.
+
+This is an independently maintained architectural rewrite derived from Simple
+Follower Framework. The fork began on 2026-10-02 from upstream revision:
+
+    6813b71cca0bfc16aae30c8a8bbc3bbeec45e020 (2026-09-19)
+    https://github.com/ItzIvy05/SimpleFollowerFramework/commit/6813b71cca0bfc16aae30c8a8bbc3bbeec45e020
+
+The first independent development commit is:
+    cbff62d8bf6b3582e27434b0da686203e2972f05 (2026-10-02)
+
+Subsequent development is part of the You Lead, I Will Follow fork, maintained by
+Me. This modified-version notice covers the maintained mod source and its
+build, configuration, test and documentation files. The fork date
+records the beginning of independent modification, not the latest release.
+Git history records individual changes and contributors; this notice is not
+a changelog. See CREDITS.md for attribution.
+
+The covered work is distributed under the GNU General Public License version 3.
+You may copy, modify, and redistribute it under that license. There is no
+warranty, including no implied warranty of merchantability or fitness for a
+particular purpose. See the accompanying LICENSE for the complete terms.
+Matching corresponding source is supplied alongside each binary download as
+YouLeadIWillFollow-<version>-source.zip.
+
+Third-party components retain their respective copyright and license notices;
+see the release archive's licenses/ directory and CREDITS.md. Bethesda game
+files and unmodified compiler SDK inputs are not relicensed by this notice
+or included in the source snapshot.

@@ -1,0 +1,26 @@
+name: Build and verify
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Prepare native and .NET tools
+        shell: powershell
+        run: ./setup.ps1 -NativeOnly
+      - name: Compile native plugin
+        shell: powershell
+        run: ./build.ps1 -Target Native
+      - name: Native, artifact, plugin record, and Papyrus tooling tests
+        shell: powershell
+        run: ./build.ps1 -Target Test
+      - name: Generate ESP
+        shell: powershell
+        run: ./build.ps1 -Target Plugin
+      # Game/Creation Kit import sources are external inputs.

@@ -1,0 +1,42 @@
+{
+    "configurations": [
+        {
+            "name": "Release x64",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/build/native/release/generated"
+            ],
+            "defines": [
+                "WIN32_LEAN_AND_MEAN",
+                "NOMINMAX",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "cppStandard": "c++23",
+            "intelliSenseMode": "windows-msvc-x64",
+            "compileCommands": [
+                "${workspaceFolder}/build/native/release/compile_commands.json"
+            ]
+        },
+        {
+            "name": "Debug x64",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/build/native/debug/generated"
+            ],
+            "defines": [
+                "_DEBUG",
+                "WIN32_LEAN_AND_MEAN",
+                "NOMINMAX",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "cppStandard": "c++23",
+            "intelliSenseMode": "windows-msvc-x64",
+            "compileCommands": [
+                "${workspaceFolder}/build/native/debug/compile_commands.json"
+            ]
+        }
+    ],
+    "version": 4
+}

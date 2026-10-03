@@ -1,0 +1,14 @@
+#pragma once
+
+// Generated from mod.json.
+namespace mod::info {
+    inline constexpr char DisplayName[] = "@MOD_DISPLAY_NAME_CPP@";
+    inline constexpr char Author[] = "@AUTHOR_NAME_CPP@";
+    inline constexpr char ShortName[] = "@MOD_SHORT_NAME@";
+    inline constexpr char PluginFile[] = "@MOD_PLUGIN_FILE@";
+    inline constexpr char BinaryName[] = "@MOD_BINARY_NAME@";
+    inline constexpr char DllFile[] = "@MOD_BINARY_NAME@.dll";
+    inline constexpr char IniPath[] = "Data\\SKSE\\Plugins\\@MOD_BINARY_NAME@.ini";
+    inline constexpr char ScriptPrefix[] = "@MOD_SCRIPT_PREFIX@";
+    inline constexpr char NativeScript[] = "@MOD_SCRIPT_PREFIX@_SKSE";
+}
