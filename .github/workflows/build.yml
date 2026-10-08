@@ -39,12 +39,15 @@ jobs:
             .tools/CommonLibSSE-NG
             .tools/downloads
             .tools/vcpkg/downloads
-          key: windows-downloads-v1-${{ hashFiles('tools/dependencies.json', 'setup.ps1', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/ports/**') }}
+          # Pins and package sources change downloads; build-script edits do not.
+          key: windows-downloads-v1-${{ hashFiles('tools/dependencies.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/ports/**') }}
       - name: Cache vcpkg binary packages
         uses: actions/cache@v4
         with:
           path: .tools/vcpkg-binaries
-          key: windows-vcpkg-v1-${{ steps.toolchain.outputs.key }}-${{ hashFiles('tools/dependencies.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/**') }}
+          # vcpkg's ABI checks validate packages; unrelated CMake helpers do not
+          # change their inputs. Keep the toolchain and overlay-port checks.
+          key: windows-vcpkg-v1-${{ steps.toolchain.outputs.key }}-${{ hashFiles('tools/dependencies.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/ports/**') }}
       - name: Prepare native and .NET tools
         shell: powershell
         run: ./setup.ps1 -NativeOnly

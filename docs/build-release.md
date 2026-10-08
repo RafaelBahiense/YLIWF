@@ -32,7 +32,10 @@ machine-local configuration between computers. Repository defaults live in
 ## Everyday commands
 
 GitHub Actions caches pinned downloads, NuGet packages, vcpkg binary packages,
-and CommonLib build outputs. Native caches are separated by runner image,
+and CommonLib build outputs. Download and vcpkg keys track dependency pins,
+manifests and overlay ports; unrelated build-script edits do not invalidate them.
+vcpkg keys also include the toolchain identity. CommonLib caches retain the
+conservative checks for build scripts and CMake settings, separated by runner image,
 compiler, Windows SDK, workspace path, dependency pins, and CMake configuration.
 CommonLib's precompiled headers and compiled objects can be reused; mod objects
 and binaries are excluded and always rebuild. The first run after a cache change
