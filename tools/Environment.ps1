@@ -1,13 +1,4 @@
 $RepoRoot = Split-Path $PSScriptRoot -Parent
-$ModIdentity = [IO.File]::ReadAllText((Join-Path $RepoRoot 'mod.json')) | ConvertFrom-Json
-foreach ($name in @('displayName','shortName','pluginFile','binaryName','scriptPrefix','author')) {
-    if ([string]::IsNullOrWhiteSpace($ModIdentity.$name)) { throw "mod.json: missing $name" }
-}
-if ($ModIdentity.binaryName -notmatch '^[A-Za-z_][A-Za-z0-9_-]*$' -or
-    $ModIdentity.scriptPrefix -notmatch '^[A-Za-z_][A-Za-z0-9_]*$' -or
-    $ModIdentity.pluginFile -match '[<>:"/\\|?*;]' -or $ModIdentity.pluginFile -notmatch '\.esp$') {
-    throw 'mod.json: invalid compatibility filename or script prefix'
-}
 
 function Invoke-Tool {
     param([string]$Executable, [string[]]$Arguments)
@@ -53,13 +44,11 @@ function Initialize-Native {
 }
 
 function Get-LocalPaths {
-    $paths = @{
-        CommonLib = Join-Path $RepoRoot '.tools/CommonLibSSE-NG'
-        Vcpkg = Join-Path $RepoRoot '.tools/vcpkg'
-        Compiler = Join-Path $RepoRoot '.tools/papyrus/caprica/Caprica.exe'
-        Vanilla = Join-Path $RepoRoot '.tools/papyrus/vanilla/Source/Scripts'
-        Flags = Join-Path $RepoRoot '.tools/papyrus/vanilla/Source/Scripts/TESV_Papyrus_Flags.flg'
-        Imports = @((Join-Path $RepoRoot '.tools/papyrus/skse'), (Join-Path $RepoRoot '.tools/papyrus/vanilla/Source/Scripts'))
+    $paths = @{}
+    $defaults = [IO.File]::ReadAllText((Join-Path $RepoRoot 'tools/paths.json')) | ConvertFrom-Json
+    foreach ($property in $defaults.PSObject.Properties) {
+        $values = @($property.Value | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $RepoRoot $_)) })
+        $paths[$property.Name] = if ($property.Name -eq 'Imports') { $values } else { $values[0] }
     }
     $config = Join-Path $RepoRoot '.tools/local.json'
     if (Test-Path -LiteralPath $config) {

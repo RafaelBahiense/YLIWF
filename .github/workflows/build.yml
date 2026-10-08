@@ -61,13 +61,7 @@ jobs:
             build/native/release/.ninja_deps
             build/native/release/.ninja_log
           key: windows-native-v1-${{ steps.toolchain.outputs.key }}-${{ hashFiles('tools/dependencies.json', 'setup.ps1', 'build.ps1', 'tools/Environment.ps1', 'CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'vcpkg.json', 'vcpkg-configuration.json', 'assets/settings.ini') }}
-      - name: Compile native plugin
+      - name: Compile, test, and generate ESP
         shell: powershell
-        run: ./build.ps1 -Target Native
-      - name: Native, artifact, plugin record, and Papyrus tooling tests
-        shell: powershell
-        run: ./build.ps1 -Target Test
-      - name: Generate ESP
-        shell: powershell
-        run: ./build.ps1 -Target Plugin
+        run: ./build.ps1 -Target Verify
       # Game/Creation Kit import sources are external inputs.

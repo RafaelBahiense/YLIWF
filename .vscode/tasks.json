@@ -29,6 +29,15 @@
             "problemMatcher": ["$msCompile"]
         },
         {
+            "label": "Verify native build and tools",
+            "type": "process",
+            "command": "powershell",
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/build.ps1", "-Target", "Verify"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "group": "test",
+            "problemMatcher": ["$msCompile"]
+        },
+        {
             "label": "Check setup",
             "type": "process",
             "command": "powershell",

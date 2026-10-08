@@ -20,13 +20,14 @@ runs. `-Check` reports missing inputs without downloads or changes.
 
 Setup locates Visual Studio, downloads dependencies pinned in
 `tools/dependencies.json`, checks hashes, prepares SKSE/vanilla imports, and
-restores locked NuGet packages. Downloads and local configuration stay in ignored
+builds ModTools when preparing Papyrus imports. Downloads and local configuration stay in ignored
 `.tools/`; machine-wide SDKs and workloads must be installed separately.
 
 Use `-CommonLib`, `-Vcpkg`, or `-Compiler` for custom locations. Setup records
 them in `.tools/local.json`; build accepts these overrides plus `-Flags` and
 `-ImportDirectories`. Custom checkouts replace the pinned inputs. Do not share
-machine-local configuration between computers.
+machine-local configuration between computers. Repository defaults live in
+`tools/paths.json`, shared by setup and ModTools.
 
 ## Everyday commands
 
@@ -43,6 +44,7 @@ performs a full build.
 .\build.ps1 -Target Plugin
 .\build.ps1 -Target Scripts
 .\build.ps1 -Target Test
+.\build.ps1 -Target Verify
 .\build.ps1 -Clean
 ```
 
@@ -57,15 +59,20 @@ the outputs, and creates the binary and matching source ZIPs in `build/dist`.
 `VERSION` contains three or four numeric components.
 
 Native builds reuse `build/native/<configuration>`. `-Clean` creates a fresh
-native/vcpkg build directory while retaining usable binary caches. Script and
-packaging stages are fresh; failed stages remain under `build/mod` for inspection.
-Successful stages are removed after their outputs are published.
+native/vcpkg build directory while retaining usable binary caches. Failed Papyrus
+stages remain under `build/papyrus/.staging-*` for inspection; successful stages
+are removed. Release archives are staged separately until validation passes.
+
+`Verify` builds native plugins, runs all tests, and generates the ESP, without
+requiring Bethesda imports. CI uses this same command. PowerShell initializes
+the environment and builds ModTools once; the C# coordinator owns the build
+sequence. CMake/Ninja own native compilation.
 
 Individual targets write the ESP to `build/plugin` and PEX files to
 `build/papyrus/Scripts`. `-Target Package` packages these existing outputs.
 Use `-OutputDirectory` for another destination. Native builds embed
 `assets/settings.ini` as the default configuration and first-launch template.
-ESP and PEX outputs have local build receipts recording source and output hashes.
+DLL, ESP and PEX outputs have local build receipts recording source and output hashes.
 Packaging rejects missing receipts, changed inputs, and mixed outputs; rebuild the
 affected component. Receipts remain beside local outputs and are not installed.
 Install ZIPs contain only notices and licenses under `docs`; documentation,
@@ -74,8 +81,9 @@ Every ZIP entry is still checked against its input hash before publication.
 
 ## Source archives and supplied DLLs
 
-`-Dll` and `-Target Package` require `-SourceArchive` pointing to the builder's
-matching source ZIP. Packaging checks the DLL hash, compiled inputs, dependency
+`-Target Package` packages local build outputs and snapshots their sources.
+Use `-Target Repackage -Dll <dll> -SourceArchive <zip>` for externally supplied
+binaries. This regenerates the ESP and compiles scripts, then checks the DLL hash, compiled inputs, dependency
 snapshots, notices, and archive hashes.
 
 Full builds snapshot the actual CommonLib checkout and vcpkg source trees under
@@ -159,20 +167,11 @@ Core and patch compilations must both pass before packaging.
 The separate `YouLeadIWillFollow-<version>-3DNPC.zip` contains `follower3dnpc.pex`.
 Install it after YLIWF and Interesting NPCs. `-DeployTo` deploys only the core mod.
 
-## Tests and portability
+## Tests
 
 `-Target Test` runs CTest assertions and .NET checks for generated records,
 artifact integrity, source preparation, compiler failures, and release rollback.
 Windows CI also generates the ESP; full Papyrus builds require vanilla imports.
 
-The native build requires Windows/MSVC. Linux with PowerShell 7 can use a
-supplied DLL and Wine:
-
-```powershell
-./build.ps1 -Dll '/path/YouLeadIWillFollow.dll' -SourceArchive '/path/matching-source.zip' -Wine wine64 `
-  -Compiler '/path/Caprica.exe' -Flags '/path/TESV_Papyrus_Flags.flg' `
-  -ImportDirectories @('/path/SKSE', '/path/vanilla')
-```
-
-This Linux path has not been revalidated on the current Windows machine.
+Native and Papyrus compilation require Windows.
 See [development tools](../tools/README.md) for direct .NET commands and analysis.

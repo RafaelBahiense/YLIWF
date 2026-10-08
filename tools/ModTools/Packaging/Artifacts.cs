@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ModTools.Building;
 
 namespace ModTools.Packaging;
 
@@ -324,6 +325,20 @@ public static class Artifacts
             }
             var destination = Path.Combine(output, $"{ModInfo.BinaryName}-{version}.zip");
             pending.Add((PrepareZip(destination, CoreFiles(root, esp, dll, Path.Combine(papyrus, "Scripts"), dependencyNotices), metadata, timestamp, includeManifest: false), destination));
+            foreach (var addon in Addon.Read(root))
+            {
+                var addonDll = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(dll))!, addon.DllFile);
+                if (mode == BuildMode.SuppliedDll && !File.Exists(addonDll))
+                {
+                    continue;
+                }
+
+                SourceSnapshot.ValidateAddon(sourceTemporary, addonDll, addon.DllFile);
+                var files = new Dictionary<string, string> { ["SKSE/Plugins/" + addon.DllFile] = addonDll };
+                AddNotices(root, files, dependencyNotices);
+                destination = Path.Combine(output, $"{ModInfo.BinaryName}-{version}-{addon.Name}.zip");
+                pending.Add((PrepareZip(destination, files, metadata, timestamp, includeManifest: false), destination));
+            }
             if (patch)
             {
                 var files = ScriptOutputs(Path.Combine(root, "src/papyrus/patches/3dnpc"), Path.Combine(papyrus, "Patches/3DNPC/Scripts")).ToDictionary(file => "Scripts/" + Path.GetFileName(file), file => file);

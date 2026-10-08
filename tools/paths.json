@@ -1,0 +1,9 @@
+{
+  "CommonLib": ".tools/CommonLibSSE-NG",
+  "Vcpkg": ".tools/vcpkg",
+  "Compiler": ".tools/papyrus/caprica/Caprica.exe",
+  "Vanilla": ".tools/papyrus/vanilla/Source/Scripts",
+  "Flags": ".tools/papyrus/vanilla/Source/Scripts/TESV_Papyrus_Flags.flg",
+  "Imports": [".tools/papyrus/skse", ".tools/papyrus/vanilla/Source/Scripts"],
+  "Output": "build/dist"
+}

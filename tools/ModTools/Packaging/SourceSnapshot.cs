@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
+using ModTools.Building;
 
 namespace ModTools.Packaging;
 
@@ -97,7 +98,7 @@ public static class SourceSnapshot
             files["provenance/" + name] = path;
         }
         var timestamp = ReleaseTimestamp.Read(root);
-        return Artifacts.PrepareZip(destination, files, new Dictionary<string, object>
+        var metadata = new Dictionary<string, object>
         {
             [ManifestFields.ArchiveTimestamp] = timestamp.ToUnixTimeSeconds(),
             [ManifestFields.Kind] = ArchiveKind,
@@ -106,7 +107,28 @@ public static class SourceSnapshot
             [ManifestFields.Plugin] = ModInfo.PluginFile,
             [ManifestFields.NativeDependencies] = Ports.Prepend("CommonLibSSE-NG").ToArray(),
             [ManifestFields.BuildInputs] = "See docs/build-release.md and tools/dependencies.json. General-purpose compiler tools and Bethesda Creation Kit imports are obtained separately."
-        }, timestamp);
+        };
+        var addonHashes = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var addon in Addon.Read(root))
+        {
+            var addonDll = Path.Combine(nativeBuild, addon.DllFile);
+            Artifacts.ValidateDll(addonDll);
+            addonHashes.Add(addon.DllFile, Artifacts.HashFile(addonDll));
+        }
+        metadata[ManifestFields.AddonHashes] = addonHashes;
+        return Artifacts.PrepareZip(destination, files, metadata, timestamp);
+    }
+    public static void ValidateAddon(string archivePath, string dll, string filename)
+    {
+        Artifacts.ValidateDll(dll);
+        using var archive = ZipFile.OpenRead(archivePath);
+        using var stream = archive.GetEntry(Artifacts.Manifest)!.Open();
+        using var manifest = JsonDocument.Parse(stream);
+        if (!manifest.RootElement.TryGetProperty(ManifestFields.AddonHashes, out var hashes) ||
+            !hashes.TryGetProperty(filename, out var hash) || hash.GetString() != Artifacts.HashFile(dll))
+        {
+            throw new InvalidDataException($"Source archive does not match the add-on DLL: {filename}");
+        }
     }
     public static void Validate(string archivePath, string dll, string? root = null)
     {
@@ -158,7 +180,7 @@ public static class SourceSnapshot
             foreach (var (name, path) in ProjectFiles(root).Where(file => file.Key.StartsWith("src/", StringComparison.Ordinal) ||
                 file.Key.StartsWith("include/", StringComparison.Ordinal) || file.Key.StartsWith("cmake/", StringComparison.Ordinal) ||
                 (file.Key.StartsWith("tools/ModTools/", StringComparison.Ordinal) && file.Key.EndsWith(".cs", StringComparison.Ordinal)) ||
-                file.Key is "setup.ps1" or "build.ps1" or "tools/Environment.ps1" or "tools/dependencies.json" ||
+                file.Key is "setup.ps1" or "build.ps1" or "tools/Environment.ps1" or "tools/dependencies.json" or "tools/paths.json" ||
                 file.Key is "CMakeLists.txt" or "CMakePresets.json" or "assets/settings.ini" or "mod.json" or "VERSION" or "vcpkg.json" or "vcpkg-configuration.json" or "global.json" or "tools/ModTools/ModTools.csproj" or "tools/ModTools/packages.lock.json"))
             {
                 if (!hashes.TryGetProperty(name, out var checksum) || checksum.GetString() != Artifacts.HashFile(path))

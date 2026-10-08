@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using ModTools.Building;
 using ModTools.Packaging;
 using ModTools.Papyrus;
 using Mutagen.Bethesda.Plugins;
@@ -103,6 +104,7 @@ byte[] PexFixture(string filename)
 }
 try
 {
+    BuildTests.Run(root, temporary);
     var previousEpoch = Environment.GetEnvironmentVariable("SOURCE_DATE_EPOCH");
     try
     {
@@ -369,7 +371,7 @@ try
     Directory.CreateDirectory(Path.Combine(compileOutput, "Scripts"));
     File.WriteAllText(Path.Combine(compileOutput, "Scripts/YLIWF_SKSE.pex"), "old script");
     var calls = 0;
-    Fails(() => PapyrusCompiler.Compile(root, compiler, flags, [temporary], compileOutput, true, OperatingSystem.IsWindows() ? null : "fixture-wine", (_, arguments, _) =>
+    Fails(() => PapyrusCompiler.Compile(root, compiler, flags, [temporary], compileOutput, true, (_, arguments, _) =>
     {
         if (++calls == 2)
         {
@@ -377,17 +379,15 @@ try
         }
 
         var argv = arguments.ToArray();
-        string Local(string path) => OperatingSystem.IsWindows() ? path : path[2..].Replace('\\', '/');
-        Scripts(Local(argv[OperatingSystem.IsWindows() ? 0 : 1]), Local(argv.Single(a => a.StartsWith("--output=", StringComparison.Ordinal))[9..]));
+        Scripts(argv[0], argv.Single(a => a.StartsWith("--output=", StringComparison.Ordinal))[9..]);
     }));
     Check(File.ReadAllText(Path.Combine(compileOutput, "Scripts/YLIWF_SKSE.pex")) == "old script", "Failed compilation published core outputs");
     var failedStages = Directory.GetDirectories(compileOutput, ".staging-*");
     Check(failedStages.Length == 1, "Failed compiler stage was not retained");
-    PapyrusCompiler.Compile(root, compiler, flags, [temporary], compileOutput, true, OperatingSystem.IsWindows() ? null : "fixture-wine", (_, arguments, _) =>
+    PapyrusCompiler.Compile(root, compiler, flags, [temporary], compileOutput, true, (_, arguments, _) =>
     {
         var argv = arguments.ToArray();
-        string Local(string path) => OperatingSystem.IsWindows() ? path : path[2..].Replace('\\', '/');
-        Scripts(Local(argv[OperatingSystem.IsWindows() ? 0 : 1]), Local(argv.Single(a => a.StartsWith("--output=", StringComparison.Ordinal))[9..]));
+        Scripts(argv[0], argv.Single(a => a.StartsWith("--output=", StringComparison.Ordinal))[9..]);
     });
     Check(Directory.GetDirectories(compileOutput, ".staging-*").SequenceEqual(failedStages), "Successful compilation left a stage or deleted failed work");
     BuildReceipt.Validate(root, BuildComponent.PapyrusCore,

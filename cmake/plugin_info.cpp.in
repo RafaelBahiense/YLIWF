@@ -1,9 +1,10 @@
 #include "REL/Relocation.h"
 #include "SKSE/SKSE.h"
+using namespace std::literals;
 
 SKSEPluginInfo(
     .Version = REL::Version{ @PROJECT_VERSION_MAJOR@, @PROJECT_VERSION_MINOR@, @PROJECT_VERSION_PATCH@, @PROJECT_VERSION_TWEAK@ },
-    .Name = "@MOD_BINARY_NAME@"sv,
+    .Name = "@PLUGIN_BINARY_NAME@"sv,
     .Author = "@AUTHOR_NAME_CPP@"sv,
     .SupportEmail = ""sv,
     .StructCompatibility = SKSE::StructCompatibility::Independent,

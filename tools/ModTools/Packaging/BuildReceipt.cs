@@ -4,7 +4,7 @@ namespace ModTools.Packaging;
 
 public enum BuildComponent
 {
-    Plugin = 0, PapyrusCore = 1, Papyrus3Dnpc = 2
+    Plugin = 0, PapyrusCore = 1, Papyrus3Dnpc = 2, Native = 3
 }
 
 // Local sidecars bind reusable outputs to the sources that produced them.
@@ -21,13 +21,21 @@ public static class BuildReceipt
     public static Dictionary<string, string> CaptureInputs(string root, BuildComponent component)
     {
         ValidateToolBuild(root);
-        var sourceDirectory = component == BuildComponent.Plugin ? "src/plugin/" : "src/papyrus/core/";
+        var sourceDirectory = component switch
+        {
+            BuildComponent.Plugin => "src/plugin/",
+            BuildComponent.Native => "src/native/",
+            _ => "src/papyrus/core/"
+        };
         return SourceSnapshot.ProjectFiles(root).Where(file =>
             file.Key.StartsWith(sourceDirectory, StringComparison.Ordinal) ||
+            (component == BuildComponent.Native && (file.Key.StartsWith("include/", StringComparison.Ordinal) ||
+                file.Key.StartsWith("src/addons/", StringComparison.Ordinal) || file.Key.StartsWith("cmake/", StringComparison.Ordinal) ||
+                file.Key is "CMakeLists.txt" or "CMakePresets.json" or "vcpkg.json" or "vcpkg-configuration.json" or "assets/settings.ini")) ||
             (component == BuildComponent.Papyrus3Dnpc && file.Key.StartsWith("src/papyrus/patches/3dnpc/", StringComparison.Ordinal)) ||
             file.Key.StartsWith("src/shared/", StringComparison.Ordinal) ||
             (file.Key.StartsWith("tools/ModTools/", StringComparison.Ordinal) && file.Key.EndsWith(".cs", StringComparison.Ordinal)) ||
-            file.Key is "mod.json" or "VERSION" or "global.json" or "tools/dependencies.json" or
+            file.Key is "mod.json" or "VERSION" or "global.json" or "tools/dependencies.json" or "tools/paths.json" or
                 "tools/ModTools/ModTools.csproj" or "tools/ModTools/packages.lock.json")
             .ToDictionary(file => file.Key, file => Artifacts.HashFile(file.Value), StringComparer.Ordinal);
     }

@@ -50,6 +50,20 @@ internal static class BuildReceiptTests
         Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
         File.Copy(Path.Combine(root, "src/plugin/Records/Quests.cs"), source);
         BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt);
+        var nativeReceipt = Path.Combine(temporary, "native.build.json");
+        var nativeInputs = BuildReceipt.CaptureInputs(checkout, BuildComponent.Native);
+        BuildReceipt.Write(checkout, BuildComponent.Native, nativeInputs, [output], nativeReceipt);
+        BuildReceipt.Validate(checkout, BuildComponent.Native, [output], nativeReceipt);
+        var nativeSource = Path.Combine(checkout, "src/native/Controller.cpp");
+        File.AppendAllText(nativeSource, "\n// changed native input\n");
+        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Native, [output], nativeReceipt));
+        File.Copy(Path.Combine(root, "src/native/Controller.cpp"), nativeSource, true);
+        var addon = Path.Combine(checkout, "src/addons/new/addon.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(addon)!);
+        File.WriteAllText(addon, """{"name":"New", "sources":["Adapter.cpp"]}""");
+        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Native, [output], nativeReceipt));
+        File.Delete(addon);
+        BuildReceipt.Validate(checkout, BuildComponent.Native, [output], nativeReceipt);
         File.WriteAllText(receipt, "{}");
         Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
     }

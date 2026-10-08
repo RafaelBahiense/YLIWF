@@ -1,8 +1,12 @@
 # Development tools
 
-`ModTools` uses .NET 10 and locked Mutagen packages for ESP generation and
+`ModTools` coordinates builds and uses .NET 10 and locked Mutagen packages for ESP generation and
 inspection, Papyrus preparation and compilation, validation, and packaging.
 See the [build guide](../docs/build-release.md) for setup and build targets.
+
+`Building/` owns target selection, local paths and external compiler invocation.
+`Papyrus/` owns script preparation/compilation; `Packaging/` owns release
+validation and publication. `build.ps1` is the Windows environment launcher.
 
 ## Generate and inspect plugins
 

@@ -1,28 +1,12 @@
-using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using ModTools.Building;
 using ModTools.Packaging;
 
 namespace ModTools.Papyrus;
 
 public static partial class PapyrusCompiler
 {
-    public static void Run(string executable, IEnumerable<string> arguments, string root)
-    {
-        var startInfo = new ProcessStartInfo(executable) { WorkingDirectory = root, UseShellExecute = false };
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        Console.WriteLine($"Running: {executable} {string.Join(' ', startInfo.ArgumentList)}");
-        using var process = Process.Start(startInfo) ?? throw new IOException($"Could not start {executable}");
-        process.WaitForExit();
-        if (process.ExitCode != 0)
-        {
-            throw new IOException($"{executable} failed (exit {process.ExitCode}). Staged outputs were not published.");
-        }
-    }
     public static void StageCore(string source, string destination)
     {
         Directory.CreateDirectory(destination);
@@ -44,7 +28,7 @@ public static partial class PapyrusCompiler
             File.WriteAllText(bridge, regex.Replace(text, "$1 Native"), new UTF8Encoding(false));
         }
     }
-    public static void Compile(string root, string compiler, string flags, string[] imports, string output, bool patch, string? wine = null,
+    public static void Compile(string root, string compiler, string flags, string[] imports, string output, bool patch,
         Action<string, IEnumerable<string>, string>? runner = null)
     {
         foreach (var path in new[] { compiler, flags }.Concat(imports))
@@ -60,12 +44,12 @@ public static partial class PapyrusCompiler
             throw new ArgumentException("At least one import directory is required");
         }
 
-        if (!OperatingSystem.IsWindows() && string.IsNullOrWhiteSpace(wine))
+        if (!OperatingSystem.IsWindows() && runner == null)
         {
-            throw new ArgumentException("Supply --wine on Linux to run Caprica");
+            throw new PlatformNotSupportedException("Papyrus compilation requires Windows.");
         }
 
-        runner ??= Run;
+        runner ??= ProcessRunner.Run;
         foreach (var script in new[] { ModInfo.NativeScript })
         {
             if (!File.Exists(Path.Combine(root, "src/papyrus/core", script + ".psc")))
@@ -86,22 +70,16 @@ public static partial class PapyrusCompiler
             var source = Path.Combine(root, "src/papyrus/patches/3dnpc");
             groups.Add((source, Path.Combine(stage, "Patches/3DNPC/Scripts"), Path.Combine(output, "Patches/3DNPC/Scripts"), new[] { source, core }.Concat(imports).ToArray()));
         }
-        string CompilerPath(string path) => wine == null ? Path.GetFullPath(path) : "Z:" + Path.GetFullPath(path).Replace('/', '\\');
         var completed = new List<(string[] Outputs, string Destination)>();
         foreach (var (source, staging, destination, groupImports) in groups)
         {
             Directory.CreateDirectory(staging);
             var arguments = new List<string> {
-                CompilerPath(source), "--game=skyrim", "--ignorecwd", "--enable-language-extensions=false",
-                "--import=" + string.Join(';', groupImports.Select(CompilerPath)),
-                "--flags=" + CompilerPath(flags), "--output=" + CompilerPath(staging)
+                Path.GetFullPath(source), "--game=skyrim", "--ignorecwd", "--enable-language-extensions=false",
+                "--import=" + string.Join(';', groupImports.Select(path => Path.GetFullPath(path))),
+                "--flags=" + Path.GetFullPath(flags), "--output=" + Path.GetFullPath(staging)
             };
-            if (wine != null)
-            {
-                arguments.Insert(0, Path.GetFullPath(compiler));
-            }
-
-            runner(wine ?? compiler, arguments, root);
+            runner(compiler, arguments, root);
             var outputs = Artifacts.ScriptOutputs(source, staging);
             foreach (var file in outputs)
             {

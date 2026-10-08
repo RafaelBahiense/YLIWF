@@ -80,8 +80,8 @@ try {
             [IO.File]::WriteAllText($marker,$pins.commonlib.revision)
         } elseif ([IO.File]::ReadAllText($marker).Trim() -ne $pins.commonlib.revision) { throw 'CommonLib pin changed. Move the old local directory, then rerun setup.' }
     }
-    Restore-ModTools
     if (!$NativeOnly) {
+        Restore-ModTools
         if (!$Compiler -and $paths.Compiler -eq (Join-Path $RepoRoot '.tools/papyrus/caprica/Caprica.exe')) {
             $archive = Get-PinnedDownload $pins.caprica 'Caprica.v0.3.0.7z'
             $marker = Join-Path (Split-Path $paths.Compiler -Parent) '.compiler-cache.json'

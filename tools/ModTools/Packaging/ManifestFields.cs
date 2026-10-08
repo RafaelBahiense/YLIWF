@@ -10,4 +10,5 @@ internal static class ManifestFields
     internal const string BuildInputs = "build_inputs";
     internal const string Hashes = "sha256";
     internal const string ArchiveTimestamp = "archive_timestamp";
+    internal const string AddonHashes = "addon_dll_sha256";
 }
