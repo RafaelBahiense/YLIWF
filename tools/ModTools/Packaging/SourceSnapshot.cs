@@ -84,7 +84,9 @@ public static class SourceSnapshot
                 throw new InvalidDataException($"Empty dependency notice: {name}");
             }
         }
-        foreach (var name in new[] { "CMakeCache.txt", "compile_commands.json", "vcpkg_installed/vcpkg/status" })
+        // Compiler commands and CMake caches disclose local paths and environment
+        // details. Dependency versions remain useful and contain no build paths.
+        foreach (var name in new[] { "vcpkg_installed/vcpkg/status" })
         {
             var path = Path.Combine(nativeBuild, name);
             if (!File.Exists(path))
@@ -94,15 +96,17 @@ public static class SourceSnapshot
 
             files["provenance/" + name] = path;
         }
+        var timestamp = ReleaseTimestamp.Read(root);
         return Artifacts.PrepareZip(destination, files, new Dictionary<string, object>
         {
+            [ManifestFields.ArchiveTimestamp] = timestamp.ToUnixTimeSeconds(),
             [ManifestFields.Kind] = ArchiveKind,
             [ManifestFields.DllHash] = Artifacts.HashFile(dll),
             [ManifestFields.Version] = File.ReadAllText(Path.Combine(root, "VERSION")).Trim(),
             [ManifestFields.Plugin] = ModInfo.PluginFile,
             [ManifestFields.NativeDependencies] = Ports.Prepend("CommonLibSSE-NG").ToArray(),
             [ManifestFields.BuildInputs] = "See docs/build-release.md and tools/dependencies.json. General-purpose compiler tools and Bethesda Creation Kit imports are obtained separately."
-        });
+        }, timestamp);
     }
     public static void Validate(string archivePath, string dll, string? root = null)
     {

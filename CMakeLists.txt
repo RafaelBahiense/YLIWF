@@ -50,6 +50,14 @@ set(ENABLE_SKYRIM_SE ON CACHE BOOL "" FORCE)
 set(ENABLE_SKYRIM_AE ON CACHE BOOL "" FORCE)
 set(ENABLE_SKYRIM_VR ON CACHE BOOL "" FORCE)
 set(BUILD_TESTS OFF CACHE BOOL "Build CommonLib tests" FORCE)
+# Keep local paths for development debugging; published Release binaries use
+# stable paths, including source_location strings compiled into CommonLib.
+file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" RELEASE_SOURCE_PATH)
+file(TO_NATIVE_PATH "${COMMONLIB_SSE_FOLDER}" RELEASE_COMMONLIB_PATH)
+add_compile_options(
+  "$<$<CONFIG:Release>:/experimental:deterministic>"
+  "$<$<CONFIG:Release>:/pathmap:${RELEASE_SOURCE_PATH}=source>"
+  "$<$<CONFIG:Release>:/pathmap:${RELEASE_COMMONLIB_PATH}=dependencies\\CommonLibSSE-NG>")
 add_subdirectory("${COMMONLIB_SSE_FOLDER}" "${CMAKE_CURRENT_BINARY_DIR}/_deps/clib-build")
 find_path(SKSE_MCP_INCLUDE_DIRS "SKSEMCP/utils.hpp" REQUIRED)
 configure_file(cmake/version.rc.in version.rc @ONLY)
@@ -66,6 +74,7 @@ add_library(mod SHARED
   include/Party.h include/PartyRules.h include/Strings.h include/Controller.h include/ControllerRules.h include/CommandRules.h include/ControllerStorage.h include/ControllerState.h include/ControllerRuntime.h include/StateCodec.h include/ControllerExecutor.h include/ExecutorRules.h include/NativeLatent.h
   "${CMAKE_CURRENT_BINARY_DIR}/version.rc" "${CMAKE_CURRENT_BINARY_DIR}/plugin_info.cpp")
 set_target_properties(mod PROPERTIES OUTPUT_NAME "${MOD_BINARY_NAME}")
+target_link_options(mod PRIVATE "/PDBALTPATH:%_PDB%")
 target_link_libraries(mod PRIVATE CommonLibSSE::CommonLibSSE)
 target_compile_features(mod PRIVATE cxx_std_23)
 target_precompile_headers(mod PRIVATE include/PCH.h)

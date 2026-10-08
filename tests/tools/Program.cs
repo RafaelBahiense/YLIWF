@@ -11,6 +11,7 @@ using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
 
 var root = Path.GetFullPath(args.Single());
+var archiveTimestamp = ReleaseTimestamp.Read(root);
 var temporary = Path.Combine(Path.GetTempPath(), "yliwf-tools-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(temporary);
 void Check(bool condition, string description)
@@ -79,11 +80,59 @@ void Scripts(string source, string output)
     Directory.CreateDirectory(output);
     foreach (var file in Directory.GetFiles(source, "*.psc"))
     {
-        File.WriteAllBytes(Path.Combine(output, Path.GetFileNameWithoutExtension(file) + ".pex"), [0xfa, 0x57, 0xc0, 0xde, 3, 2, 0, 1, 0]);
+        File.WriteAllBytes(Path.Combine(output, Path.GetFileNameWithoutExtension(file) + ".pex"), PexFixture(Path.GetFileName(file)));
     }
+}
+byte[] PexFixture(string filename)
+{
+    using var stream = new MemoryStream();
+    stream.Write(new byte[] { 0xfa, 0x57, 0xc0, 0xde, 3, 2, 0, 1 });
+    stream.Write(Enumerable.Repeat((byte)123, 8).ToArray());
+    Span<byte> length = stackalloc byte[2];
+    foreach (var text in new[] { "C:\\Users\\PrivateUser\\repo\\" + filename, "PrivateUser", "PrivateComputer" })
+    {
+        var bytes = Encoding.UTF8.GetBytes(text);
+        BinaryPrimitives.WriteUInt16BigEndian(length, checked((ushort)bytes.Length));
+        stream.Write(length);
+        stream.Write(bytes);
+    }
+    stream.Write(new byte[] { 0, 0, 1 }); // Empty string table; debug section present.
+    stream.Write(Enumerable.Repeat((byte)124, 8).ToArray());
+    stream.Write(new byte[] { 0, 0, 0, 0, 0, 0 }); // Empty debug, flag and object tables.
+    return stream.ToArray();
 }
 try
 {
+    var previousEpoch = Environment.GetEnvironmentVariable("SOURCE_DATE_EPOCH");
+    try
+    {
+        Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", "1791462459");
+        var expectedDate = DateTimeOffset.FromUnixTimeSeconds(1791462458);
+        Check(ReleaseTimestamp.Read(root) == expectedDate, "Explicit release date was not rounded to ZIP precision");
+        Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", "invalid");
+        Fails(() => ReleaseTimestamp.Read(root));
+        Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", "0");
+        Fails(() => ReleaseTimestamp.Read(root));
+        Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", null);
+        var extractedSource = Path.Combine(temporary, "extracted-source");
+        var extractedManifest = Path.Combine(extractedSource, Artifacts.Manifest);
+        Directory.CreateDirectory(Path.GetDirectoryName(extractedManifest)!);
+        File.WriteAllText(extractedManifest, "{\"archive_timestamp\":1791462458}");
+        Check(ReleaseTimestamp.Read(extractedSource) == expectedDate, "Extracted sources lost the original release date");
+        Fails(() => ReleaseTimestamp.Read(temporary));
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", previousEpoch);
+    }
+    var privatePex = PexFixture("Test.psc");
+    var cleanPex = PexMetadata.Sanitize(privatePex);
+    Check(!Encoding.UTF8.GetString(cleanPex).Contains("Private", StringComparison.Ordinal), "PEX retains machine identity");
+    Check(cleanPex.AsSpan(8, 8).SequenceEqual(new byte[8]), "PEX retains compile time");
+    Check(cleanPex.AsSpan(33, 8).SequenceEqual(new byte[8]), "PEX retains debug modification time");
+    Check(cleanPex.AsSpan(41).SequenceEqual(privatePex.AsSpan(privatePex.Length - 6)), "PEX metadata sanitation changed debug tables or bytecode");
+    Check(PexMetadata.Sanitize(cleanPex).SequenceEqual(cleanPex), "PEX sanitation is not idempotent");
+    Fails(() => PexMetadata.Sanitize(privatePex[..20]));
     var identityJson = File.ReadAllText(Path.Combine(root, "mod.json"));
     Check(ModInfo.Identity == ModIdentity.Parse(identityJson), "Embedded identity is stale; rebuild ModTools after editing mod.json");
     var branding = JsonNode.Parse(identityJson)!.AsObject();
@@ -193,17 +242,24 @@ try
     var sourceArchive = Path.Combine(temporary, "fixture-source.zip");
     Artifacts.Publish(new[] { (SourceSnapshot.Prepare(root, dll, sourceArchive, commonLib, vcpkg, nativeBuild), sourceArchive) });
     SourceSnapshot.Validate(sourceArchive, dll, root);
+    using (var snapshot = ZipFile.OpenRead(sourceArchive))
+    {
+        Check(!snapshot.Entries.Any(entry => entry.FullName is "provenance/CMakeCache.txt" or "provenance/compile_commands.json"),
+            "Source snapshot publishes machine-specific compiler paths");
+        Check(snapshot.Entries.All(entry => entry.LastWriteTime.DateTime == archiveTimestamp.DateTime && entry.ExternalAttributes == 0),
+            "Source ZIP date differs from the release or retains file attributes");
+    }
     var sourceMetadata = new Dictionary<string, object> { ["kind"] = "corresponding source", ["dll_sha256"] = Artifacts.HashFile(dll), ["plugin"] = ModInfo.PluginFile };
     var changedDefaults = Path.Combine(temporary, "different-defaults.ini");
     File.WriteAllText(changedDefaults, "[General]\niMaxFollowers=1\n");
     var differentDefaultsFiles = new Dictionary<string, string>(sourceFiles) { ["assets/settings.ini"] = changedDefaults };
     var differentDefaultsArchive = Path.Combine(temporary, "different-defaults.zip");
-    Artifacts.Publish(new[] { (Artifacts.PrepareZip(differentDefaultsArchive, differentDefaultsFiles, sourceMetadata), differentDefaultsArchive) });
+    Artifacts.Publish(new[] { (Artifacts.PrepareZip(differentDefaultsArchive, differentDefaultsFiles, sourceMetadata, archiveTimestamp), differentDefaultsArchive) });
     Fails(() => SourceSnapshot.Validate(differentDefaultsArchive, dll, root));
     var invalidNotices = Path.Combine(temporary, "invalid-notices.zip");
     var missingNoticeFiles = new Dictionary<string, string>(sourceFiles);
     missingNoticeFiles.Remove("licenses/spdlog.txt");
-    Artifacts.Publish(new[] { (Artifacts.PrepareZip(invalidNotices, missingNoticeFiles, sourceMetadata), invalidNotices) });
+    Artifacts.Publish(new[] { (Artifacts.PrepareZip(invalidNotices, missingNoticeFiles, sourceMetadata, archiveTimestamp), invalidNotices) });
     Fails(() => SourceSnapshot.Validate(invalidNotices, dll));
     var installedFmtNotice = sourceFiles["licenses/fmt.txt"];
     var originalFmtNotice = File.ReadAllText(installedFmtNotice);
@@ -212,7 +268,7 @@ try
     Fails(() => SourceSnapshot.Prepare(root, dll, sourceArchive, commonLib, vcpkg, nativeBuild));
     File.WriteAllText(installedFmtNotice, " \n");
     Fails(() => SourceSnapshot.Prepare(root, dll, sourceArchive, commonLib, vcpkg, nativeBuild));
-    Artifacts.Publish(new[] { (Artifacts.PrepareZip(invalidNotices, sourceFiles, sourceMetadata), invalidNotices) });
+    Artifacts.Publish(new[] { (Artifacts.PrepareZip(invalidNotices, sourceFiles, sourceMetadata, archiveTimestamp), invalidNotices) });
     Fails(() => SourceSnapshot.Validate(invalidNotices, dll));
     Check(File.ReadAllBytes(sourceArchive).SequenceEqual(originalSourceArchive), "Missing or empty notice changed the existing source archive");
     File.WriteAllText(installedFmtNotice, originalFmtNotice);
@@ -223,9 +279,10 @@ try
     File.WriteAllBytes(mismatchedDll, [1, 2, 3]);
     Fails(() => SourceSnapshot.Validate(sourceArchive, mismatchedDll));
     var zip = Path.Combine(temporary, "mod.zip");
-    Artifacts.Publish(new[] { (Artifacts.PrepareZip(zip, files, new Dictionary<string, object> { ["version"] = "test" }), zip) });
+    Artifacts.Publish(new[] { (Artifacts.PrepareZip(zip, files, new Dictionary<string, object> { ["version"] = "test" }, archiveTimestamp), zip) });
     using (var archive = ZipFile.OpenRead(zip))
     {
+        Check(archive.Entries.All(entry => entry.LastWriteTime.DateTime == archiveTimestamp.DateTime), "ZIP entries have inconsistent release dates");
         var names = archive.Entries.Select(e => e.FullName).ToArray();
         Check(names.Contains(Artifacts.Plugin) && names.Contains("SKSE/Plugins/" + Artifacts.Dll), "Missing plugin or DLL");
         Check(names.Count(n => n.EndsWith(".pex", StringComparison.Ordinal)) == 5 && !names.Contains("Scripts/Game.pex"), "Missing scripts or stale outputs entered archive");
@@ -249,8 +306,8 @@ try
         }
     }
     var previous = File.ReadAllBytes(zip);
-    Fails(() => Artifacts.PrepareZip(zip, new Dictionary<string, string> { ["Scripts/missing.pex"] = Path.Combine(temporary, "missing") }, new Dictionary<string, object>()));
-    Fails(() => Artifacts.PrepareZip(zip, new Dictionary<string, string> { ["../bad"] = esp }, new Dictionary<string, object>()));
+    Fails(() => Artifacts.PrepareZip(zip, new Dictionary<string, string> { ["Scripts/missing.pex"] = Path.Combine(temporary, "missing") }, new Dictionary<string, object>(), archiveTimestamp));
+    Fails(() => Artifacts.PrepareZip(zip, new Dictionary<string, string> { ["../bad"] = esp }, new Dictionary<string, object>(), archiveTimestamp));
     Check(File.ReadAllBytes(zip).SequenceEqual(previous) && Directory.GetFiles(temporary, ".*.tmp").Length == 0, "Failed ZIP changed release or left temporary files");
     File.Delete(Path.Combine(papyrus, "Scripts/YLIWF_SKSE.pex"));
     Fails(() => Artifacts.Package(root, esp, dll, papyrus, temporary, false, BuildMode.SuppliedDll, sourceArchive));
@@ -296,7 +353,7 @@ try
     // Publication rollback if the second archive cannot be installed.
     var rollback = Path.Combine(temporary, "rollback.zip");
     File.WriteAllText(rollback, "old");
-    var newZip = Artifacts.PrepareZip(rollback, files, new Dictionary<string, object>());
+    var newZip = Artifacts.PrepareZip(rollback, files, new Dictionary<string, object>(), archiveTimestamp);
     Fails(() => Artifacts.Publish(new[] { (newZip, rollback), (Path.Combine(temporary, "absent.tmp"), Path.Combine(temporary, "patch.zip")) }));
     Check(File.ReadAllText(rollback) == "old", "Multi-archive rollback failed");
 

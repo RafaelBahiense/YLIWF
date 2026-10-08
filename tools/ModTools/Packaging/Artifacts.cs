@@ -151,7 +151,7 @@ public static class Artifacts
         }
     }
     // Prepare every requested archive before publishing any release.
-    public static string PrepareZip(string destination, IReadOnlyDictionary<string, string> files, IReadOnlyDictionary<string, object> metadata, bool includeManifest = true)
+    public static string PrepareZip(string destination, IReadOnlyDictionary<string, string> files, IReadOnlyDictionary<string, object> metadata, DateTimeOffset timestamp, bool includeManifest = true)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destination))!);
         var temporary = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(destination))!, "." + Path.GetFileName(destination) + "." + Guid.NewGuid().ToString("N") + ".tmp");
@@ -170,14 +170,14 @@ public static class Artifacts
 
                     var bytes = File.ReadAllBytes(source);
                     hashes.Add(name, Hash(bytes));
-                    using var entry = archive.CreateEntry(name, CompressionLevel.SmallestSize).Open();
+                    using var entry = CreateEntry(archive, name, timestamp).Open();
                     entry.Write(bytes);
                 }
                 if (includeManifest)
                 {
                     var manifest = metadata.ToDictionary(pair => pair.Key, pair => pair.Value);
                     manifest[ManifestFields.Hashes] = hashes;
-                    using var writer = new StreamWriter(archive.CreateEntry(Manifest).Open(), new UTF8Encoding(false));
+                    using var writer = new StreamWriter(CreateEntry(archive, Manifest, timestamp).Open(), new UTF8Encoding(false));
                     writer.Write(JsonSerializer.Serialize(manifest, ManifestJsonOptions));
                 }
             }
@@ -209,6 +209,13 @@ public static class Artifacts
             return temporary;
         }
         catch { File.Delete(temporary); throw; }
+    }
+    private static ZipArchiveEntry CreateEntry(ZipArchive archive, string name, DateTimeOffset timestamp)
+    {
+        var entry = archive.CreateEntry(name, CompressionLevel.SmallestSize);
+        entry.LastWriteTime = timestamp;
+        entry.ExternalAttributes = 0;
+        return entry;
     }
     public static void Publish(IEnumerable<(string Temporary, string Destination)> archives)
     {
@@ -309,14 +316,20 @@ public static class Artifacts
                 SourceSnapshot.Validate(sourceTemporary, dll, root);
             }
             var dependencyNotices = SourceSnapshot.ExtractBinaryNotices(sourceTemporary, noticeDirectory);
+            DateTimeOffset timestamp;
+            using (var sourceZip = ZipFile.OpenRead(sourceTemporary))
+            {
+                // Supplied sources retain the original release's date.
+                timestamp = new DateTimeOffset(sourceZip.GetEntry(Manifest)!.LastWriteTime.DateTime, TimeSpan.Zero);
+            }
             var destination = Path.Combine(output, $"{ModInfo.BinaryName}-{version}.zip");
-            pending.Add((PrepareZip(destination, CoreFiles(root, esp, dll, Path.Combine(papyrus, "Scripts"), dependencyNotices), metadata, includeManifest: false), destination));
+            pending.Add((PrepareZip(destination, CoreFiles(root, esp, dll, Path.Combine(papyrus, "Scripts"), dependencyNotices), metadata, timestamp, includeManifest: false), destination));
             if (patch)
             {
                 var files = ScriptOutputs(Path.Combine(root, "src/papyrus/patches/3dnpc"), Path.Combine(papyrus, "Patches/3DNPC/Scripts")).ToDictionary(file => "Scripts/" + Path.GetFileName(file), file => file);
                 AddNotices(root, files, dependencyNotices);
                 destination = Path.Combine(output, $"{ModInfo.BinaryName}-{version}-3DNPC.zip");
-                pending.Add((PrepareZip(destination, files, metadata, includeManifest: false), destination));
+                pending.Add((PrepareZip(destination, files, metadata, timestamp, includeManifest: false), destination));
             }
             Publish(pending);
             foreach (var (_, path) in pending)

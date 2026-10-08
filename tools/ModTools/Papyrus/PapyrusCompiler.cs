@@ -102,7 +102,12 @@ public static partial class PapyrusCompiler
             }
 
             runner(wine ?? compiler, arguments, root);
-            completed.Add((Artifacts.ScriptOutputs(source, staging), destination));
+            var outputs = Artifacts.ScriptOutputs(source, staging);
+            foreach (var file in outputs)
+            {
+                PexMetadata.Sanitize(file);
+            }
+            completed.Add((outputs, destination));
         }
         // Validate both groups before publishing either outputs or receipts.
         for (var i = 0; i < completed.Count; ++i)

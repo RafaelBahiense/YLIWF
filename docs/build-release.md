@@ -30,6 +30,13 @@ machine-local configuration between computers.
 
 ## Everyday commands
 
+GitHub Actions caches pinned downloads, NuGet packages, vcpkg binary packages,
+and CommonLib build outputs. Native caches are separated by runner image,
+compiler, Windows SDK, workspace path, dependency pins, and CMake configuration.
+CommonLib's precompiled headers and compiled objects can be reused; mod objects
+and binaries are excluded and always rebuild. The first run after a cache change
+performs a full build.
+
 ```powershell
 .\build.ps1
 .\build.ps1 -Target Native -Configuration Debug
@@ -76,9 +83,18 @@ Full builds snapshot the actual CommonLib checkout and vcpkg source trees under
 packaging. Source ZIPs exclude saves and machine-local configuration.
 
 Dependencies are under `dependencies/`. When building an extracted source ZIP,
-use `-CommonLib './dependencies/CommonLibSSE-NG'`. `provenance/` records the
-original build configuration and installed package versions; absolute paths
-there are evidence, not portable configuration.
+use `-CommonLib './dependencies/CommonLibSSE-NG'`. `provenance/` records installed
+package versions. Machine-specific CMake caches and compiler commands are omitted.
+
+Release builds map native source paths to stable names. Papyrus headers contain
+only source filenames, with compiler user/computer names and timestamps cleared;
+debug line mappings remain available. ZIP entries use HEAD's commit date in UTC
+(rounded to ZIP's two-second precision) and no copied filesystem attributes.
+`SOURCE_DATE_EPOCH` can override the date with Unix seconds; extracted source
+archives retain it in the build manifest for builds without Git. Repackaging
+supplied sources retains their original archive date.
+Debug builds retain local native source paths for
+the debugger and are intended for local development.
 
 All requested archives are prepared and validated before replacing releases.
 Publication rolls back earlier replacements if another archive in the group fails.
