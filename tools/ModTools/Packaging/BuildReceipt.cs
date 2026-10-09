@@ -21,24 +21,43 @@ public static class BuildReceipt
     public static Dictionary<string, string> CaptureInputs(string root, BuildComponent component)
     {
         ValidateToolBuild(root);
+        return SourceSnapshot.ProjectFiles(root)
+            .Where(file => IsComponentInput(file.Key, component) || IsSharedInput(file.Key))
+            .ToDictionary(file => file.Key, file => Artifacts.HashFile(file.Value), StringComparer.Ordinal);
+    }
+
+    private static bool IsComponentInput(string name, BuildComponent component)
+    {
         var sourceDirectory = component switch
         {
             BuildComponent.Plugin => "src/plugin/",
             BuildComponent.Native => "src/native/",
             _ => "src/papyrus/core/"
         };
-        return SourceSnapshot.ProjectFiles(root).Where(file =>
-            file.Key.StartsWith(sourceDirectory, StringComparison.Ordinal) ||
-            (component == BuildComponent.Native && (file.Key.StartsWith("include/", StringComparison.Ordinal) ||
-                file.Key.StartsWith("src/addons/", StringComparison.Ordinal) || file.Key.StartsWith("cmake/", StringComparison.Ordinal) ||
-                file.Key is "CMakeLists.txt" or "CMakePresets.json" or "vcpkg.json" or "vcpkg-configuration.json" or "assets/settings.ini")) ||
-            (component == BuildComponent.Papyrus3Dnpc && file.Key.StartsWith("src/papyrus/patches/3dnpc/", StringComparison.Ordinal)) ||
-            file.Key.StartsWith("src/shared/", StringComparison.Ordinal) ||
-            (file.Key.StartsWith("tools/ModTools/", StringComparison.Ordinal) && file.Key.EndsWith(".cs", StringComparison.Ordinal)) ||
-            file.Key is "mod.json" or "VERSION" or "global.json" or "tools/dependencies.json" or "tools/paths.json" or
-                "tools/ModTools/ModTools.csproj" or "tools/ModTools/packages.lock.json")
-            .ToDictionary(file => file.Key, file => Artifacts.HashFile(file.Value), StringComparer.Ordinal);
+        return name.StartsWith(sourceDirectory, StringComparison.Ordinal) || component switch
+        {
+            BuildComponent.Native => IsNativeInput(name),
+            BuildComponent.Papyrus3Dnpc => name.StartsWith("src/papyrus/patches/3dnpc/", StringComparison.Ordinal),
+            _ => false
+        };
     }
+
+    private static bool IsNativeInput(string name) =>
+        name.StartsWith("include/", StringComparison.Ordinal) ||
+        name.StartsWith("src/addons/", StringComparison.Ordinal) ||
+        name.StartsWith("cmake/", StringComparison.Ordinal) ||
+        name is "CMakeLists.txt" or "CMakePresets.json" or "vcpkg.json" or "vcpkg-configuration.json" or "assets/settings.ini";
+
+    private static bool IsSharedInput(string name) =>
+        name.StartsWith("src/shared/", StringComparison.Ordinal) ||
+        (name.StartsWith("tools/ModTools/", StringComparison.Ordinal) && name.EndsWith(".cs", StringComparison.Ordinal)) ||
+        name is "mod.json" or "VERSION" or "global.json" or "tools/dependencies.json" or "tools/paths.json" or
+            "tools/ModTools/ModTools.csproj" or "tools/ModTools/packages.lock.json";
+
+    private static bool IsGeneratorInput(string name) =>
+        (name.EndsWith(".cs", StringComparison.Ordinal) && (name.StartsWith("tools/ModTools/", StringComparison.Ordinal) ||
+            name.StartsWith("src/plugin/", StringComparison.Ordinal) || name == "src/shared/ModInfo.cs")) ||
+        name is "mod.json" or "tools/ModTools/ModTools.csproj" or "tools/ModTools/packages.lock.json";
 
     private static void ValidateToolBuild(string root)
     {
@@ -58,10 +77,7 @@ public static class BuildReceipt
             var name = Path.GetRelativePath(root, path).Replace('\\', '/');
             built.Add(name, line[(separator + 1)..].ToLowerInvariant());
         }
-        var current = SourceSnapshot.ProjectFiles(root).Where(file =>
-            (file.Key.EndsWith(".cs", StringComparison.Ordinal) && (file.Key.StartsWith("tools/ModTools/", StringComparison.Ordinal) ||
-                file.Key.StartsWith("src/plugin/", StringComparison.Ordinal) || file.Key == "src/shared/ModInfo.cs")) ||
-            file.Key is "mod.json" or "tools/ModTools/ModTools.csproj" or "tools/ModTools/packages.lock.json")
+        var current = SourceSnapshot.ProjectFiles(root).Where(file => IsGeneratorInput(file.Key))
             .ToDictionary(file => file.Key, file => Artifacts.HashFile(file.Value), StringComparer.Ordinal);
         if (!SameHashes(built, current))
         {

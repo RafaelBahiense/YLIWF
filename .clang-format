@@ -4,7 +4,14 @@ TabWidth: '4'
 IndentWidth: '4'
 BasedOnStyle: Google
 AccessModifierOffset: -4
-ColumnLimit: 0
+ColumnLimit: 120
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortBlocksOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+SeparateDefinitionBlocks: Always
+SortIncludes: Never
+LineEnding: CRLF
 NamespaceIndentation: All
 IndentPPDirectives: BeforeHash
 FixNamespaceComments: false

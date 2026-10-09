@@ -1,6 +1,6 @@
 // Assertions are the test runner; keep them active in every configuration.
 #ifdef NDEBUG
-#undef NDEBUG
+    #undef NDEBUG
 #endif
 #include "DebugRules.h"
 #include "Debug.h"
@@ -42,7 +42,8 @@ struct TraceValue {
     int* formatCalls;
 };
 
-template <> struct fmt::formatter<TraceValue> : fmt::formatter<int> {
+template <>
+struct fmt::formatter<TraceValue> : fmt::formatter<int> {
     auto format(const TraceValue& value, fmt::format_context& context) const {
         ++*value.formatCalls;
         return fmt::formatter<int>::format(42, context);
@@ -67,7 +68,7 @@ int main() {
         assert(Decode(first, 1).preset == 2 && !Decode(first, 1).individual);
         first = Encode(0, true);
         assert(Decode(first, 1).preset == 0 && Decode(second, 1).preset == 2);
-        assert(Decode(second, 0).preset == 2); // Save choice wins over a different INI default.
+        assert(Decode(second, 0).preset == 2);  // Save choice wins over a different INI default.
     }
     {
         using namespace mod::settings_rules;
@@ -78,23 +79,33 @@ int main() {
         assert(ParseInteger(*IniValue(mod::settings_defaults::Ini, "General", "bFollowerHomes"), 0, 1) == 0);
         assert(ParseInteger(*IniValue(mod::settings_defaults::Ini, "General", "iFollowDistance"), 0, 2) == 1);
         assert(ParseInteger(" 2 // comment", 0, 2) == 2);
-        for (auto text : {"", "invalid", "1junk", "-1", "3", "9999999999999"}) assert(!ParseInteger(text, 0, 2));
-        assert(!ParseInteger("2", 0, 1)); // Boolean options accept only zero or one.
+        for (auto text : {"", "invalid", "1junk", "-1", "3", "9999999999999"})
+            assert(!ParseInteger(text, 0, 2));
+        assert(!ParseInteger("2", 0, 1));  // Boolean options accept only zero or one.
         assert(!ParseInteger("0", 1, 8));
 
         using namespace mod::settings_file;
-        const auto directory = std::filesystem::current_path() / ("settings-test-" + std::to_string(GetCurrentProcessId()));
+        const auto directory =
+            std::filesystem::current_path() / ("settings-test-" + std::to_string(GetCurrentProcessId()));
         const auto path = directory / "Plugins" / "settings.ini";
         assert(CreateMissing(path, mod::settings_defaults::Ini).result == Result::Created);
-        auto read = [&] { std::ifstream file(path, std::ios::binary); return std::string(std::istreambuf_iterator<char>(file), {}); };
+        auto read = [&] {
+            std::ifstream file(path, std::ios::binary);
+            return std::string(std::istreambuf_iterator<char>(file), {});
+        };
         assert(read() == mod::settings_defaults::Ini);
         const std::string custom = "[General]\r\niMaxFollowers=invalid\r\nUnknownUserSetting=keep\r\n";
-        { std::ofstream file(path, std::ios::binary | std::ios::trunc); file << custom; }
+        {
+            std::ofstream file(path, std::ios::binary | std::ios::trunc);
+            file << custom;
+        }
         assert(CreateMissing(path, mod::settings_defaults::Ini).result == Result::Existing && read() == custom);
         assert(!ParseInteger(*IniValue(read(), "General", "iMaxFollowers"), 1, 8));
         assert(CreateMissing(path.parent_path(), mod::settings_defaults::Ini).result == Result::Failed);
-        assert(read() == custom); // A creation failure cannot reset the user file.
-        std::filesystem::remove(path); std::filesystem::remove(path.parent_path()); std::filesystem::remove(directory);
+        assert(read() == custom);  // A creation failure cannot reset the user file.
+        std::filesystem::remove(path);
+        std::filesystem::remove(path.parent_path());
+        std::filesystem::remove(directory);
     }
     {
         using namespace mod::follower_view;
@@ -116,7 +127,8 @@ int main() {
     assert(ParseFormID("00058F75") == 0x58F75);
     assert(ParseFormID("0x00058f75") == 0x58F75);
     assert(ParseFormID("0XFFFFFFFF") == 0xFFFFFFFF);
-    for (const auto* invalid : {"", "0x", "58F75junk", "-1", "+1", " 1", "1 ", "100000000"}) assert(!ParseFormID(invalid));
+    for (const auto* invalid : {"", "0x", "58F75junk", "-1", "+1", " 1", "1 ", "100000000"})
+        assert(!ParseFormID(invalid));
     using namespace mod::debug_rules;
     {
         using mod::party_rules::Slot;
@@ -140,9 +152,13 @@ int main() {
         assert(!mod::party_rules::ValidBinding(true, 99, "ExtraFollower01", false));
         // Null slots and foreign/animal bindings are invalid, not free. A filled
         // non-actor alias must also stay occupied so recruitment cannot overwrite it.
-        std::vector<Slot> slots{{}, {true, true, false, 0}, {true, false},
-            {true, true, false, 0x123}, {true, true, false, 0x123},
-            {true, true, true, 0x456}, {true, true, false, 0x789}};
+        std::vector<Slot> slots{{},
+                                {true, true, false, 0},
+                                {true, false},
+                                {true, true, false, 0x123},
+                                {true, true, false, 0x123},
+                                {true, true, true, 0x456},
+                                {true, true, false, 0x789}};
         assert(mod::party_rules::FindActor(slots, 0) == -1);
         assert(mod::party_rules::FindActor(slots, 0x456) == 5);  // Dead actors remain managed until explicit cleanup.
         assert(mod::party_rules::FindActor(slots, 0x123) == 3);  // Prefer the first duplicate.
@@ -160,7 +176,9 @@ int main() {
         assert(mod::party_rules::CountLive({}) == 0);
         assert(mod::party_rules::FindFree({}) == -1);
         assert(mod::party_rules::FindFirstLiving({}) == -1);
-        for (auto& slot : slots) if (slot.actorID) slot.dead = true;
+        for (auto& slot : slots)
+            if (slot.actorID)
+                slot.dead = true;
         assert(mod::party_rules::CountLive(slots) == 0);
         assert(mod::party_rules::FindFirstLiving(slots) == -1);
         const auto empty = mod::party_rules::CountGlobals(0, 4);
@@ -171,6 +189,8 @@ int main() {
         assert(full.vanillaCount == 1 && full.recruitGate == 0);
         assert(mod::party_rules::CountGlobals(5, 4).recruitGate == 0);  // Do not silently dismiss an over-cap party.
         assert(mod::party_rules::CountGlobals(-1, 0).partyCount == 0);
+        const auto questOnly = mod::party_rules::CountGlobals(0, 8, true);
+        assert(questOnly.vanillaCount == 1 && questOnly.partyCount == 0 && questOnly.recruitGate == 1);
     }
     {
         mod::refresh::State refresh;
@@ -180,7 +200,7 @@ int main() {
         refresh.SetVisible(true);
         const auto first = refresh.Queue(now);
         assert(first && refresh.Queue(now) == 0);  // Coalesce render frames.
-        refresh.Inspect(0x123);  // Inspection arriving after polling queued must not be lost.
+        refresh.Inspect(0x123);                    // Inspection arriving after polling queued must not be lost.
         const auto request = refresh.Start(first);
         assert(request && request->inspectID == 0x123);
         refresh.MarkDirty();  // A gameplay change during capture still needs a fresh read.
@@ -284,13 +304,14 @@ int main() {
         assert(CanCommand(true, true, false, action, true) == (action == 0));
     }
     assert(!CanCommand(true, true, true, -1, true));
-    assert(CanCommand(true, true, true, 8, false)); // Primary selection is available without debug options.
+    assert(CanCommand(true, true, true, 8, false));  // Primary selection is available without debug options.
     assert(!CanCommand(true, true, false, 8, false));
     assert(!CanCommand(true, true, true, 9, true));
     assert(!CanCommand(true, true, false, 0, false));
     std::vector<Row> rows{{0}, {0x123}, {0x456, false, true, true, 1}};
     assert(Diagnose(rows) == 2);
-    for (const auto& row : rows) assert(row.issues.empty());
+    for (const auto& row : rows)
+        assert(row.issues.empty());
     assert(GlobalIssues(2, 4, 2, 1).empty());
     assert(GlobalIssues(4, 4, 4, 0).empty());
     assert(GlobalIssues(0, 1, 0, 1).empty());

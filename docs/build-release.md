@@ -1,12 +1,12 @@
-# Build, development, and releases
+# Build and release
 
-Run commands from the repository root in ordinary PowerShell.
+Run commands from the repository root in PowerShell. Native and Papyrus
+compilation require Windows.
 
 ## First setup
 
-Install Git for Windows, the .NET 10 SDK, and Visual Studio 2022 Community or
-Build Tools with **Desktop development with C++**, a Windows SDK, and
-**C++ CMake tools for Windows**.
+Install Git for Windows, .NET 10 and Visual Studio 2022 with:
+**Desktop development with C++**, a Windows SDK and **C++ CMake tools for Windows**.
 
 ```powershell
 .\setup.ps1 -VanillaScriptsZip 'C:\path\to\Creation Kit\Data\Scripts.zip'
@@ -14,32 +14,17 @@ Build Tools with **Desktop development with C++**, a Windows SDK, and
 .\build.ps1
 ```
 
-Alternatively, use `-VanillaSources` with a directory containing vanilla `.psc`
-files and `TESV_Papyrus_Flags.flg`. Setup reuses validated local inputs on repeat
-runs. `-Check` reports missing inputs without downloads or changes.
+Alternatively, `-VanillaSources` accepts a directory containing vanilla
+`.psc` files and `TESV_Papyrus_Flags.flg`. `-Check` reports missing inputs
+without changing anything.
 
-Setup locates Visual Studio, downloads dependencies pinned in
-`tools/dependencies.json`, checks hashes, prepares SKSE/vanilla imports, and
-builds ModTools when preparing Papyrus imports. Downloads and local configuration stay in ignored
-`.tools/`; machine-wide SDKs and workloads must be installed separately.
-
-Use `-CommonLib`, `-Vcpkg`, or `-Compiler` for custom locations. Setup records
-them in `.tools/local.json`; build accepts these overrides plus `-Flags` and
-`-ImportDirectories`. Custom checkouts replace the pinned inputs. Do not share
-machine-local configuration between computers. Repository defaults live in
-`tools/paths.json`, shared by setup and ModTools.
+Setup downloads pinned dependencies and prepares imports in ignored `.tools/`.
+It reuses validated inputs. Machine-wide SDKs must be installed separately.
+Overrides `-CommonLib`, `-Vcpkg` and `-Compiler` are stored in
+`.tools/local.json`; repository defaults are in `tools/paths.json`.
+Build also accepts `-Flags` and `-ImportDirectories`.
 
 ## Everyday commands
-
-GitHub Actions caches pinned downloads, NuGet packages, vcpkg binary packages,
-and CommonLib build outputs. Download and vcpkg keys track dependency pins,
-manifests and overlay ports; unrelated build-script edits do not invalidate them.
-vcpkg keys also include the toolchain identity. CommonLib caches retain the
-conservative checks for build scripts and CMake settings, separated by runner image,
-compiler, Windows SDK, workspace path, dependency pins, and CMake configuration.
-CommonLib's precompiled headers and compiled objects can be reused; mod objects
-and binaries are excluded and always rebuild. The first run after a cache change
-performs a full build.
 
 ```powershell
 .\build.ps1
@@ -48,110 +33,99 @@ performs a full build.
 .\build.ps1 -Target Scripts
 .\build.ps1 -Target Test
 .\build.ps1 -Target Verify
+.\build.ps1 -Target Package
 .\build.ps1 -Clean
 ```
 
-VS Code provides matching build, test, and setup-check tasks; `Ctrl+Shift+B`
-builds the release. Select `Release x64` or `Debug x64` in C/C++ configuration
-after generating that build's compile database. For native debugging, install
-the matching Debug DLL, start Skyrim, and use **Attach to Skyrim (native)** to
-select its process; symbols come from the local Debug build.
+| Target | Result |
+| --- | --- |
+| `All` (default) | Build, validate and package core and declared add-ons |
+| `Native` | DLLs in `build/native/<configuration>` |
+| `Plugin` | ESP in `build/plugin` |
+| `Scripts` | PEX files in `build/papyrus/Scripts` |
+| `Test` | Native and .NET checks |
+| `Verify` | Native builds, tests and ESP generation; no Bethesda imports needed |
+| `Package` | Package existing outputs into `build/dist` |
+| `Repackage` | Regenerate ESP/scripts for a supplied DLL and matching source ZIP |
 
-`All` builds the DLL, generates the ESP, compiles five core scripts, validates
-the outputs, and creates the binary and matching source ZIPs in `build/dist`.
-`VERSION` contains three or four numeric components.
+Build receipts reject stale or mixed outputs; rebuild the affected component.
+CMake discovers core sources in `src/native/` and each add-on's `native/` folder.
+New `.cpp` files need no build-list edits; tests remain explicit targets.
+`-Clean` resets native outputs while keeping binary caches.
+Failed Papyrus stages remain in `build/papyrus/.staging-*`.
 
-Native builds reuse `build/native/<configuration>`. `-Clean` creates a fresh
-native/vcpkg build directory while retaining usable binary caches. Failed Papyrus
-stages remain under `build/papyrus/.staging-*` for inspection; successful stages
-are removed. Release archives are staged separately until validation passes.
+Add-ons are discovered from `src/addons/**/addon.json` and packaged separately
+as `YouLeadIWillFollow-<version>-<addon>.zip`. They share the source archive
+and notices. Supplied-DLL repackaging includes declared add-ons beside the core
+DLL only when their hashes match the source manifest.
 
-`Verify` builds native plugins, runs all tests, and generates the ESP, without
-requiring Bethesda imports. CI uses this same command. PowerShell initializes
-the environment and builds ModTools once; the C# coordinator owns the build
-sequence. CMake/Ninja own native compilation.
+VS Code provides build/test tasks. Generate the matching compile database,
+select Release or Debug x64, install the Debug DLL, then use
+**Attach to Skyrim (native)** to select the game process.
 
-Individual targets write the ESP to `build/plugin` and PEX files to
-`build/papyrus/Scripts`. `-Target Package` packages these existing outputs.
-Use `-OutputDirectory` for another destination. Native builds embed
-`assets/settings.ini` as the default configuration and first-launch template.
-DLL, ESP and PEX outputs have local build receipts recording source and output hashes.
-Packaging rejects missing receipts, changed inputs, and mixed outputs; rebuild the
-affected component. Receipts remain beside local outputs and are not installed.
-Install ZIPs contain only notices and licenses under `docs`; documentation,
-default settings sources, and the build manifest remain in the source ZIP.
-Every ZIP entry is still checked against its input hash before publication.
+## CI and caching
 
-## Source archives and supplied DLLs
+CI runs `Verify`. It caches pinned downloads, NuGet, vcpkg binaries and CommonLib
+build outputs. Dependency keys track pins and ports; CommonLib keys also track
+build settings, runner, compiler, SDK and workspace path. Mod objects always
+rebuild. A new key requires one full build.
 
-`-Target Package` packages local build outputs and snapshots their sources.
-Use `-Target Repackage -Dll <dll> -SourceArchive <zip>` for externally supplied
-binaries. This regenerates the ESP and compiles scripts, then checks the DLL hash, compiled inputs, dependency
-snapshots, notices, and archive hashes.
+## Packaging
 
-Full builds snapshot the actual CommonLib checkout and vcpkg source trees under
-`buildtrees`. If a binary cache lacks sources, restore those exact sources before
-packaging. Source ZIPs exclude saves and machine-local configuration.
+`VERSION` supplies three or four numeric components. Outputs are:
+`YouLeadIWillFollow-<version>.zip`, its `-source.zip`, and optional add-on ZIPs.
 
-Dependencies are under `dependencies/`. When building an extracted source ZIP,
-use `-CommonLib './dependencies/CommonLibSSE-NG'`. `provenance/` records installed
-package versions. Machine-specific CMake caches and compiler commands are omitted.
+To repackage an external DLL:
 
-Release builds map native source paths to stable names. Papyrus headers contain
-only source filenames, with compiler user/computer names and timestamps cleared;
-debug line mappings remain available. ZIP entries use HEAD's commit date in UTC
-(rounded to ZIP's two-second precision) and no copied filesystem attributes.
-`SOURCE_DATE_EPOCH` can override the date with Unix seconds; extracted source
-archives retain it in the build manifest for builds without Git. Repackaging
-supplied sources retains their original archive date.
-Debug builds retain local native source paths for
-the debugger and are intended for local development.
+```powershell
+.\build.ps1 -Target Repackage -Dll 'C:\path\YouLeadIWillFollow.dll' -SourceArchive 'C:\path\matching-source.zip'
+```
 
-All requested archives are prepared and validated before replacing releases.
-Publication rolls back earlier replacements if another archive in the group fails.
+Sources include the actual CommonLib checkout and vcpkg dependency sources.
+Restore missing sources before packaging cached binaries. Extracted source
+archives contain `dependencies/`; pass
+`-CommonLib './dependencies/CommonLibSSE-NG'` when rebuilding.
+
+Packaging validates hashes, receipts and notices before replacing archives.
+Publication rolls back if any replacement fails.
+`-OutputDirectory` changes the destination.
+
+Release paths and Papyrus headers omit machine identity. ZIPs use HEAD's UTC
+commit date, rounded to two seconds, without copied filesystem attributes.
+`SOURCE_DATE_EPOCH` overrides it; supplied source archives retain their date.
+Debug builds keep local paths for debugging.
 
 ## Dependency notices
 
-Packaging reads CommonLib's `LICENSE` and the native build's
-`vcpkg_installed/x64-windows-static/share/<port>/copyright` files.
-Missing or empty notices fail packaging.
-
-The source ZIP includes CommonLibSSE-NG, fmt, spdlog, rapidcsv, and SKSE-MCP
-notices. Binary ZIPs take four from that matching source archive, omitting fmt
-under its compiled-code exception. Supplied-DLL packaging uses the supplied
-archive's notices. Review licenses when updating dependencies or adding assets.
+Packaging reads CommonLib's `LICENSE` and vcpkg's `share/<port>/copyright`.
+Missing notices fail packaging. Source archives contain CommonLib, fmt, spdlog,
+rapidcsv and SKSE-MCP notices. Binary archives omit fmt under its compiled-code
+exception and take the other notices from the matching source archive.
 
 ## Publishing a release
 
-1. Build, run the tests above, and perform [in-game verification](debugging.md#verification)
-   on a new game and an existing YLIWF save.
-2. Upload the matching source ZIP beside every core or optional binary download
-   at no additional charge. Retain older sources while their binaries are
-   downloadable; a moving branch alone does not identify an older binary's source.
-3. Preserve `LICENSE`, `NOTICE`, `CREDITS.md`, and upstream/dependency notices.
-   Describe YLIWF as an independent architectural rewrite derived from SFF and
-   retain the original-project links.
+1. Build, run tests and complete [in-game verification](debugging.md#verification).
+2. Publish matching source beside each binary at no extra charge. Retain sources
+   while their binaries remain downloadable.
+3. Preserve `LICENSE`, `NOTICE`, `CREDITS.md` and dependency notices.
 
-Update `NOTICE` when attribution, ownership, lineage, or licensing changes.
-Individual features and fixes belong in Git history or release notes.
-Build commands create local archives; uploading them is a separate step.
+Update `NOTICE` for attribution, lineage or licensing changes; individual fixes
+belong in Git history or release notes. Build commands do not upload releases.
 
 ## Installation and explicit deployment
 
-The ZIP contains Data contents directly at its root:
+Install ZIPs contain Data contents:
 
 ```text
 You Lead, I Will Follow.esp
-Scripts/<five core PEX files>
+Scripts/<core PEX files>
 SKSE/Plugins/YouLeadIWillFollow.dll
-docs/YouLeadIWillFollow/<LICENSE, NOTICE, CREDITS.md, and dependency notices>
+docs/YouLeadIWillFollow/<notices and licenses>
 ```
 
-Install through your mod manager; runtime requirements are in the
-[README](../README.md#installation). `-DeployTo 'C:\MO2\mods\YouLeadIWillFollow'`
-deploys the core mod after successful packaging. The archive contains no user
-INI; the running mod creates it only when missing and preserves existing files.
-Builds deploy only when that option is supplied.
+Use a mod manager. `-DeployTo 'C:\MO2\mods\YouLeadIWillFollow'` explicitly
+deploys the core after packaging. The mod creates a missing INI; releases omit
+it to preserve settings. Documentation and build inputs belong in the source ZIP.
 
 ## Optional 3DNPC patch
 
@@ -163,18 +137,8 @@ Builds deploy only when that option is supplied.
 )
 ```
 
-The import list replaces defaults; retain SKSE and vanilla sources in precedence
-order. The patch needs additional imports such as `SetHirelingRehire3DNPC.psc`.
-Core and patch compilations must both pass before packaging.
+The import list replaces defaults and must include `SetHirelingRehire3DNPC.psc`.
+Install the separate `-3DNPC.zip` after YLIWF and Interesting NPCs.
+Both core and patch compilation must pass; `-DeployTo` deploys only the core.
 
-The separate `YouLeadIWillFollow-<version>-3DNPC.zip` contains `follower3dnpc.pex`.
-Install it after YLIWF and Interesting NPCs. `-DeployTo` deploys only the core mod.
-
-## Tests
-
-`-Target Test` runs CTest assertions and .NET checks for generated records,
-artifact integrity, source preparation, compiler failures, and release rollback.
-Windows CI also generates the ESP; full Papyrus builds require vanilla imports.
-
-Native and Papyrus compilation require Windows.
-See [development tools](../tools/README.md) for direct .NET commands and analysis.
+See [development tools](../tools/README.md) for inspection and C# analysis.

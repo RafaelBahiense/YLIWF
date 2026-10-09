@@ -1,130 +1,96 @@
 # Debugging follower state
 
-Open **SKSE Menu Framework → You Lead, I Will Follow**. The framework is optional
-for gameplay and required for these controls.
+Open **SKSE Menu Framework → You Lead, I Will Follow**.
 
 ## Menu and command feedback
 
-**Followers** shows registered actors, Following/Waiting status, and Follow,
-Wait, Dismiss, and Make primary commands. The primary follower is labeled in the
-list. **Debug options** reveal installation diagnostics,
-IDs, empty slots, repairs, and actor inspection/recruitment. **Log mod flow** is
-independent; both switches default to off.
+**Followers** shows state, location, approximate distance and ordinary commands.
+**Debug options** adds IDs, empty slots, repairs and inspection/recruitment.
+**Log mod flow** is independent; both settings default to off.
 
-**Settings → Following distance** selects Close, Normal or Far for human YLIWF
-followers. Selecting a preset or
-**Apply to all followers** replaces individual choices for the current roster.
-Each row on **Followers** also offers Close, Normal and Far for that actor alone.
-Choices are saved on the actor and survive save/load and primary-slot promotion;
-**Save** in Settings retains the default for newly configured followers.
-The animal alias is excluded. Normal uses the
-vanilla follow radii; pathfinding, combat and idle sandboxing can change actual spacing.
+Global Close/Normal/Far or **Apply to all followers** replaces the current
+party's distance choices. Row controls change one actor. Choices persist in
+game saves and through primary promotion; Settings **Save** retains the default
+for new followers. Animals are excluded. Paths, combat and sandboxing affect
+actual spacing.
 
-Follow All and Wait All apply to unique living followers; Dismiss All requires
-confirmation and includes dead registrations. Group commands target the roster
-at submission and report verified results per follower. The animal is excluded.
-Location and approximate straight-line distance in metres are visible with debug
-options off. Distance is unavailable for unloaded actors or different
-interiors/worldspaces.
+Follow All/Wait All target unique living humanoids. Dismiss All includes dead
+registrations and requires confirmation. Location distance is straight-line;
+it may be unavailable for unloaded actors or different interiors/worldspaces.
 
-Opening Followers or Debug refreshes the snapshot. State changes invalidate it
-for the next visible frame, with a one-second refresh fallback. Closing the menu
-stops captures and refresh tasks; Settings and other mods' pages do not poll
-the roster. The visibility observer reads no game state.
+Snapshots refresh on opening Followers/Debug, after state changes and once per
+second while visible. Closed menus, Settings and other mods' pages do not poll.
 
-Dismiss, clear, recruit, and release require confirmation. Close a paused menu
-to let the controller and engine adapters execute. Queue acceptance is not completion: feedback comes from
-verified results. The UI allows one pending command; the shared controller queue
-holds up to 16 requests.
-
-After 30 unpaused seconds without progress, diagnostics show an unknown outcome
-and retain ownership. A delayed operation is not replayed automatically.
-See [controller contracts](native-controller.md#delays-timers-and-loading) for
-save/load behavior.
+Dismiss, clear, recruit and release require confirmation. Close paused menus
+to allow execution. Feedback reports verified completion, not queue acceptance.
+The UI allows one pending command. After 30 unpaused seconds without progress,
+an unknown outcome retains ownership and is not replayed.
+See [controller contracts](native-controller.md#delays-timers-and-loading).
 
 ## Capture a problem
 
-1. Enable **Log mod flow** and reproduce the issue.
-2. Use **Dump full context**, including the inspected actor if relevant.
-3. Copy the newest log and dump from the SKSE log directory, normally
+1. Enable **Log mod flow** and reproduce the problem.
+2. Use **Dump full context**; inspect the relevant actor first if needed.
+3. Copy the newest log and dump from
    `Documents/My Games/Skyrim Special Edition/SKSE`.
-4. Disable flow logging when finished. **Save debug settings** persists both
-   switches in `Data/SKSE/Plugins/YouLeadIWillFollow.ini`.
+4. Disable logging afterward. **Save debug settings** persists both switches.
 
-`YouLeadIWillFollow.log` contains timestamps, thread IDs, and numbered native/Papyrus
-flow events. Logs rotate at 10 MiB with five backups. Saving settings, dumping,
-and disabling logging flush the log.
+`YouLeadIWillFollow.log` rotates at 10 MiB with five backups.
+Saving settings, dumping and disabling logging flush it.
+Relevant VM errors include severity and stack text even with flow logging off.
 
-Matching VM messages for `DialogueFollowerScript` and
-mod-prefixed scripts are forwarded with severity and stack text even when flow
-logging is off. A separate `Papyrus.0.log` is not required.
-
-`YLIWF-context-<timestamp>-<sequence>.txt` captures settings, load order,
-native checkpoints/callers, selected quest stages/aliases/script variables, all
-array entries, and actor
-faction, teammate, waiting, package, location, and protection state. Selection
-follows mod, follower/hireling, home, Blades, party-actor, and script links.
-
-Dumps work with logging off. They read live values individually, not an atomic
-save snapshot or running VM stacks/timer queues. Large dumps may briefly pause
-the game; unrelated quests or dependencies hidden inside other scripts may be
-outside their selection.
+`YLIWF-context-<timestamp>-<sequence>.txt` includes settings, load order,
+native work, linked quests/scripts and actor state. Dumps work without logging.
+They read live values, not an atomic save snapshot; unrelated state may be
+omitted, and large dumps can briefly pause the game.
 
 ## Installation diagnostics
 
-After loading, Followers or Debug reports the winning `DialogueFollower` plugin,
-configured cap, alias capacity, and resolved extra aliases (expected seven). This
-summary is also logged with flow logging off and when the diagnosis changes.
+Diagnosis reports the winning `DialogueFollower` plugin, cap, validated slots
+and seven expected extra aliases. YLIWF itself is an expected winner.
+Validated slots are structurally correct slots, not occupied followers.
 
-YLIWF is an expected winning plugin. Structural failures identify missing IDs,
-wrong alias types/names/owners, duplicates, or unavailable globals.
-**Validated slots** means slots passing these checks, not occupied followers.
-An uninitialized script is reported separately.
-
-Fix structural quest conflicts before attempting binding repair. A valid quest
-with missing vanilla properties can use reconciliation; other repairs become
-available after it completes and the snapshot refreshes. `PlayerFollowerCount`
-also gates dialogue, so a temporary zero during recruitment is normal.
+Fix quest override conflicts before repairing bindings. Missing IDs, wrong
+alias types/names/owners and unavailable globals are structural failures;
+uninitialized scripts are reported separately. A temporary zero
+`PlayerFollowerCount` during recruitment is normal because it also gates dialogue.
 
 ## Repair commands
 
-Save before repairing. Use an actor's **reference FormID**, selected in the Skyrim
-console, for inspection; its NPC base ID is not sufficient. Check whether another
-follower framework owns an actor before releasing orphan service flags.
+Save first. Inspection needs the actor's **reference FormID**, not NPC base ID.
+Check another framework's ownership before releasing orphan flags.
 
 | Action | Effect |
 | --- | --- |
-| Reconcile counts / dead slots | Repairs validated alias/global bindings, cleans dead slots, promotes an extra follower when needed, and recalculates counts/gates. |
-| Repair flags / duplicates | Keeps the primary registration if present, otherwise the selected slot; restores service/protection flags and a valid waiting state/timer. |
-| Follow / Wait | Deduplicates registration and applies the quest's service flags and follow/wait behavior. |
-| Make primary | Moves a living extra follower into the vanilla primary slot. The previous primary takes their extra slot; following/waiting state and remaining waiting deadlines stay with each actor. Works with a full party and does not dismiss either follower. |
-| Dismiss | Silently dismisses and verifies removal from aliases and teammate/current-follower state; reevaluates AI and reconciles the party. |
-| Clear this slot | Clears the selected alias/timer; releases service state only if no registration remains. Does not run hireling dismissal. |
-| Recruit into party (debug) | Uses normal recruitment for a living eligible actor with capacity and no existing registration. |
-| Release orphan service flags | Releases an unregistered actor's teammate/current-follower/wait/protection state; refuses the animal alias. |
+| Reconcile counts / dead slots | Repair valid bindings, clean dead slots, promote if needed and recalculate gates |
+| Repair flags / duplicates | Keep primary or selected registration; restore service, protection and waiting state |
+| Follow / Wait | Deduplicate and apply follow/wait state |
+| Make primary | Exchange primary and extra occupants, preserving each actor's state/deadline |
+| Dismiss | Release aliases and service state, verify removal and reconcile |
+| Clear this slot | Clear alias/timer; release service only if no registration remains; no hireling dismissal |
+| Recruit into party (debug) | Recruit an eligible living actor with capacity |
+| Release orphan service flags | Clear an unregistered actor's service/protection state; exclude animal alias |
 
-Follow, Wait, Dismiss, and Make primary work without debug options. Repairs do not reset quests,
-change quest stages, or resurrect actors. Original essential/protected flags can
-only be restored while their native cache is available; it is not saved.
+Ordinary commands and promotion need no debug setting.
+Repairs do not reset quests, change stages or resurrect actors.
+Original essential/protected flags can be restored only while their unsaved
+native cache exists.
 
 ## Repair missing bindings
 
-Use reconciliation when the vanilla `pFollowerAlias` or `pPlayerFollowerCount`
-property is missing or points at the wrong form. Extra aliases and YLIWF globals
-are resolved natively, so they no longer depend on saved script properties.
+For missing or incorrect `pFollowerAlias`/`pPlayerFollowerCount` properties:
 
-1. Load the save and enable **Debug options**.
-2. Click **Reconcile counts / dead slots** once, then close the menu.
-3. After completion, refresh or dump again. Expect the canonical primary alias,
-   the vanilla count global, seven resolved extra aliases, and matching counts.
-4. Save and reload to confirm persistence, then retry failed recruitment.
+1. Enable debug options and run **Reconcile counts / dead slots** once.
+2. Close the menu, then refresh or dump after completion.
+3. Confirm primary/count bindings, seven extra aliases and correct counts.
+4. Save and reload before retrying recruitment.
 
-Repair validates quest identity, alias names/types/ownership, globals, and the
-request ticket before writing. It cannot repair corrupt or unsupported native
-co-save records or replay an operation whose outcome is unknown.
+Repair validates quest structure and request identity. It cannot repair corrupt
+native co-save records or replay an unknown outcome.
+
 ## Writing flow logs
 
-Native formatting occurs after the logging flag is checked:
+Native formatting checks the flag before running:
 
 ```cpp
 mod::debug::Trace("Native.CountFollowerSlots", nullptr, "slots={}", slots);
@@ -133,73 +99,28 @@ mod::debug::TraceLazy("Native.ApplyFollowerDialogueGate", speaker, [&] {
 });
 ```
 
-Argument expressions run before the call. Use `TraceLazy` for getters or expensive
-diagnostic work; its callback runs synchronously and is never retained.
+Arguments still evaluate before a call. Use `TraceLazy` for expensive getters;
+its callback runs synchronously.
 
-Papyrus should pass values already available to the script:
-
-```papyrus
-YLIWF_SKSE.Debug("Papyrus.follower3dnpc.SetFollower.exit", FollowerActor)
-YLIWF_SKSE.DebugInt("Papyrus.follower3dnpc.DismissFollower.enter", None, "iMessage", iMessage)
-YLIWF_SKSE.DebugForm("Papyrus.follower3dnpc.ResolveFollower.return", None, "result", target)
-```
-
-`DebugBool` records booleans. These native functions check the flag before
-formatting and write through a thread-safe sink on Papyrus tasklets. Forms are
-logged as IDs or `None`, without querying mutable actor state.
-
-Papyrus also evaluates arguments first. Guard getters and composed strings:
-
-```papyrus
-If YLIWF_SKSE.IsDebugLoggingEnabled()
-    YLIWF_SKSE.Debug("Papyrus.follower3dnpc.DismissFollower.enter", akFollower, "follower=" + akFollower)
-EndIf
-```
-
-Build/install instructions are in the [build guide](build-release.md).
+Papyrus helpers `Debug`, `DebugInt`, `DebugBool` and `DebugForm` check the flag
+before formatting. Pass existing values; guard expensive expressions with
+`IsDebugLoggingEnabled()`. Forms log as IDs without mutable actor queries.
 
 ## Verification
 
-Run `build.ps1 -Target Test` for automated checks. Before release, test in Skyrim:
+Run `build.ps1 -Target Test`, then check in game:
 
-1. With logging off, recruit two followers and test follow, wait, dismissal,
-   death/promotion, and fast travel. Repeat with logging on, then disable it and
-   confirm flow lines stop.
-2. Toggle debug options separately from logging. Check normal roster actions,
-   hidden IDs/empty slots/repairs, and immediate dismissal confirmation. Cancel
-   preserves the party; completion removes only the selected actor.
-3. Dump with logging on and off. Check follower/home aliases, hireling, animal,
-   and Blades state, load order, and actor package/faction data.
-4. Test installation diagnosis with a correct quest, a conflicting override,
-   missing vanilla properties, and an uninitialized script. Repair healthy bindings
-   repeatedly and confirm they survive loading.
-5. Remove service flags or duplicate an actor across aliases. Repair retains the
-   primary registration, valid waiting state and 72-hour timer, correct protection,
-   and counts matching unique live followers.
-6. Clear one duplicate slot, then the last registration. Check service release
-   and promotion; unrelated aliases and quest stages stay unchanged. Dismiss a
-   dead slot and reconcile changed counts.
-7. Recruit an eligible inspected actor and release an orphan. Reject player,
-   dead actor, base ID, animal, invalid ID, and full-party requests. Lower the cap
-   below party size: preserve followers and block further recruitment.
-8. Test wait timeout, unload, homes, animal commands, Blades recruitment, and
-   optional 3DNPC forwarding. Blades must finish dismissal before continuing.
-9. Save during a dismissal line and an accepted engine adapter, then reload and
-   check completion. Keep the matching `.skse` co-save with the `.ess`. Trigger alias
-   events during that wait; confirm one executor, ordered pending maintenance,
-   and a verified receipt without duplicate effects.
-10. Save/reload twice with another recruitment between cycles; registrations and
-    bindings must persist.
-11. Queue a UI command while paused, then load another save. Reject old UI tickets
-    without affecting the new party. Delayed/old-script work must not allow
-    overlapping repairs. A paused menu exceeding 30 seconds must not trigger an
-    active-time stall warning.
-12. Close the menu, change followers through dialogue, and reopen: refresh
-    immediately. Test Settings/other pages and a non-pausing menu. A queued
-    capture must skip after closing; command feedback survives reopening and
-    inspection remains correct during refreshes. Under VM load, delayed work
-    should complete without replay.
-13. Test all three group commands with eight followers, duplicates, and dead
-    slots. Cancel Dismiss All, then confirm it; verify partial failures and save/load
-    during execution. With debug options off, check location/distance in the same
-    room, outdoors, and across different interiors or unloaded areas.
+| Area | Cases |
+| --- | --- |
+| Gameplay | Recruit, follow, wait, dismiss, death/promotion, fast travel, homes and 72-hour wait timeout |
+| Primary/party controls | Full party, duplicates, dead slots, promotion, all three party commands, cancellation and partial failure |
+| Distance | Global reset, one-actor override, promotion and save/load; same room, outdoors and unavailable positions |
+| Diagnosis/repair | Healthy quest, conflicting override, missing properties, uninitialized script, duplicates and orphan flags |
+| Admission | Reject player, dead/base/invalid IDs, animals and full party; lowering cap preserves followers |
+| Integrations | Animal/hireling behavior, Blades awaiting dismissal and optional 3DNPC forwarding |
+| Persistence | Repeated save/load with recruitment; save during dismissal delay and pending adapter/caller; no duplicate effects |
+| UI generations | Command queued while paused, then another save; reject stale work and avoid paused-time stall warnings |
+| Refresh/logging | Dialogue changes while closed, reopen immediately, no hidden polling; toggle debug/logging independently and dump with either state |
+
+Keep matching `.ess`/`.skse` pairs. Test under VM load: delayed work must complete
+without replay, and repairs must leave unrelated aliases and quest stages intact.

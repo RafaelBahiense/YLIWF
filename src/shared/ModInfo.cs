@@ -3,6 +3,8 @@ using System.Text.Json;
 // Shared by plugin authoring and build tools; embedded so commands also work outside the repo.
 public sealed record ModIdentity(string DisplayName, string ShortName, string PluginFile, string BinaryName, string ScriptPrefix, string Author)
 {
+    private static readonly System.Buffers.SearchValues<char> s_myChars = System.Buffers.SearchValues.Create("<>:\"/\\|?*;");
+
     public string DllFile => BinaryName + ".dll";
     public string IniFile => BinaryName + ".ini";
     public string DocumentationDirectory => "docs/" + BinaryName;
@@ -32,7 +34,7 @@ public sealed record ModIdentity(string DisplayName, string ShortName, string Pl
                 throw new InvalidDataException("mod.json: shortName, binaryName and scriptPrefix must be identifiers");
             }
         }
-        if (identity.ScriptPrefix.Contains('-') || identity.PluginFile.IndexOfAny("<>:\"/\\|?*;".ToCharArray()) >= 0 ||
+        if (identity.ScriptPrefix.Contains('-') || identity.PluginFile.AsSpan().IndexOfAny(s_myChars) >= 0 ||
             !identity.PluginFile.EndsWith(".esp", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException("mod.json: invalid script prefix or plugin filename");

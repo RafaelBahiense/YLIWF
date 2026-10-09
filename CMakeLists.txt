@@ -69,10 +69,11 @@ configure_file(cmake/SettingsDefaults.h.in generated/SettingsDefaults.h @ONLY)
 # CommonLib's add_commonlibsse_plugin rewrites its generated .cpp every configure.
 set(PLUGIN_BINARY_NAME "${MOD_BINARY_NAME}")
 configure_file(cmake/plugin_info.cpp.in plugin_info.cpp @ONLY)
-add_library(mod SHARED
-  src/native/plugin.cpp src/native/Debug.cpp src/native/UI.cpp src/native/Settings.cpp src/native/Controller.cpp src/native/ControllerExecutor.cpp src/native/ControllerStorage.cpp src/native/FollowDistance.cpp
-  include/PCH.h include/Debug.h include/DebugRules.h include/Refresh.h include/FollowerView.h include/UI.h include/Settings.h include/SettingsRules.h include/SettingsFile.h
-  include/Party.h include/PartyRules.h include/Strings.h include/Controller.h include/ControllerRules.h include/CommandRules.h include/ControllerStorage.h include/ControllerState.h include/ControllerRuntime.h include/StateCodec.h include/ControllerExecutor.h include/ExecutorRules.h include/NativeLatent.h
+# Keep discovery scoped to the core; add-ons and tests own separate targets.
+file(GLOB_RECURSE MOD_SOURCES CONFIGURE_DEPENDS
+  "${PROJECT_SOURCE_DIR}/src/native/*.cpp"
+  "${PROJECT_SOURCE_DIR}/include/*.h" "${PROJECT_SOURCE_DIR}/include/*.hpp")
+add_library(mod SHARED ${MOD_SOURCES}
   "${CMAKE_CURRENT_BINARY_DIR}/version.rc" "${CMAKE_CURRENT_BINARY_DIR}/plugin_info.cpp")
 include(cmake/NativePlugins.cmake)
 configure_native_plugin(mod "${MOD_BINARY_NAME}")
@@ -80,18 +81,16 @@ target_precompile_headers(mod PRIVATE include/PCH.h)
 add_custom_target(native_plugins DEPENDS mod)
 add_native_addons()
 enable_testing()
-find_package(fmt CONFIG REQUIRED)
-add_executable(debug_rules_test tests/native/debug_rules.cpp)
-target_link_libraries(debug_rules_test PRIVATE fmt::fmt)
-target_compile_features(debug_rules_test PRIVATE cxx_std_23)
-target_include_directories(debug_rules_test PRIVATE include "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_compile_definitions(debug_rules_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_compile_options(debug_rules_test PRIVATE /W4)
-add_test(NAME debug_rules COMMAND debug_rules_test)
-add_executable(controller_rules_test tests/native/controller_rules.cpp)
-target_compile_features(controller_rules_test PRIVATE cxx_std_23)
-target_include_directories(controller_rules_test PRIVATE include)
-target_compile_options(controller_rules_test PRIVATE /W4)
-add_test(NAME controller_rules COMMAND controller_rules_test)
+add_custom_target(native_tests)
+foreach(test debug_rules controller_rules adapter_rules)
+  add_executable(${test}_test tests/native/${test}.cpp)
+  target_include_directories(${test}_test PRIVATE include)
+  target_compile_options(${test}_test PRIVATE /W4)
+  add_test(NAME ${test} COMMAND ${test}_test)
+  add_dependencies(native_tests ${test}_test)
+endforeach()
 
-add_custom_target(native_tests DEPENDS debug_rules_test controller_rules_test)
+find_package(fmt CONFIG REQUIRED)
+target_link_libraries(debug_rules_test PRIVATE fmt::fmt)
+target_include_directories(debug_rules_test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_compile_definitions(debug_rules_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)

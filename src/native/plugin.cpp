@@ -10,6 +10,7 @@
 #include "Debug.h"
 #include "Controller.h"
 #include "ControllerStorage.h"
+#include "Adapters.h"
 #include "FollowDistance.h"
 
 namespace {
@@ -35,16 +36,17 @@ namespace {
     bool ApplyFollowerEssential(RE::StaticFunctionTag*, RE::Actor* actor);
     bool RestoreFollowerEssential(RE::StaticFunctionTag*, RE::Actor* actor);
 
-    template <class T> T* ResolveForm(RE::FormID localID, std::string_view plugin, std::string_view editorID) {
+    template <class T>
+    T* ResolveForm(RE::FormID localID, std::string_view plugin, std::string_view editorID) {
         auto* dh = RE::TESDataHandler::GetSingleton();
         if (auto* form = dh ? dh->LookupForm<T>(localID, plugin) : nullptr) {
-            mod::debug::Trace("Native.ResolveForm", nullptr,
-                "{}|{:08X} {} -> {:08X}", plugin, localID, editorID, form->GetFormID());
+            mod::debug::Trace("Native.ResolveForm", nullptr, "{}|{:08X} {} -> {:08X}", plugin, localID, editorID,
+                              form->GetFormID());
             return form;
         }
         auto* form = RE::TESForm::LookupByEditorID(editorID);
-        mod::debug::Trace("Native.ResolveForm.fallback", nullptr,
-            "{}|{:08X} {} -> {:08X}", plugin, localID, editorID, form ? form->GetFormID() : 0);
+        mod::debug::Trace("Native.ResolveForm.fallback", nullptr, "{}|{:08X} {} -> {:08X}", plugin, localID, editorID,
+                          form ? form->GetFormID() : 0);
         return form ? form->As<T>() : nullptr;
     }
 
@@ -59,18 +61,24 @@ namespace {
         g_followerSandbox = ResolveForm<RE::TESGlobal>(0x805, kRequiredPluginName, "YLIWF_FollowerSandbox");
         g_followerHomes = ResolveForm<RE::TESGlobal>(0x986, kRequiredPluginName, "YLIWF_FollowerHomes");
         g_followDistance = ResolveForm<RE::TESGlobal>(0x993, kRequiredPluginName, "YLIWF_FollowDistance");
-        mod::follow_distance::Configure(ResolveForm<RE::TESFaction>(0x994, kRequiredPluginName, "YLIWF_FollowDistanceChoice"));
+        mod::follow_distance::Configure(
+            ResolveForm<RE::TESFaction>(0x994, kRequiredPluginName, "YLIWF_FollowDistanceChoice"));
         g_friendlyFireSpell = ResolveForm<RE::SpellItem>(0x800, kRequiredPluginName, "YLIWF_CompanionsSafeSpell");
-        mod::debug::Configure({g_dialogueFollower, g_currentFollowerFaction, g_potentialFollowerFaction, g_friendlyFireSpell,
-            g_playerFollowerCount, g_currentFollowerCount, g_canRecruitMore, GetEffectiveFollowerCap,
-            []() { SyncParty(false); ApplyFollowerDialogueGate(nullptr); },
-            []() { return std::vector<std::pair<std::uint32_t, std::uint8_t>>(g_essOrig.begin(), g_essOrig.end()); }, GetTotalFollowerCapFromSettings,
-            mod::ui::IsRefreshVisible});
+        mod::debug::Configure(
+            {g_dialogueFollower, g_currentFollowerFaction, g_potentialFollowerFaction, g_friendlyFireSpell,
+             g_playerFollowerCount, g_currentFollowerCount, g_canRecruitMore, GetEffectiveFollowerCap,
+             []() {
+                 SyncParty(false);
+                 ApplyFollowerDialogueGate(nullptr);
+             },
+             []() { return std::vector<std::pair<std::uint32_t, std::uint8_t>>(g_essOrig.begin(), g_essOrig.end()); },
+             GetTotalFollowerCapFromSettings, mod::ui::IsRefreshVisible});
         mod::controller::Configure({{g_dialogueFollower, g_currentFollowerFaction, g_potentialFollowerFaction,
-            [](RE::Actor* actor) { ApplyFollowerEssential(nullptr, actor); }},
-            [](RE::Actor* actor) { RestoreFollowerEssential(nullptr, actor); }, GetEffectiveFollowerCap,
-            ResolveForm<RE::TESQuest>(0x961, kRequiredPluginName, "YLIWF_HomeQuest"),
-            ResolveForm<RE::TESFaction>(0x960, kRequiredPluginName, "YLIWF_HomeFaction")});
+                                     [](RE::Actor* actor) { ApplyFollowerEssential(nullptr, actor); }},
+                                    [](RE::Actor* actor) { RestoreFollowerEssential(nullptr, actor); },
+                                    GetEffectiveFollowerCap,
+                                    ResolveForm<RE::TESQuest>(0x961, kRequiredPluginName, "YLIWF_HomeQuest"),
+                                    ResolveForm<RE::TESFaction>(0x960, kRequiredPluginName, "YLIWF_HomeFaction")});
         mod::debug::Trace("Native.ResolveForms.end");
     }
 
@@ -98,10 +106,13 @@ namespace {
     }
 
     void ApplyCrossfireForActor(RE::Actor* a, bool want) {
-        if (a != RE::PlayerCharacter::GetSingleton()) SetAbility(a, want);
+        if (a != RE::PlayerCharacter::GetSingleton())
+            SetAbility(a, want);
     }
 
-    bool IsValidActor(RE::Actor* a) { return a && a != RE::PlayerCharacter::GetSingleton() && !a->IsDead(); }
+    bool IsValidActor(RE::Actor* a) {
+        return a && a != RE::PlayerCharacter::GetSingleton() && !a->IsDead();
+    }
 
     bool FileExistsA(const char* path) {
         DWORD attrs = GetFileAttributesA(path);
@@ -115,33 +126,44 @@ namespace {
 
     void EarlyPreflightCheck() {
         std::string espPath = std::string("Data\\") + kRequiredPluginName;
-        if (!FileExistsA(espPath.c_str())) MessageAndExit(fmt::format("Missing required file:\n\n{}\nInstall it (or fix your mod manager / VFS), then relaunch.", espPath).c_str());
+        if (!FileExistsA(espPath.c_str()))
+            MessageAndExit(
+                fmt::format("Missing required file:\n\n{}\nInstall it (or fix your mod manager / VFS), then relaunch.",
+                            espPath)
+                    .c_str());
     }
 
     void ApplySandbox() {
         std::scoped_lock lock(mod::settings::Mutex);
         mod::debug::Trace("Native.ApplySandbox", nullptr, mod::settings::FollowerSandbox ? "on" : "off");
-        if (g_followerSandbox) g_followerSandbox->value = mod::settings::FollowerSandbox ? 1.0f : 0.0f;
+        if (g_followerSandbox)
+            g_followerSandbox->value = mod::settings::FollowerSandbox ? 1.0f : 0.0f;
     }
 
     void ApplyHomes() {
         std::scoped_lock lock(mod::settings::Mutex);
         mod::debug::Trace("Native.ApplyHomes", nullptr, mod::settings::FollowerHomes ? "on" : "off");
-        if (g_followerHomes) g_followerHomes->value = mod::settings::FollowerHomes ? 1.0f : 0.0f;
+        if (g_followerHomes)
+            g_followerHomes->value = mod::settings::FollowerHomes ? 1.0f : 0.0f;
     }
+
     void ApplyFollowDistance() {
         std::scoped_lock lock(mod::settings::Mutex);
-        if (g_followDistance) g_followDistance->value = static_cast<float>(mod::settings::FollowDistance);
+        if (g_followDistance)
+            g_followDistance->value = static_cast<float>(mod::settings::FollowDistance);
         mod::follow_distance::ApplyAll();
     }
 
     bool HasPerkFromSpec(const std::string& file, std::uint32_t localID) {
         auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player) return false;
+        if (!player)
+            return false;
         auto* dh = RE::TESDataHandler::GetSingleton();
-        if (!dh) return false;
+        if (!dh)
+            return false;
         auto* mod = dh->LookupModByName(file);
-        if (!mod) return false;
+        if (!mod)
+            return false;
         auto* perk = dh->LookupForm<RE::BGSPerk>(localID & (mod->IsLight() ? 0xFFFu : 0xFFFFFFu), file);
         return perk && player->HasPerk(perk);
     }
@@ -151,7 +173,8 @@ namespace {
         std::int32_t owned = 0;
         for (std::size_t i = 0; i < mod::settings::PerkSpecCount; ++i) {
             const auto& p = mod::settings::PerkSpecs[i];
-            if (HasPerkFromSpec(p.file, p.localID)) ++owned;
+            if (HasPerkFromSpec(p.file, p.localID))
+                ++owned;
         }
         return owned;
     }
@@ -160,9 +183,11 @@ namespace {
         std::scoped_lock lock(mod::settings::Mutex);
         constexpr std::int32_t kBase = 1, kMaxExtras = 7;
         auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player) return kBase;
+        if (!player)
+            return kBase;
 
-        const auto speech = static_cast<std::int32_t>(player->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSpeech));
+        const auto speech =
+            static_cast<std::int32_t>(player->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSpeech));
         const std::int32_t levelsPerSlot = std::max(mod::settings::SpeechLevelsPerSlot, 1);
         std::int32_t total = kBase + (speech / levelsPerSlot);
         return std::clamp(total, 1, kBase + kMaxExtras);
@@ -172,12 +197,16 @@ namespace {
         std::scoped_lock lock(mod::settings::Mutex);
         constexpr std::int32_t kBase = 1, kMaxExtras = 7;
 
-        if (mod::settings::FollowerPerkOption == 0) return kBase + std::clamp(static_cast<int>(mod::settings::MaxExtraFollowers), 0, kMaxExtras);
-        if (mod::settings::FollowerPerkOption == 1) return std::clamp(kBase + CountOwnedPerksFromList(), 1, kBase + kMaxExtras);
+        if (mod::settings::FollowerPerkOption == 0)
+            return kBase + std::clamp(static_cast<int>(mod::settings::MaxExtraFollowers), 0, kMaxExtras);
+        if (mod::settings::FollowerPerkOption == 1)
+            return std::clamp(kBase + CountOwnedPerksFromList(), 1, kBase + kMaxExtras);
         return GetSpeechBasedFollowerCap();
     }
 
-    std::int32_t GetEffectiveFollowerCap() { return std::min(GetTotalFollowerCapFromSettings(), g_slotCapacity); }
+    std::int32_t GetEffectiveFollowerCap() {
+        return std::min(GetTotalFollowerCapFromSettings(), g_slotCapacity);
+    }
 
     void CountFollowerSlots() {
         if (!g_dialogueFollower) {
@@ -194,20 +223,27 @@ namespace {
     }
 
     void ApplyFollowerDialogueGate(RE::Actor* speaker) {
-        if (!g_playerFollowerCount) return;
+        if (!g_playerFollowerCount)
+            return;
 
         const int count = g_currentFollowerCount ? std::max(static_cast<int>(g_currentFollowerCount->value), 0) : 0;
         const bool canRecruitMore = count < GetEffectiveFollowerCap();
-        const bool hireable = speaker && !speaker->IsDead() && g_potentialFollowerFaction && speaker->IsInFaction(g_potentialFollowerFaction) && !speaker->IsPlayerTeammate() && !(g_currentFollowerFaction && speaker->IsInFaction(g_currentFollowerFaction));
-        g_playerFollowerCount->value = hireable ? (canRecruitMore ? 0.0f : 1.0f) : (count > 0 ? 1.0f : 0.0f);
-        if (g_canRecruitMore) g_canRecruitMore->value = canRecruitMore ? 1.0f : 0.0f;
+        const bool hireable = speaker && !speaker->IsDead() && g_potentialFollowerFaction &&
+                              speaker->IsInFaction(g_potentialFollowerFaction) && !speaker->IsPlayerTeammate() &&
+                              !(g_currentFollowerFaction && speaker->IsInFaction(g_currentFollowerFaction));
+        g_playerFollowerCount->value =
+            hireable ? (canRecruitMore ? 0.0f : 1.0f) : (count > 0 || mod::adapters::HasFollowers() ? 1.0f : 0.0f);
+        if (g_canRecruitMore)
+            g_canRecruitMore->value = canRecruitMore ? 1.0f : 0.0f;
         mod::debug::TraceLazy("Native.ApplyFollowerDialogueGate", speaker, [&] {
-            return fmt::format("count={} cap={} hireable={} recruit={} vanillaGate={}",
-                count, GetEffectiveFollowerCap(), hireable, canRecruitMore, g_playerFollowerCount->value);
+            return fmt::format("count={} cap={} hireable={} recruit={} vanillaGate={}", count,
+                               GetEffectiveFollowerCap(), hireable, canRecruitMore, g_playerFollowerCount->value);
         });
     }
 
-    bool IsInServiceEssential(RE::Actor* a) { return a && g_currentFollowerFaction && a->IsInFaction(g_currentFollowerFaction) && a->IsPlayerTeammate(); }
+    bool IsInServiceEssential(RE::Actor* a) {
+        return a && g_currentFollowerFaction && a->IsInFaction(g_currentFollowerFaction) && a->IsPlayerTeammate();
+    }
 
     void SetBaseFlag(RE::TESNPC* base, RE::ACTOR_BASE_DATA::Flag flag, bool on) {
         if (on) {
@@ -224,7 +260,8 @@ namespace {
 
     bool RestoreEssentialFlags(RE::TESNPC* base) {
         auto it = g_essOrig.find(base->GetFormID());
-        if (it == g_essOrig.end()) return false;
+        if (it == g_essOrig.end())
+            return false;
         ApplyOriginalFlags(base, it->second);
         g_essOrig.erase(it);
         mod::debug::Trace("Native.RestoreEssentialFlags", nullptr, "base={:08X}", base->GetFormID());
@@ -245,13 +282,16 @@ namespace {
         std::scoped_lock lock(mod::settings::Mutex);
         mod::debug::Trace("Native.UpdateEssentialForActor", a);
         auto* base = a->GetActorBase();
-        if (!base) return;
+        if (!base)
+            return;
         if (!mod::settings::FollowerEssential || !IsInServiceEssential(a)) {
             RestoreEssentialFlags(base);
             return;
         }
         auto& flags = base->actorData.actorBaseFlags;
-        g_essOrig.try_emplace(base->GetFormID(), static_cast<std::uint8_t>((flags.any(RE::ACTOR_BASE_DATA::Flag::kEssential) ? 1 : 0) | (flags.any(RE::ACTOR_BASE_DATA::Flag::kProtected) ? 2 : 0)));
+        g_essOrig.try_emplace(base->GetFormID(),
+                              static_cast<std::uint8_t>((flags.any(RE::ACTOR_BASE_DATA::Flag::kEssential) ? 1 : 0) |
+                                                        (flags.any(RE::ACTOR_BASE_DATA::Flag::kProtected) ? 2 : 0)));
         flags.set(RE::ACTOR_BASE_DATA::Flag::kEssential);
         flags.reset(RE::ACTOR_BASE_DATA::Flag::kProtected);
     }
@@ -259,17 +299,23 @@ namespace {
     void SyncParty(bool pull) {
         std::scoped_lock lock(mod::settings::Mutex);
         mod::debug::Trace("Native.SyncParty.begin", nullptr, pull ? "pull=true" : "pull=false");
-        if (!g_dialogueFollower) return;
+        if (!g_dialogueFollower)
+            return;
         auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player) return;
+        if (!player)
+            return;
         for (auto* alias : g_dialogueFollower->aliases) {
-            if (!alias || alias->GetVMTypeID() != RE::BGSRefAlias::VMTYPEID) continue;
+            if (!alias || alias->GetVMTypeID() != RE::BGSRefAlias::VMTYPEID)
+                continue;
             auto* a = static_cast<RE::BGSRefAlias*>(alias)->GetActorReference();
-            if (!a) continue;
+            if (!a)
+                continue;
             const bool inService = IsInServiceEssential(a);
             UpdateEssentialForActor(a);
             ApplyCrossfireForActor(a, mod::settings::FollowerCrossfire && inService);
-            if (pull && inService && !a->IsOnMount() && a->AsActorValueOwner()->GetActorValue(RE::ActorValue::kWaitingForPlayer) == 0.0f && a->GetParentCell() != player->GetParentCell()) {
+            if (pull && inService && !a->IsOnMount() &&
+                a->AsActorValueOwner()->GetActorValue(RE::ActorValue::kWaitingForPlayer) == 0.0f &&
+                a->GetParentCell() != player->GetParentCell()) {
                 mod::debug::Trace("Native.FastTravelPull", a);
                 a->MoveTo(player);
             }
@@ -277,14 +323,16 @@ namespace {
         mod::debug::Trace("Native.SyncParty.end");
     }
 
-    template <class Fn> void QueueGameTask(Fn fn) {
+    template <class Fn>
+    void QueueGameTask(Fn fn) {
         const auto generation = mod::debug::Generation();
-        if (auto* task = SKSE::GetTaskInterface()) task->AddTask([fn, generation]() {
-            if (mod::debug::IsCurrentGame(generation)) {
-                fn();
-                mod::debug::NotifyStateChanged();
-            }
-        });
+        if (auto* task = SKSE::GetTaskInterface())
+            task->AddTask([fn, generation]() {
+                if (mod::debug::IsCurrentGame(generation)) {
+                    fn();
+                    mod::debug::NotifyStateChanged();
+                }
+            });
     }
 
     void DeferSyncParty(bool pull = false) {
@@ -307,11 +355,13 @@ namespace {
 
     bool RestoreFollowerEssential(RE::StaticFunctionTag*, RE::Actor* a) {
         mod::debug::Trace("Native.RestoreFollowerEssential", a);
-        if (!a) return false;
+        if (!a)
+            return false;
         ApplyCrossfireForActor(a, false);
         auto* base = a->GetActorBase();
         const bool restored = base && RestoreEssentialFlags(base);
-        mod::debug::Trace("Native.RestoreFollowerEssential.result", a, restored ? "original flags restored" : "original flags not cached");
+        mod::debug::Trace("Native.RestoreFollowerEssential.result", a,
+                          restored ? "original flags restored" : "original flags not cached");
         return restored;
     }
 
@@ -327,16 +377,21 @@ namespace {
             static MenuSink s;
             return &s;
         }
-        RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* e, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override {
-            if (e->menuName == "Main Menu" && e->opening) mod::controller::Invalidate();
-            if (auto* tasks = SKSE::GetTaskInterface()) tasks->AddTask([] { mod::controller::ObservePause(); });
+
+        RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* e,
+                                              RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override {
+            if (e->menuName == "Main Menu" && e->opening)
+                mod::controller::Invalidate();
+            if (auto* tasks = SKSE::GetTaskInterface())
+                tasks->AddTask([] { mod::controller::ObservePause(); });
             if (e->menuName == "Dialogue Menu") {
                 std::scoped_lock lock(mod::settings::Mutex);
                 mod::debug::Trace("Native.DialogueMenu", nullptr, e->opening ? "opened" : "closed");
                 auto* topics = RE::MenuTopicManager::GetSingleton();
                 auto speaker = (e->opening && topics) ? topics->speaker.get() : nullptr;
                 ApplyFollowerDialogueGate(speaker ? speaker->As<RE::Actor>() : nullptr);
-                if (e->opening && mod::settings::FollowerCrossfire) DeferSyncParty();
+                if (e->opening && mod::settings::FollowerCrossfire)
+                    DeferSyncParty();
             }
             return RE::BSEventNotifyControl::kContinue;
         }
@@ -348,8 +403,11 @@ namespace {
             static ActivateSink s;
             return &s;
         }
-        RE::BSEventNotifyControl ProcessEvent(const RE::TESActivateEvent* e, RE::BSTEventSource<RE::TESActivateEvent>*) override {
-            if (e->actionRef.get() != RE::PlayerCharacter::GetSingleton() || !e->objectActivated) return RE::BSEventNotifyControl::kContinue;
+
+        RE::BSEventNotifyControl ProcessEvent(const RE::TESActivateEvent* e,
+                                              RE::BSTEventSource<RE::TESActivateEvent>*) override {
+            if (e->actionRef.get() != RE::PlayerCharacter::GetSingleton() || !e->objectActivated)
+                return RE::BSEventNotifyControl::kContinue;
             if (auto* actor = e->objectActivated->As<RE::Actor>()) {
                 mod::debug::Trace("Native.PlayerActivate", actor);
                 ApplyFollowerDialogueGate(actor);
@@ -365,49 +423,75 @@ namespace {
             static TravelSink s;
             return &s;
         }
-        RE::BSEventNotifyControl ProcessEvent(const RE::TESFastTravelEndEvent*, RE::BSTEventSource<RE::TESFastTravelEndEvent>*) override {
+
+        RE::BSEventNotifyControl ProcessEvent(const RE::TESFastTravelEndEvent*,
+                                              RE::BSTEventSource<RE::TESFastTravelEndEvent>*) override {
             mod::debug::Trace("Native.FastTravelEnd");
             DeferSyncParty(true);
             return RE::BSEventNotifyControl::kContinue;
         }
     };
+
     class FollowerEvents final : public RE::BSTEventSink<RE::TESDeathEvent>,
-        public RE::BSTEventSink<RE::TESCombatEvent>, public RE::BSTEventSink<RE::TESObjectLoadedEvent> {
+                                 public RE::BSTEventSink<RE::TESCombatEvent>,
+                                 public RE::BSTEventSink<RE::TESObjectLoadedEvent> {
     public:
-        static FollowerEvents* GetSingleton() { static FollowerEvents sink; return &sink; }
-        RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* event, RE::BSTEventSource<RE::TESDeathEvent>*) override {
-            if (event && event->dead && event->actorDying) mod::controller::Died(event->actorDying->As<RE::Actor>());
+        static FollowerEvents* GetSingleton() {
+            static FollowerEvents sink;
+            return &sink;
+        }
+
+        RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* event,
+                                              RE::BSTEventSource<RE::TESDeathEvent>*) override {
+            if (event && event->dead && event->actorDying)
+                mod::controller::Died(event->actorDying->As<RE::Actor>());
             return RE::BSEventNotifyControl::kContinue;
         }
-        RE::BSEventNotifyControl ProcessEvent(const RE::TESCombatEvent* event, RE::BSTEventSource<RE::TESCombatEvent>*) override {
-            if (event && event->actor && event->targetActor) mod::controller::CombatChanged(event->actor->As<RE::Actor>(), event->targetActor->As<RE::Actor>());
+
+        RE::BSEventNotifyControl ProcessEvent(const RE::TESCombatEvent* event,
+                                              RE::BSTEventSource<RE::TESCombatEvent>*) override {
+            if (event && event->actor && event->targetActor)
+                mod::controller::CombatChanged(event->actor->As<RE::Actor>(), event->targetActor->As<RE::Actor>());
             return RE::BSEventNotifyControl::kContinue;
         }
-        RE::BSEventNotifyControl ProcessEvent(const RE::TESObjectLoadedEvent* event, RE::BSTEventSource<RE::TESObjectLoadedEvent>*) override {
-            if (event && !event->loaded) mod::controller::Unloaded(RE::TESForm::LookupByID<RE::Actor>(event->formID));
+
+        RE::BSEventNotifyControl ProcessEvent(const RE::TESObjectLoadedEvent* event,
+                                              RE::BSTEventSource<RE::TESObjectLoadedEvent>*) override {
+            if (event && !event->loaded)
+                mod::controller::Unloaded(RE::TESForm::LookupByID<RE::Actor>(event->formID));
             return RE::BSEventNotifyControl::kContinue;
         }
     };
 
     void Install() {
         mod::debug::Trace("Native.InstallEventSinks");
-        if (auto* ui = RE::UI::GetSingleton()) ui->AddEventSink<RE::MenuOpenCloseEvent>(MenuSink::GetSingleton());
+        if (auto* ui = RE::UI::GetSingleton())
+            ui->AddEventSink<RE::MenuOpenCloseEvent>(MenuSink::GetSingleton());
         auto* events = RE::ScriptEventSourceHolder::GetSingleton();
-        if (!events) return;
+        if (!events)
+            return;
         events->AddEventSink<RE::TESActivateEvent>(ActivateSink::GetSingleton());
         events->AddEventSink<RE::TESDeathEvent>(FollowerEvents::GetSingleton());
         events->AddEventSink<RE::TESCombatEvent>(FollowerEvents::GetSingleton());
         events->AddEventSink<RE::TESObjectLoadedEvent>(FollowerEvents::GetSingleton());
-        if (events->GetEventSource<RE::TESFastTravelEndEvent>()) events->AddEventSink<RE::TESFastTravelEndEvent>(TravelSink::GetSingleton());
+        if (events->GetEventSource<RE::TESFastTravelEndEvent>())
+            events->AddEventSink<RE::TESFastTravelEndEvent>(TravelSink::GetSingleton());
     }
 
     void InitializeGameData() {
         auto* data = RE::TESDataHandler::GetSingleton();
-        if (!data || (!data->LookupLoadedModByName(kRequiredPluginName) && !data->LookupLoadedLightModByName(kRequiredPluginName)))
-            MessageAndExit(fmt::format("Missing required plugin in load order:\n{}\nEnable it in your active mod-manager profile, then relaunch.", kRequiredPluginName).c_str());
+        if (!data || (!data->LookupLoadedModByName(kRequiredPluginName) &&
+                      !data->LookupLoadedLightModByName(kRequiredPluginName)))
+            MessageAndExit(fmt::format("Missing required plugin in load order:\n{}\nEnable it in your active "
+                                       "mod-manager profile, then relaunch.",
+                                       kRequiredPluginName)
+                               .c_str());
         ResolveForms();
         if (!g_currentFollowerCount)
-            MessageAndExit(fmt::format("Missing required plugin in load order:\n{}\nEnable it in your load order, then relaunch.", mod::info::PluginFile).c_str());
+            MessageAndExit(
+                fmt::format("Missing required plugin in load order:\n{}\nEnable it in your load order, then relaunch.",
+                            mod::info::PluginFile)
+                    .c_str());
         CountFollowerSlots();
         ApplyFollowerDialogueGate(nullptr);
         Install();
@@ -437,13 +521,15 @@ namespace {
             InitializeGameData();
         } else if (msg->type == SKSE::MessagingInterface::kPreLoadGame) {
             InvalidateGameState();
-        } else if (msg->type == SKSE::MessagingInterface::kPostLoadGame || msg->type == SKSE::MessagingInterface::kNewGame) {
+        } else if (msg->type == SKSE::MessagingInterface::kPostLoadGame ||
+                   msg->type == SKSE::MessagingInterface::kNewGame) {
             // SKSE passes the success bool as the pointer value, not a bool pointer.
             if (msg->type == SKSE::MessagingInterface::kPostLoadGame && !msg->data) {
                 logger::warn("Save load failed; debug controls remain unavailable.");
                 return;
             }
-            if (msg->type == SKSE::MessagingInterface::kNewGame) InvalidateGameState();
+            if (msg->type == SKSE::MessagingInterface::kNewGame)
+                InvalidateGameState();
             ApplyLoadedGameState();
         }
     }
@@ -464,8 +550,10 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
     mod::settings::EssentialCallback = []() { DeferSyncParty(); };
     mod::settings::CrossfireCallback = []() { DeferSyncParty(); };
 
-    if (auto* papyrus = SKSE::GetPapyrusInterface()) papyrus->Register(RegisterPapyrus);
-    if (auto* messaging = SKSE::GetMessagingInterface()) messaging->RegisterListener(OnMessage);
+    if (auto* papyrus = SKSE::GetPapyrusInterface())
+        papyrus->Register(RegisterPapyrus);
+    if (auto* messaging = SKSE::GetMessagingInterface())
+        messaging->RegisterListener(OnMessage);
 
     mod::ui::Register();
     return true;

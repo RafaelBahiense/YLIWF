@@ -1,20 +1,21 @@
 # Development tools
 
-`ModTools` coordinates builds and uses .NET 10 and locked Mutagen packages for ESP generation and
-inspection, Papyrus preparation and compilation, validation, and packaging.
-See the [build guide](../docs/build-release.md) for setup and build targets.
+`ModTools` uses .NET 10 and locked Mutagen packages for builds, ESP generation,
+Papyrus compilation, validation and packaging.
+See the [build guide](../docs/build-release.md).
 
-`Building/` owns target selection, local paths and external compiler invocation.
-`Papyrus/` owns script preparation/compilation; `Packaging/` owns release
-validation and publication. `build.ps1` is the Windows environment launcher.
+| Directory | Responsibility |
+| --- | --- |
+| `Building/` | Targets, paths and compiler invocation |
+| `Papyrus/` | Source preparation and compilation |
+| `Packaging/` | Validation and archive publication |
 
 ## Generate and inspect plugins
 
-Edit ESP definitions under `src/plugin/`; the project compiles them as linked
-sources. `build.ps1 -Target Plugin` writes the generated ESP to `build/plugin`.
-Original plugins under `plugin/input` are local inspection artifacts.
+Edit `src/plugin/`; `build.ps1 -Target Plugin` writes the ESP to `build/plugin`.
+Original plugins in `plugin/input` are local inspection inputs.
 
-For direct CLI use, run from the repository root:
+For direct CLI use:
 
 ```powershell
 . ./tools/Environment.ps1
@@ -24,16 +25,12 @@ Invoke-ModTools @('generate', 'build/plugin')
 Invoke-ModTools @('inspect', 'build/plugin/You Lead, I Will Follow.esp')
 ```
 
-`inspect` lists FormIDs, record types, and editor IDs. Neither command requires
-Skyrim master files.
+`inspect` lists FormIDs, types and editor IDs. Neither command needs Skyrim masters.
 
-## C# style and analysis
+## C# analysis
 
-The root `.editorconfig` defines formatting and analyzer settings. Use semantic
-names, remove unused imports, prefer object/collection initializers, and add
-braces to control flow. Keep numeric suffixes only for meaningful IDs or slots.
-
-After initializing .NET and restoring the projects:
+`.editorconfig` defines style. Use semantic names, remove unused imports and
+prefer initializers. After initializing .NET and restoring:
 
 ```powershell
 foreach ($project in 'tools/ModTools/ModTools.csproj', 'tests/tools/ModTools.Tests.csproj') {
@@ -42,9 +39,7 @@ foreach ($project in 'tools/ModTools/ModTools.csproj', 'tests/tools/ModTools.Tes
 }
 ```
 
-Remove `--verify-no-changes` to apply formatter fixes, then review the diff and
-run `build.ps1 -Target Test`. Some editor refactorings still require manual edits.
-`SYSLIB1045` is enabled as a warning for source-generated regex suggestions.
-
-For a diagnostic report, add `-p:ErrorLog=<absolute-path>.sarif` to the build.
-Use a different report path for each project and store reports under `build/`.
+Remove `--verify-no-changes` to apply fixes, review them, then run
+`build.ps1 -Target Test`. `SYSLIB1045` suggests generated regexes.
+For a SARIF report, add `-p:ErrorLog=<absolute-path>.sarif`; use separate paths
+under `build/` for each project.

@@ -36,7 +36,8 @@ static void HelpMarker(const char* desc) {
 }
 
 static bool StyledRadio(const char* label, const char* desc, bool selected) {
-    ImGuiMCP::ImVec4 labelCol = selected ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f} : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f};
+    ImGuiMCP::ImVec4 labelCol =
+        selected ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f} : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f};
     ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, labelCol);
     bool hit = ImGuiMCP::RadioButton(label, selected);
     ImGuiMCP::PopStyleColor();
@@ -76,8 +77,10 @@ namespace {
     } confirmation;
 
     mod::debug::Snapshot PageSnapshot(Page page) {
-        if (getMainWindow && !mainWindow.load()) mainWindow = getMainWindow();
-        if (page != lastPage || lastPageFrame != ImGuiMCP::GetFrameCount() - 1) mod::debug::NotifyStateChanged();
+        if (getMainWindow && !mainWindow.load())
+            mainWindow = getMainWindow();
+        if (page != lastPage || lastPageFrame != ImGuiMCP::GetFrameCount() - 1)
+            mod::debug::NotifyStateChanged();
         lastPage = page;
         lastPageFrame = ImGuiMCP::GetFrameCount();
         snapshotPageVisible = true;
@@ -87,13 +90,17 @@ namespace {
     }
 
     bool CanRequest(const mod::debug::Snapshot& state, mod::debug::Action action) {
-        return state.ready && !state.busy && mod::debug_rules::CanCommand(state.structureReady, state.scriptReady,
-            state.bindingsReady, static_cast<std::int32_t>(action), mod::debug::OptionsEnabled.load());
+        return state.ready && !state.busy &&
+               mod::debug_rules::CanCommand(state.structureReady, state.scriptReady, state.bindingsReady,
+                                            static_cast<std::int32_t>(action), mod::debug::OptionsEnabled.load());
     }
 
-    void Confirm(mod::debug::Action action, const mod::debug::Follower& row, const mod::debug::Snapshot& state, std::int32_t alias) {
-        confirmation = {action, row.formID, alias, state.generation, row.name.empty() ? "Unnamed follower" : row.name, false, true, true};
+    void Confirm(mod::debug::Action action, const mod::debug::Follower& row, const mod::debug::Snapshot& state,
+                 std::int32_t alias) {
+        confirmation = {action, row.formID, alias, state.generation, row.name.empty() ? "Unnamed follower" : row.name,
+                        false,  true,       true};
     }
+
     void ConfirmParty(mod::debug::Action action, const mod::debug::Snapshot& state) {
         confirmation = {action, 0, -1, state.generation, "all registered followers", true, true, true};
     }
@@ -105,22 +112,29 @@ namespace {
             ImGuiMCP::OpenPopup(title);
             confirmation.open = false;
         }
-        if (!confirmation.active) return;
+        if (!confirmation.active)
+            return;
         if (ImGuiMCP::BeginPopupModal(title, &confirmation.active, ImGuiMCP::ImGuiWindowFlags_AlwaysAutoResize)) {
             const bool current = state.ready && confirmation.generation == state.generation &&
-                (mod::debug_rules::IsPartyAction(static_cast<std::int32_t>(confirmation.action)) || mod::debug::OptionsEnabled.load());
+                                 (mod::debug_rules::IsPartyAction(static_cast<std::int32_t>(confirmation.action)) ||
+                                  mod::debug::OptionsEnabled.load());
             if (!current) {
                 confirmation.active = false;
                 ImGuiMCP::CloseCurrentPopup();
             } else {
-                const auto label = confirmation.party ? mod::debug::PartyActionName(confirmation.action) : mod::debug::ActionName(confirmation.action);
+                const auto label = confirmation.party ? mod::debug::PartyActionName(confirmation.action)
+                                                      : mod::debug::ActionName(confirmation.action);
                 ImGuiMCP::TextWrapped("%s: %s?", label, confirmation.name.c_str());
-                if (!confirmation.party && mod::debug::OptionsEnabled.load()) ImGuiMCP::Text("Reference %08X", confirmation.actor);
+                if (!confirmation.party && mod::debug::OptionsEnabled.load())
+                    ImGuiMCP::Text("Reference %08X", confirmation.actor);
                 const bool allowed = CanRequest(state, confirmation.action);
                 BeginDisabled(!allowed);
                 if (ImGuiMCP::Button(label)) {
-                    if (confirmation.party) mod::debug::RequestPartyAction(confirmation.action, confirmation.generation);
-                    else mod::debug::RequestAction(confirmation.action, confirmation.actor, confirmation.alias, confirmation.generation);
+                    if (confirmation.party)
+                        mod::debug::RequestPartyAction(confirmation.action, confirmation.generation);
+                    else
+                        mod::debug::RequestAction(confirmation.action, confirmation.actor, confirmation.alias,
+                                                  confirmation.generation);
                     confirmation.active = false;
                     ImGuiMCP::CloseCurrentPopup();
                 }
@@ -136,106 +150,153 @@ namespace {
     }
 
     void ActorDiagnostics(const mod::debug::Follower& row) {
-        ImGuiMCP::TextWrapped("Reference %08X | Base %08X | Cell %08X | Package %08X", row.formID, row.baseID, row.cellID, row.packageID);
+        ImGuiMCP::TextWrapped("Reference %08X | Base %08X | Cell %08X | Package %08X", row.formID, row.baseID,
+                              row.cellID, row.packageID);
         ImGuiMCP::TextWrapped("Waiting %.2f | Teammate %s | Current faction %s | Potential follower %s | 3D %s",
-            row.waiting, row.teammate ? "yes" : "no", row.currentFaction ? "yes" : "no",
-            row.potentialFaction ? "yes" : "no", row.loaded ? "loaded" : "unloaded");
-        ImGuiMCP::TextWrapped("Essential %s | Protected %s | Crossfire %s",
-            row.essential ? "yes" : "no", row.protectedActor ? "yes" : "no", row.crossfire ? "yes" : "no");
-        if (!row.issues.empty()) ImGuiMCP::TextWrapped("Issues: %s", row.issues.c_str());
+                              row.waiting, row.teammate ? "yes" : "no", row.currentFaction ? "yes" : "no",
+                              row.potentialFaction ? "yes" : "no", row.loaded ? "loaded" : "unloaded");
+        ImGuiMCP::TextWrapped("Essential %s | Protected %s | Crossfire %s", row.essential ? "yes" : "no",
+                              row.protectedActor ? "yes" : "no", row.crossfire ? "yes" : "no");
+        if (!row.issues.empty())
+            ImGuiMCP::TextWrapped("Issues: %s", row.issues.c_str());
     }
 
     void CommandFeedback(const mod::debug::Snapshot& state) {
         if (!state.ready) {
             ImGuiMCP::TextWrapped("Load a game to view your followers.");
         } else if (state.commandState != mod::debug::CommandState::Idle) {
-            const auto color = state.commandState == mod::debug::CommandState::Failed ? ImGuiMCP::ImVec4{0.95f, 0.45f, 0.45f, 1.0f} :
-                state.busy ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f} : ImGuiMCP::ImVec4{0.45f, 0.75f, 0.45f, 1.0f};
+            const auto color = state.commandState == mod::debug::CommandState::Failed
+                                   ? ImGuiMCP::ImVec4{0.95f, 0.45f, 0.45f, 1.0f}
+                               : state.busy ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f}
+                                            : ImGuiMCP::ImVec4{0.45f, 0.75f, 0.45f, 1.0f};
             ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, color);
             ImGuiMCP::TextWrapped("%s", state.commandStatus.c_str());
             ImGuiMCP::PopStyleColor();
         }
-        if (state.ready && mod::debug::OptionsEnabled.load() && !state.executionStatus.empty()) ImGuiMCP::TextWrapped("%s", state.executionStatus.c_str());
+        if (state.ready && mod::debug::OptionsEnabled.load() && !state.executionStatus.empty())
+            ImGuiMCP::TextWrapped("%s", state.executionStatus.c_str());
     }
+
     const char* FollowerStatus(const mod::debug::Follower& row) {
-        if (row.dead) return "Dead";
-        if (!row.teammate || !row.currentFaction || (row.waiting != 0 && row.waiting != 1)) return "Needs attention";
+        if (row.dead)
+            return "Dead";
+        if (!row.adapterName.empty())
+            return row.adapterStatus.c_str();
+        if (!row.teammate || !row.currentFaction || (row.waiting != 0 && row.waiting != 1))
+            return "Needs attention";
         return row.waiting == 1 ? "Waiting" : "Following";
     }
 
     void RenderFollowerCommands(const mod::debug::Follower& row, const mod::debug::Snapshot& state) {
         const bool canDirect = CanRequest(state, mod::debug::Action::Follow) && !row.dead;
-        BeginDisabled(!canDirect);
-        if (ImGuiMCP::Button("Follow")) mod::debug::RequestAction(mod::debug::Action::Follow, row.formID, row.aliasID, state.generation);
+        const auto allowed = [&](std::uint32_t command) {
+            return row.adapterName.empty() || (row.adapterCommands & (1u << command));
+        };
+        const bool canFollow = canDirect && allowed(0), canWait = canDirect && allowed(1);
+        BeginDisabled(!canFollow);
+        if (ImGuiMCP::Button("Follow"))
+            mod::debug::RequestAction(mod::debug::Action::Follow, row.formID, row.aliasID, state.generation);
+        EndDisabled(!canFollow);
         ImGuiMCP::SameLine();
-        if (ImGuiMCP::Button("Wait")) mod::debug::RequestAction(mod::debug::Action::Wait, row.formID, row.aliasID, state.generation);
-        EndDisabled(!canDirect);
+        BeginDisabled(!canWait);
+        if (ImGuiMCP::Button("Wait"))
+            mod::debug::RequestAction(mod::debug::Action::Wait, row.formID, row.aliasID, state.generation);
+        EndDisabled(!canWait);
         ImGuiMCP::SameLine();
-        const bool canDismiss = CanRequest(state, mod::debug::Action::Dismiss);
+        const bool canDismiss =
+            CanRequest(state, mod::debug::Action::Dismiss) && allowed(2) && (row.adapterName.empty() || !row.dead);
         BeginDisabled(!canDismiss);
-        if (ImGuiMCP::Button("Dismiss")) Confirm(mod::debug::Action::Dismiss, row, state, row.aliasID);
+        if (ImGuiMCP::Button("Dismiss"))
+            Confirm(mod::debug::Action::Dismiss, row, state, row.aliasID);
         EndDisabled(!canDismiss);
         if (row.aliasID >= 2 && row.aliasID <= 8) {
             ImGuiMCP::SameLine();
             const bool canPromote = CanRequest(state, mod::debug::Action::PromotePrimary) && !row.dead;
             BeginDisabled(!canPromote);
             if (ImGuiMCP::Button("Make primary"))
-                mod::debug::RequestAction(mod::debug::Action::PromotePrimary, row.formID, row.aliasID, state.generation);
+                mod::debug::RequestAction(mod::debug::Action::PromotePrimary, row.formID, row.aliasID,
+                                          state.generation);
             EndDisabled(!canPromote);
-            HelpMarker("Move this follower to the vanilla primary slot. The current primary takes this follower's slot.\nNeither follower is dismissed; following/waiting state and waiting deadlines are preserved.");
+            HelpMarker(
+                "Move this follower to the vanilla primary slot. The current primary takes this follower's "
+                "slot.\nNeither follower is dismissed; following/waiting state and waiting deadlines are preserved.");
         }
     }
+
     void RenderPartyCommands(const mod::debug::Snapshot& state) {
-        const bool living = std::ranges::any_of(state.followers, [](const auto& row) { return row.formID && !row.dead; });
+        const bool living =
+            std::ranges::any_of(state.followers, [](const auto& row) { return row.formID && !row.dead; });
         const bool occupied = std::ranges::any_of(state.followers, [](const auto& row) { return row.formID != 0; });
-        const bool canFollow = living && CanRequest(state, mod::debug::Action::Follow);
-        const bool canDismiss = occupied && CanRequest(state, mod::debug::Action::Dismiss);
+        const auto external = [&](std::uint32_t command) {
+            return std::ranges::any_of(state.adaptedFollowers, [command](const auto& row) {
+                return !row.dead && (row.adapterCommands & (1u << command));
+            });
+        };
+        const bool canFollow = (living || external(0)) && CanRequest(state, mod::debug::Action::Follow);
+        const bool canWait = (living || external(1)) && CanRequest(state, mod::debug::Action::Wait);
+        const bool canDismiss = (occupied || external(2)) && CanRequest(state, mod::debug::Action::Dismiss);
         BeginDisabled(!canFollow);
-        if (ImGuiMCP::Button("Follow All")) mod::debug::RequestPartyAction(mod::debug::Action::Follow, state.generation);
-        ImGuiMCP::SameLine();
-        if (ImGuiMCP::Button("Wait All")) mod::debug::RequestPartyAction(mod::debug::Action::Wait, state.generation);
+        if (ImGuiMCP::Button("Follow All"))
+            mod::debug::RequestPartyAction(mod::debug::Action::Follow, state.generation);
         EndDisabled(!canFollow);
         ImGuiMCP::SameLine();
+        BeginDisabled(!canWait);
+        if (ImGuiMCP::Button("Wait All"))
+            mod::debug::RequestPartyAction(mod::debug::Action::Wait, state.generation);
+        EndDisabled(!canWait);
+        ImGuiMCP::SameLine();
         BeginDisabled(!canDismiss);
-        if (ImGuiMCP::Button("Dismiss All")) ConfirmParty(mod::debug::Action::Dismiss, state);
+        if (ImGuiMCP::Button("Dismiss All"))
+            ConfirmParty(mod::debug::Action::Dismiss, state);
         EndDisabled(!canDismiss);
     }
 
     void RenderFollowerPosition(const mod::debug::Follower& row) {
         ImGuiMCP::TextWrapped("Location: %s", row.location.c_str());
-        if (row.distanceMeters) ImGuiMCP::Text("Distance: approximately %.1f m", *row.distanceMeters);
-        else ImGuiMCP::TextUnformatted("Distance: unavailable");
+        if (row.distanceMeters)
+            ImGuiMCP::Text("Distance: approximately %.1f m", *row.distanceMeters);
+        else
+            ImGuiMCP::TextUnformatted("Distance: unavailable");
         ImGuiMCP::SameLine();
-        HelpMarker(row.distanceMeters ? "Approximate straight-line distance to the player; does not measure a travel route." :
-            row.distanceUnavailable.empty() ? "Position unavailable." : row.distanceUnavailable.c_str());
+        HelpMarker(row.distanceMeters
+                       ? "Approximate straight-line distance to the player; does not measure a travel route."
+                   : row.distanceUnavailable.empty() ? "Position unavailable."
+                                                     : row.distanceUnavailable.c_str());
     }
 
     void RenderFollowerDistance(const mod::debug::Follower& row, const mod::debug::Snapshot& state) {
-        if (!row.distanceAvailable || row.aliasID == 1) return;
-        const bool disabled = !CanRequest(state, mod::debug::Action::Follow) || row.dead;
+        if (!row.distanceAvailable || row.aliasID == 1)
+            return;
+        const bool disabled = !CanRequest(state, mod::debug::Action::Follow) || row.dead ||
+                              (!row.adapterName.empty() && !(row.adapterCommands & 1u));
         ImGuiMCP::Text("Follow distance%s:", row.individualDistance ? " (individual)" : "");
         constexpr std::array labels{"Close##distance", "Normal##distance", "Far##distance"};
         BeginDisabled(disabled);
         for (int preset = 0; preset < static_cast<int>(labels.size()); ++preset) {
-            if (preset) ImGuiMCP::SameLine();
+            if (preset)
+                ImGuiMCP::SameLine();
             if (ImGuiMCP::RadioButton(labels[preset], row.followDistance == preset))
-                mod::follow_distance::Request(row.formID, static_cast<std::int32_t>(row.aliasID), preset, state.generation);
+                mod::follow_distance::Request(row.formID, static_cast<std::int32_t>(row.aliasID), preset,
+                                              state.generation);
         }
         EndDisabled(disabled);
     }
 
     void RenderFollowerRepairs(const mod::debug::Follower& row, const mod::debug::Snapshot& state) {
-        if (!ImGuiMCP::CollapsingHeader("Diagnostics and repairs")) return;
+        if (!ImGuiMCP::CollapsingHeader("Diagnostics and repairs"))
+            return;
         ImGuiMCP::Text("Slot %s (alias %u)", row.aliasName.c_str(), row.aliasID);
         ActorDiagnostics(row);
         const bool canRepair = CanRequest(state, mod::debug::Action::Repair) && !row.dead;
         BeginDisabled(!canRepair);
-        if (ImGuiMCP::Button("Repair flags / duplicates")) mod::debug::RequestAction(mod::debug::Action::Repair, row.formID, row.aliasID, state.generation);
+        if (ImGuiMCP::Button("Repair flags / duplicates"))
+            mod::debug::RequestAction(mod::debug::Action::Repair, row.formID, row.aliasID, state.generation);
         EndDisabled(!canRepair);
         ImGuiMCP::SameLine();
         const bool canClear = CanRequest(state, mod::debug::Action::ClearSlot);
         BeginDisabled(!canClear);
-        if (ImGuiMCP::Button("Clear this slot")) Confirm(mod::debug::Action::ClearSlot, row, state, row.aliasID);
+        if (ImGuiMCP::Button("Clear this slot"))
+            Confirm(mod::debug::Action::ClearSlot, row, state, row.aliasID);
         EndDisabled(!canClear);
     }
 
@@ -250,38 +311,56 @@ namespace {
         RenderFollowerPosition(row);
         RenderFollowerCommands(row, state);
         RenderFollowerDistance(row, state);
-        if (debug) RenderFollowerRepairs(row, state);
+        if (!row.adapterName.empty()) {
+            ImGuiMCP::Text("Controller: %s", row.adapterName.c_str());
+            if (!row.adapterReason.empty())
+                ImGuiMCP::TextWrapped("%s", row.adapterReason.c_str());
+            if (debug)
+                ActorDiagnostics(row);
+        } else if (debug)
+            RenderFollowerRepairs(row, state);
     }
 
     void RenderInstallationDiagnostics(const mod::debug::Snapshot& state) {
         if (ImGuiMCP::CollapsingHeader("Installation")) {
-            ImGuiMCP::TextWrapped("DialogueFollower winning record: %s | Configured cap: %d | Validated slots: %d / 8 | Resolved extra aliases: %d / 7",
+            ImGuiMCP::TextWrapped(
+                "DialogueFollower winning record: %s | Configured cap: %d | Validated slots: %d / 8 | Resolved extra "
+                "aliases: %d / 7",
                 state.winningPlugin.c_str(), state.configuredCap, state.slotCapacity, state.boundExtraAliases);
-            if (!state.installationIssues.empty()) ImGuiMCP::TextWrapped("%s", state.installationIssues.c_str());
+            if (!state.installationIssues.empty())
+                ImGuiMCP::TextWrapped("%s", state.installationIssues.c_str());
         }
-        if (!state.installationIssues.empty()) ImGuiMCP::TextWrapped("Installation needs attention. Expand Installation for details.");
+        if (!state.installationIssues.empty())
+            ImGuiMCP::TextWrapped("Installation needs attention. Expand Installation for details.");
     }
 
     void RenderPartyDiagnostics(const mod::debug::Snapshot& state) {
-        if (!ImGuiMCP::CollapsingHeader("Party diagnostics and reconciliation")) return;
+        if (!ImGuiMCP::CollapsingHeader("Party diagnostics and reconciliation"))
+            return;
         ImGuiMCP::TextWrapped("Live followers: %d / %d | Party count: %.0f | Vanilla gate: %.0f | Recruit gate: %.0f",
-            state.liveCount, state.cap, state.modCount, state.vanillaCount, state.recruitGate);
-        if (!state.issues.empty()) ImGuiMCP::TextWrapped("%s", state.issues.c_str());
-        ImGuiMCP::TextWrapped("A temporary zero in the vanilla dialogue gate while recruiting is expected. Individual diagnostics and repairs are on Followers.");
+                              state.liveCount, state.cap, state.modCount, state.vanillaCount, state.recruitGate);
+        if (!state.issues.empty())
+            ImGuiMCP::TextWrapped("%s", state.issues.c_str());
+        ImGuiMCP::TextWrapped(
+            "A temporary zero in the vanilla dialogue gate while recruiting is expected. Individual diagnostics and "
+            "repairs are on Followers.");
         const bool canSync = CanRequest(state, mod::debug::Action::Sync);
         BeginDisabled(!canSync);
-        if (ImGuiMCP::Button("Reconcile counts / dead slots")) mod::debug::RequestAction(mod::debug::Action::Sync, 0, -1, state.generation);
+        if (ImGuiMCP::Button("Reconcile counts / dead slots"))
+            mod::debug::RequestAction(mod::debug::Action::Sync, 0, -1, state.generation);
         EndDisabled(!canSync);
     }
 
     bool ParseReferenceFormID(std::string_view input, std::uint32_t& formID) {
-        if (input.starts_with("0x") || input.starts_with("0X")) input.remove_prefix(2);
+        if (input.starts_with("0x") || input.starts_with("0X"))
+            input.remove_prefix(2);
         const auto parsed = std::from_chars(input.data(), input.data() + input.size(), formID, 16);
         return parsed.ec == std::errc{} && parsed.ptr == input.data() + input.size() && formID;
     }
 
     void RenderActorInspector(const mod::debug::Snapshot& state) {
-        if (!ImGuiMCP::CollapsingHeader("Actor inspection and test recruitment")) return;
+        if (!ImGuiMCP::CollapsingHeader("Actor inspection and test recruitment"))
+            return;
         static char referenceID[16]{};
         static std::string inputError;
         ImGuiMCP::InputText("Reference FormID (hex)", referenceID, sizeof(referenceID));
@@ -295,25 +374,32 @@ namespace {
                 inputError = "Enter an actor reference FormID, for example 000A2C94.";
             }
         }
-        if (!inputError.empty()) ImGuiMCP::TextWrapped("%s", inputError.c_str());
-        if (!state.inspected.formID) return;
+        if (!inputError.empty())
+            ImGuiMCP::TextWrapped("%s", inputError.c_str());
+        if (!state.inspected.formID)
+            return;
         ImGuiMCP::TextUnformatted(state.inspected.name.c_str());
         ActorDiagnostics(state.inspected);
-        ImGuiMCP::TextWrapped("Test recruitment requires a living potential follower and a free slot. Release is only for actors without a party registration.");
+        ImGuiMCP::TextWrapped(
+            "Test recruitment requires a living potential follower and a free slot. Release is only for actors without "
+            "a party registration.");
         const bool canRecruit = CanRequest(state, mod::debug::Action::Adopt) && !state.inspected.dead;
         BeginDisabled(!canRecruit);
-        if (ImGuiMCP::Button("Recruit into party (debug)")) Confirm(mod::debug::Action::Adopt, state.inspected, state, -1);
+        if (ImGuiMCP::Button("Recruit into party (debug)"))
+            Confirm(mod::debug::Action::Adopt, state.inspected, state, -1);
         EndDisabled(!canRecruit);
         ImGuiMCP::SameLine();
         const bool canRelease = CanRequest(state, mod::debug::Action::Release);
         BeginDisabled(!canRelease);
-        if (ImGuiMCP::Button("Release orphan service flags")) Confirm(mod::debug::Action::Release, state.inspected, state, -1);
+        if (ImGuiMCP::Button("Release orphan service flags"))
+            Confirm(mod::debug::Action::Release, state.inspected, state, -1);
         EndDisabled(!canRelease);
     }
 }
 
 void mod::ui::Register() {
-    if (!SKSEMenuFramework::IsInstalled()) return;
+    if (!SKSEMenuFramework::IsInstalled())
+        return;
     // Optional newer export: use the main menu's atomic IsOpen when available,
     // including non-pausing menus. Older framework versions expose blocking state.
     getMainWindow = SKSEMenuFramework::Model::Internal::GetFunction<GetMainWindow>("GetMainWindow");
@@ -325,8 +411,10 @@ void mod::ui::Register() {
 }
 
 bool mod::ui::IsRefreshVisible() {
-    if (!snapshotPageVisible.load()) return false;
-    if (auto* window = mainWindow.load()) return window->IsOpen.load();
+    if (!snapshotPageVisible.load())
+        return false;
+    if (auto* window = mainWindow.load())
+        return window->IsOpen.load();
     return SKSEMenuFramework::IsAnyBlockingWindowOpened();
 }
 
@@ -334,29 +422,49 @@ void __stdcall mod::ui::RenderFollowers() {
     const auto state = PageSnapshot(Page::Followers);
     const bool debug = mod::debug::OptionsEnabled.load();
     ImGuiMCP::Text("Followers: %d / %d", state.liveCount, state.cap);
+    if (!state.adaptedFollowers.empty()) {
+        ImGuiMCP::SameLine();
+        ImGuiMCP::Text("| Quest-managed: %zu", state.adaptedFollowers.size());
+    }
     ImGuiMCP::SameLine();
-    if (ImGuiMCP::Button("Refresh")) mod::debug::RequestRefresh();
+    if (ImGuiMCP::Button("Refresh"))
+        mod::debug::RequestRefresh();
     CommandFeedback(state);
-    if (!state.ready) { RenderConfirmation(state); return; }
+    if (!state.ready) {
+        RenderConfirmation(state);
+        return;
+    }
     RenderPartyCommands(state);
     if (!state.structureReady || !state.scriptReady || !state.bindingsReady)
-        ImGuiMCP::TextWrapped("Follower controls are unavailable. Enable debug options on the Debug page to check the installation.");
+        ImGuiMCP::TextWrapped(
+            "Follower controls are unavailable. Enable debug options on the Debug page to check the installation.");
     static bool showEmpty = false;
-    if (debug) ImGuiMCP::Checkbox("Show empty slots", &showEmpty);
+    if (debug)
+        ImGuiMCP::Checkbox("Show empty slots", &showEmpty);
     std::unordered_set<std::uint32_t> seen;
     bool displayed = false;
     if (ImGuiMCP::BeginChild("Follower roster", ImGuiMCP::ImVec2{0, 0}, ImGuiMCP::ImGuiChildFlags_Border,
-        ImGuiMCP::ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+                             ImGuiMCP::ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
         for (const auto& row : state.followers) {
-            if (!row.formID && !(debug && showEmpty)) continue;
-            if (row.formID && !seen.insert(row.formID).second && !debug) continue;
+            if (!row.formID && !(debug && showEmpty))
+                continue;
+            if (row.formID && !seen.insert(row.formID).second && !debug)
+                continue;
             displayed = true;
             ImGuiMCP::PushID(static_cast<int>(row.aliasID));
             RenderFollowerRow(row, state, debug);
             ImGuiMCP::Separator();
             ImGuiMCP::PopID();
         }
-        if (!displayed) ImGuiMCP::TextUnformatted("No followers in your party.");
+        for (const auto& row : state.adaptedFollowers) {
+            displayed = true;
+            ImGuiMCP::PushID(static_cast<int>(row.formID));
+            RenderFollowerRow(row, state, debug);
+            ImGuiMCP::Separator();
+            ImGuiMCP::PopID();
+        }
+        if (!displayed)
+            ImGuiMCP::TextUnformatted("No followers in your party.");
     }
     ImGuiMCP::EndChild();
     RenderConfirmation(state);
@@ -364,23 +472,37 @@ void __stdcall mod::ui::RenderFollowers() {
 
 void __stdcall mod::ui::RenderDebug() {
     bool enabled = mod::debug::OptionsEnabled.load();
-    if (ImGuiMCP::Checkbox("Enable debug options", &enabled)) mod::debug::OptionsEnabled = enabled;
+    if (ImGuiMCP::Checkbox("Enable debug options", &enabled))
+        mod::debug::OptionsEnabled = enabled;
     ImGuiMCP::SameLine();
-    if (ImGuiMCP::Button("Save debug settings")) mod::settings::Save();
+    if (ImGuiMCP::Button("Save debug settings"))
+        mod::settings::Save();
     {
         std::scoped_lock lock(mod::settings::Mutex);
-        if (!mod::settings::SaveStatus.empty()) ImGuiMCP::TextWrapped("%s", mod::settings::SaveStatus.c_str());
+        if (!mod::settings::SaveStatus.empty())
+            ImGuiMCP::TextWrapped("%s", mod::settings::SaveStatus.c_str());
     }
-    ImGuiMCP::TextWrapped("Debug options show follower diagnostics, state repairs and test recruitment. Flow logging is a separate setting.");
+    ImGuiMCP::TextWrapped(
+        "Debug options show follower diagnostics, state repairs and test recruitment. Flow logging is a separate "
+        "setting.");
     bool logging = mod::debug::Logging.load();
-    if (ImGuiMCP::Checkbox("Log mod flow", &logging)) mod::debug::SetLogging(logging);
+    if (ImGuiMCP::Checkbox("Log mod flow", &logging))
+        mod::debug::SetLogging(logging);
     const auto state = PageSnapshot(Page::Debug);
-    if (!enabled) { RenderConfirmation(state); return; }
-    if (ImGuiMCP::Button("Refresh state")) mod::debug::RequestRefresh();
+    if (!enabled) {
+        RenderConfirmation(state);
+        return;
+    }
+    if (ImGuiMCP::Button("Refresh state"))
+        mod::debug::RequestRefresh();
     ImGuiMCP::SameLine();
-    if (ImGuiMCP::Button("Dump full context")) mod::debug::RequestDump();
+    if (ImGuiMCP::Button("Dump full context"))
+        mod::debug::RequestDump();
     ImGuiMCP::TextWrapped("%s", state.status.c_str());
-    if (!state.ready) { RenderConfirmation(state); return; }
+    if (!state.ready) {
+        RenderConfirmation(state);
+        return;
+    }
     RenderInstallationDiagnostics(state);
     RenderPartyDiagnostics(state);
     RenderActorInspector(state);
@@ -435,13 +557,17 @@ void __stdcall mod::ui::RenderSettings() {
         ImGuiMCP::TextUnformatted("Perk List");
         ImGuiMCP::PopStyleColor();
         ImGuiMCP::SameLine();
-        HelpMarker("Comma-separated list, up to 8 entries.\nFormat: PluginName.esp|FormID\nExample: Skyrim.esm|00058F75\nEach perk the player owns grants one extra follower slot.");
+        HelpMarker(
+            "Comma-separated list, up to 8 entries.\nFormat: PluginName.esp|FormID\nExample: Skyrim.esm|00058F75\nEach "
+            "perk the player owns grants one extra follower slot.");
         ImGuiMCP::SetNextItemWidth(-1.0f);
         if (ImGuiMCP::InputText("##PerkList", mod::settings::PerkListBuffer, sizeof(mod::settings::PerkListBuffer))) {
             changed = true;
             mod::settings::ParsePerkListIntoSpecs(mod::settings::PerkListBuffer);
         }
-        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, mod::settings::PerkSpecCount > 0 ? ImGuiMCP::ImVec4{0.45f, 0.75f, 0.45f, 1.0f} : ImGuiMCP::ImVec4{0.50f, 0.50f, 0.50f, 1.0f});
+        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, mod::settings::PerkSpecCount > 0
+                                                              ? ImGuiMCP::ImVec4{0.45f, 0.75f, 0.45f, 1.0f}
+                                                              : ImGuiMCP::ImVec4{0.50f, 0.50f, 0.50f, 1.0f});
         ImGuiMCP::Text("  %zu / %zu Perks Parsed", mod::settings::PerkSpecCount, mod::settings::kMaxPerkSpecs);
         ImGuiMCP::PopStyleColor();
         ImGuiMCP::Unindent(22.0f);
@@ -463,9 +589,11 @@ void __stdcall mod::ui::RenderSettings() {
         ImGuiMCP::PopStyleColor();
         ImGuiMCP::SameLine(160.0f);
         ImGuiMCP::SetNextItemWidth(250.0f);
-        if (ImGuiMCP::SliderInt("##iSpeechLevelsPerSlot", &mod::settings::SpeechLevelsPerSlot, 1, 30)) changed = true;
+        if (ImGuiMCP::SliderInt("##iSpeechLevelsPerSlot", &mod::settings::SpeechLevelsPerSlot, 1, 30))
+            changed = true;
         ImGuiMCP::SameLine();
-        HelpMarker("Speech levels needed for each extra follower slot.\nDefault is 10, meaning Speech 0-9 = 1 follower.");
+        HelpMarker(
+            "Speech levels needed for each extra follower slot.\nDefault is 10, meaning Speech 0-9 = 1 follower.");
         ImGuiMCP::Unindent(22.0f);
         EndDisabled(dis);
     }
@@ -475,17 +603,24 @@ void __stdcall mod::ui::RenderSettings() {
     ImGuiMCP::SeparatorText("FOLLOWING DISTANCE");
     constexpr std::array distanceLabels{"Close", "Normal", "Far"};
     for (int preset = 0; preset < static_cast<int>(distanceLabels.size()); ++preset) {
-        if (preset) ImGuiMCP::SameLine();
+        if (preset)
+            ImGuiMCP::SameLine();
         if (StyledRadio(distanceLabels[preset], "", mod::settings::FollowDistance == preset)) {
             mod::settings::FollowDistance = preset;
             changed = true;
-            if (mod::settings::FollowDistanceCallback) mod::settings::FollowDistanceCallback();
+            if (mod::settings::FollowDistanceCallback)
+                mod::settings::FollowDistanceCallback();
         }
     }
     if (ImGuiMCP::Button("Apply to all followers")) {
-        if (mod::settings::FollowDistanceCallback) mod::settings::FollowDistanceCallback();
+        if (mod::settings::FollowDistanceCallback)
+            mod::settings::FollowDistanceCallback();
     }
-    HelpMarker("Selecting a preset or Apply to all replaces individual choices for the current party.\nEach follower also has their own distance control on Followers.\nChoices follow the actor and are stored in game saves; Save keeps the default for newly configured followers.\nPaths, combat and sandboxing may change actual spacing.");
+    HelpMarker(
+        "Selecting a preset or Apply to all replaces individual choices for the current party.\nEach follower also has "
+        "their own distance control on Followers.\nChoices follow the actor and are stored in game saves; Save keeps "
+        "the default for newly configured followers.\nPaths, combat and sandboxing may change actual spacing. "
+        "Quest-managed followers apply changes when allowed.");
     ImGuiMCP::Spacing();
     ImGuiMCP::SeparatorText("FEATURES");
 
@@ -497,11 +632,14 @@ void __stdcall mod::ui::RenderSettings() {
             mod::settings::EssentialCallback();
         }
         ImGuiMCP::SameLine();
-        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, ess ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f} : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
+        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, ess ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f}
+                                                              : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
         ImGuiMCP::TextUnformatted("Make Followers Essential");
         ImGuiMCP::PopStyleColor();
         ImGuiMCP::SameLine();
-        HelpMarker("Flags every actor in CurrentFollowerFaction as Essential,\nso they cannot be killed while following you.\nTheir original Essential or Protected state is fully\nrestored when they leave the party.");
+        HelpMarker(
+            "Flags every actor in CurrentFollowerFaction as Essential,\nso they cannot be killed while following "
+            "you.\nTheir original Essential or Protected state is fully\nrestored when they leave the party.");
         if (ess) {
             ImGuiMCP::Indent(22.0f);
             ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, ImGuiMCP::ImVec4{0.45f, 0.75f, 0.45f, 1.0f});
@@ -521,7 +659,8 @@ void __stdcall mod::ui::RenderSettings() {
             mod::settings::FriendlyFireCallback();
         }
         ImGuiMCP::SameLine();
-        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, ff ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f} : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
+        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, ff ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f}
+                                                             : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
         ImGuiMCP::TextUnformatted("Friendly Fire Protection");
         ImGuiMCP::PopStyleColor();
         ImGuiMCP::SameLine();
@@ -545,11 +684,14 @@ void __stdcall mod::ui::RenderSettings() {
             mod::settings::CrossfireCallback();
         }
         ImGuiMCP::SameLine();
-        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, cf ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f} : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
+        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, cf ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f}
+                                                             : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
         ImGuiMCP::TextUnformatted("Follower Crossfire Protection");
         ImGuiMCP::PopStyleColor();
         ImGuiMCP::SameLine();
-        HelpMarker("Followers cannot damage each other.\nTheir attacks, shouts and spells do no damage to anyone else in your party.\nDoes not change how much damage they deal to enemies.");
+        HelpMarker(
+            "Followers cannot damage each other.\nTheir attacks, shouts and spells do no damage to anyone else in your "
+            "party.\nDoes not change how much damage they deal to enemies.");
         if (cf) {
             ImGuiMCP::Indent(22.0f);
             ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, ImGuiMCP::ImVec4{0.45f, 0.75f, 0.45f, 1.0f});
@@ -569,11 +711,14 @@ void __stdcall mod::ui::RenderSettings() {
             mod::settings::SandboxCallback();
         }
         ImGuiMCP::SameLine();
-        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, sb ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f} : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
+        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, sb ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f}
+                                                             : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
         ImGuiMCP::TextUnformatted("Follower Sandbox");
         ImGuiMCP::PopStyleColor();
         ImGuiMCP::SameLine();
-        HelpMarker("Allows followers to sandbox (wander, sit, idle) in Dwellings and Habitation.\nExample: Towns, Homes and any other places marked as Dwellings and Habitation.");
+        HelpMarker(
+            "Allows followers to sandbox (wander, sit, idle) in Dwellings and Habitation.\nExample: Towns, Homes and "
+            "any other places marked as Dwellings and Habitation.");
         if (sb) {
             ImGuiMCP::Indent(22.0f);
             ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, ImGuiMCP::ImVec4{0.45f, 0.75f, 0.45f, 1.0f});
@@ -593,11 +738,15 @@ void __stdcall mod::ui::RenderSettings() {
             mod::settings::HomesCallback();
         }
         ImGuiMCP::SameLine();
-        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, hm ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f} : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
+        ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, hm ? ImGuiMCP::ImVec4{0.85f, 0.72f, 0.40f, 1.0f}
+                                                             : ImGuiMCP::ImVec4{0.90f, 0.90f, 0.90f, 1.0f});
         ImGuiMCP::TextUnformatted("Follower Homes");
         ImGuiMCP::PopStyleColor();
         ImGuiMCP::SameLine();
-        HelpMarker("Adds the \"I want you to live here.\" and \"Forget the home I gave you.\" dialogue to vanilla followers.\nDismissed followers go back to the home you gave them.\nTurn this off to use another follower home mod. The dialogue disappears and assigned homes are ignored until you turn it back on.");
+        HelpMarker(
+            "Adds the \"I want you to live here.\" and \"Forget the home I gave you.\" dialogue to vanilla "
+            "followers.\nDismissed followers go back to the home you gave them.\nTurn this off to use another follower "
+            "home mod. The dialogue disappears and assigned homes are ignored until you turn it back on.");
         if (hm) {
             ImGuiMCP::Indent(22.0f);
             ImGuiMCP::PushStyleColor(ImGuiMCP::ImGuiCol_Text, ImGuiMCP::ImVec4{0.45f, 0.75f, 0.45f, 1.0f});
@@ -611,9 +760,12 @@ void __stdcall mod::ui::RenderSettings() {
 
     ImGuiMCP::SeparatorText("INI FILE");
 
-    if (ImGuiMCP::Button("Save Settings")) mod::settings::Save();
+    if (ImGuiMCP::Button("Save Settings"))
+        mod::settings::Save();
     ImGuiMCP::SameLine();
-    HelpMarker(fmt::format("Writes the current values to:\n{}\nChanges are already live in-game. This only saves them.", mod::info::IniPath).c_str());
+    HelpMarker(fmt::format("Writes the current values to:\n{}\nChanges are already live in-game. This only saves them.",
+                           mod::info::IniPath)
+                   .c_str());
     ImGuiMCP::SameLine(0.0f, 14.0f);
     if (ImGuiMCP::Button("Reload Settings")) {
         mod::settings::Load(true);
@@ -625,8 +777,10 @@ void __stdcall mod::ui::RenderSettings() {
     }
     ImGuiMCP::SameLine();
     HelpMarker("Discard unsaved UI changes and reload values from the INI file.");
-    if (!mod::settings::SaveStatus.empty()) ImGuiMCP::TextWrapped("%s", mod::settings::SaveStatus.c_str());
+    if (!mod::settings::SaveStatus.empty())
+        ImGuiMCP::TextWrapped("%s", mod::settings::SaveStatus.c_str());
     ImGuiMCP::SetWindowFontScale(1.0f);
 
-    if (changed) mod::settings::ApplyGateCallback();
+    if (changed)
+        mod::settings::ApplyGateCallback();
 }

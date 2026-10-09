@@ -16,34 +16,61 @@ namespace RE {
     class TESFaction;
     class SpellItem;
     class TESGlobal;
-    namespace BSScript { class IVirtualMachine; }
+
+    namespace BSScript {
+        class IVirtualMachine;
+    }
 }
 
 namespace mod::debug {
     // UI action numbers map to native operations in ControllerExecutor.cpp.
-    enum class Action : std::int32_t { Sync = 0, Repair = 1, Follow = 2, Wait = 3, Dismiss = 4, ClearSlot = 5, Adopt = 6, Release = 7, PromotePrimary = 8 };
+    enum class Action : std::int32_t {
+        Sync = 0,
+        Repair = 1,
+        Follow = 2,
+        Wait = 3,
+        Dismiss = 4,
+        ClearSlot = 5,
+        Adopt = 6,
+        Release = 7,
+        PromotePrimary = 8
+    };
     enum class CommandState { Idle, Pending, Succeeded, Failed };
 
     constexpr const char* ActionName(Action action) {
         switch (action) {
-        case Action::Sync: return "Reconcile party";
-        case Action::Repair: return "Repair follower";
-        case Action::Follow: return "Follow";
-        case Action::Wait: return "Wait";
-        case Action::Dismiss: return "Dismiss";
-        case Action::ClearSlot: return "Clear slot";
-        case Action::Adopt: return "Recruit into party";
-        case Action::Release: return "Release orphan flags";
-        case Action::PromotePrimary: return "Make primary";
+            case Action::Sync:
+                return "Reconcile party";
+            case Action::Repair:
+                return "Repair follower";
+            case Action::Follow:
+                return "Follow";
+            case Action::Wait:
+                return "Wait";
+            case Action::Dismiss:
+                return "Dismiss";
+            case Action::ClearSlot:
+                return "Clear slot";
+            case Action::Adopt:
+                return "Recruit into party";
+            case Action::Release:
+                return "Release orphan flags";
+            case Action::PromotePrimary:
+                return "Make primary";
         }
         return "Follower command";
     }
+
     constexpr const char* PartyActionName(Action action) {
         switch (action) {
-        case Action::Follow: return "Follow All";
-        case Action::Wait: return "Wait All";
-        case Action::Dismiss: return "Dismiss All";
-        default: return "Party command";
+            case Action::Follow:
+                return "Follow All";
+            case Action::Wait:
+                return "Wait All";
+            case Action::Dismiss:
+                return "Dismiss All";
+            default:
+                return "Party command";
         }
     }
 
@@ -51,6 +78,8 @@ namespace mod::debug {
         std::uint32_t aliasID = 0, formID = 0, baseID = 0, cellID = 0, packageID = 0;
         std::string aliasName, name, issues;
         std::string location = "Unknown", distanceUnavailable;
+        std::string adapterName, adapterStatus, adapterReason;
+        std::uint32_t adapterCommands = 0;
         std::int32_t followDistance = 1;
         bool individualDistance = false, distanceAvailable = true;
         std::optional<double> distanceMeters;
@@ -71,6 +100,7 @@ namespace mod::debug {
         std::int32_t configuredCap = 0, slotCapacity = 0, boundExtraAliases = 0;
         bool structureReady = false, bindingsReady = false, scriptReady = false;
         std::vector<Follower> followers;
+        std::vector<Follower> adaptedFollowers;
         Follower inspected;
     };
 
@@ -100,12 +130,14 @@ namespace mod::debug {
     // and other diagnostic work that must be skipped while logging is disabled.
     template <class Detail>
     void TraceLazy(std::string_view event, RE::Actor* actor, Detail&& makeDetail) {
-        if (!Logging.load()) return;
+        if (!Logging.load())
+            return;
         Trace(event, actor, std::forward<Detail>(makeDetail)());
     }
 
     // Argument expressions are evaluated by the caller; only formatting is deferred.
-    template <class... Args> requires (sizeof...(Args) > 0)
+    template <class... Args>
+        requires(sizeof...(Args) > 0)
     void Trace(std::string_view event, RE::Actor* actor, fmt::format_string<Args...> pattern, Args&&... args) {
         TraceLazy(event, actor, [&] { return fmt::format(pattern, std::forward<Args>(args)...); });
     }
