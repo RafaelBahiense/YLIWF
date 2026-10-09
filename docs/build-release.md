@@ -50,7 +50,8 @@ Build also accepts `-Flags` and `-ImportDirectories`.
 
 Build receipts reject stale or mixed outputs; rebuild the affected component.
 CMake discovers core sources in `src/native/` and each add-on's `native/` folder.
-New `.cpp` files need no build-list edits; tests remain explicit targets.
+New `.cpp` files need no build-list edits. Core test targets are explicit;
+add-on `tests/native/*_test.cpp` files are discovered automatically.
 `-Clean` resets native outputs while keeping binary caches.
 Failed Papyrus stages remain in `build/papyrus/.staging-*`.
 

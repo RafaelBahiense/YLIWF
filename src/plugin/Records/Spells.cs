@@ -13,7 +13,7 @@ internal static partial class FollowerPlugin
     {
         var companionProtectionAbility = new Spell(OwnForm(0x000800), SkyrimRelease.SkyrimSE)
         {
-            EditorID = "YLIWF_CompanionsSafeSpell",
+            EditorID = RecordNames.ProtectionSpell,
             Name = new TranslatedString(Language.English, "Companion's Insight"),
             EquipmentType = new FormLinkNullable<IEquipTypeGetter>(SkyrimForm(0x013F44)),
             Description = new TranslatedString(Language.English, ""),

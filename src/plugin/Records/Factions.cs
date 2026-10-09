@@ -8,7 +8,7 @@ internal static partial class FollowerPlugin
         mod.Factions.Add(CreateHomeFaction());
         mod.Factions.Add(new Faction(FollowDistanceFactionForm, SkyrimRelease.SkyrimSE)
         {
-            EditorID = "YLIWF_FollowDistanceChoice",
+            EditorID = RecordNames.FollowDistanceChoice,
             Flags = Faction.FactionFlag.HiddenFromPC
         });
     }
@@ -17,7 +17,7 @@ internal static partial class FollowerPlugin
     {
         var homeFaction = new Faction(OwnForm(0x000960), SkyrimRelease.SkyrimSE)
         {
-            EditorID = "YLIWF_HomeFaction",
+            EditorID = RecordNames.HomeFaction,
             Name = new TranslatedString(Language.English, $"{ModInfo.ShortName} Home")
         };
         var crimeValues = new CrimeValues

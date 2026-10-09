@@ -51,13 +51,13 @@ public static class BuildReceipt
     private static bool IsSharedInput(string name) =>
         name.StartsWith("src/shared/", StringComparison.Ordinal) ||
         (name.StartsWith("tools/ModTools/", StringComparison.Ordinal) && name.EndsWith(".cs", StringComparison.Ordinal)) ||
-        name is "mod.json" or "VERSION" or "global.json" or "tools/dependencies.json" or "tools/paths.json" or
-            "tools/ModTools/ModTools.csproj" or "tools/ModTools/packages.lock.json";
+        name is ProjectPaths.Identity or ProjectPaths.Version or "global.json" or "tools/dependencies.json" or ProjectPaths.PathDefaults or
+            ProjectPaths.ToolProject or ProjectPaths.ToolLock;
 
     private static bool IsGeneratorInput(string name) =>
         (name.EndsWith(".cs", StringComparison.Ordinal) && (name.StartsWith("tools/ModTools/", StringComparison.Ordinal) ||
             name.StartsWith("src/plugin/", StringComparison.Ordinal) || name == "src/shared/ModInfo.cs")) ||
-        name is "mod.json" or "tools/ModTools/ModTools.csproj" or "tools/ModTools/packages.lock.json";
+        name is ProjectPaths.Identity or ProjectPaths.ToolProject or ProjectPaths.ToolLock;
 
     private static void ValidateToolBuild(string root)
     {

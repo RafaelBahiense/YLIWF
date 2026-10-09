@@ -98,7 +98,6 @@ EndFunction
 Function Counts(Quest owner, Int ticket, Int offset, GlobalVariable vanilla, GlobalVariable party, GlobalVariable gate, Float vanillaCount, Float partyCount, Float recruitGate) Global
 	Bool current = YLIWF_SKSE.SetNativeEffectCurrent(owner, ticket, offset)
 	If current
-		vanilla.SetValue(vanillaCount)
 		party.SetValue(partyCount)
 		gate.SetValue(recruitGate)
 	EndIf

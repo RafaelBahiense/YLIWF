@@ -1,9 +1,11 @@
 using ModTools.Packaging;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
 using static TestSupport;
 
-internal static class PluginTests
+internal static partial class PluginTests
 {
     public static string CreateDll(string temporary)
     {
@@ -32,6 +34,7 @@ internal static class PluginTests
     public static string Run(string root, string temporary)
     {
         var mod = FollowerPlugin.Create();
+        CheckNativeNames(root);
         var esp = Path.Combine(temporary, Artifacts.Plugin);
         mod.BeginWrite.ToPath(esp).WithLoadOrderFromHeaderMasters().WithNoDataFolder().NoMastersListContentCheck().Write();
         Artifacts.ValidateEsp(esp);
@@ -72,6 +75,42 @@ internal static class PluginTests
             Check(!quest.Aliases.Single(alias => alias.ID == 1).PackageData.Any(p => p.FormKey == packageKey), "Distance preset affects the animal alias");
         }
     }
+
+    private static void CheckNativeNames(string root)
+    {
+        // Both languages consume fixed engine names. Detect drift across that boundary.
+        CheckNameConstants(root, "include/PapyrusNames.h", typeof(PapyrusNames.Properties), propertiesOnly: true);
+        CheckNameConstants(root, "include/RecordNames.h", typeof(RecordNames));
+    }
+
+    private static void CheckNameConstants(string root, string header, Type definitions, bool propertiesOnly = false)
+    {
+        var native = File.ReadAllText(Path.Combine(root, header));
+        if (propertiesOnly)
+        {
+            native = NativePropertiesRegex().Match(native).Groups[1].Value;
+        }
+        else
+        {
+            native = native.Split("namespace aliases", StringSplitOptions.None)[0];
+        }
+        var declarations = NativeNamesRegex().Matches(native);
+        Check(declarations.Count > 0, "No native name definitions found");
+        foreach (Match declaration in declarations)
+        {
+            var name = declaration.Groups[1].Value;
+            var field = definitions.GetField(name, BindingFlags.NonPublic | BindingFlags.Static);
+            Check(field is { IsLiteral: true } && field.FieldType == typeof(string) &&
+                (string)field.GetRawConstantValue()! == declaration.Groups[2].Value,
+                $"Native and ESP names disagree: {name}");
+        }
+    }
+
+    [GeneratedRegex("constexpr char (\\w+)\\[\\] = \"([^\"]+)\";")]
+    private static partial Regex NativeNamesRegex();
+
+    [GeneratedRegex(@"namespace properties\s*\{([^}]+)\}")]
+    private static partial Regex NativePropertiesRegex();
 
     private static void CheckScriptBindings(IQuestGetter quest)
     {

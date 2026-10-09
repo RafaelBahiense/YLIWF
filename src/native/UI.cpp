@@ -194,26 +194,26 @@ namespace {
         };
         const bool canFollow = canDirect && allowed(0), canWait = canDirect && allowed(1);
         BeginDisabled(!canFollow);
-        if (ImGuiMCP::Button("Follow"))
+        if (ImGuiMCP::Button(mod::debug::ActionName(mod::debug::Action::Follow)))
             mod::debug::RequestAction(mod::debug::Action::Follow, row.formID, row.aliasID, state.generation);
         EndDisabled(!canFollow);
         ImGuiMCP::SameLine();
         BeginDisabled(!canWait);
-        if (ImGuiMCP::Button("Wait"))
+        if (ImGuiMCP::Button(mod::debug::ActionName(mod::debug::Action::Wait)))
             mod::debug::RequestAction(mod::debug::Action::Wait, row.formID, row.aliasID, state.generation);
         EndDisabled(!canWait);
         ImGuiMCP::SameLine();
         const bool canDismiss =
             CanRequest(state, mod::debug::Action::Dismiss) && allowed(2) && (row.adapterName.empty() || !row.dead);
         BeginDisabled(!canDismiss);
-        if (ImGuiMCP::Button("Dismiss"))
+        if (ImGuiMCP::Button(mod::debug::ActionName(mod::debug::Action::Dismiss)))
             Confirm(mod::debug::Action::Dismiss, row, state, row.aliasID);
         EndDisabled(!canDismiss);
         if (row.aliasID >= 2 && row.aliasID <= 8) {
             ImGuiMCP::SameLine();
             const bool canPromote = CanRequest(state, mod::debug::Action::PromotePrimary) && !row.dead;
             BeginDisabled(!canPromote);
-            if (ImGuiMCP::Button("Make primary"))
+            if (ImGuiMCP::Button(mod::debug::ActionName(mod::debug::Action::PromotePrimary)))
                 mod::debug::RequestAction(mod::debug::Action::PromotePrimary, row.formID, row.aliasID,
                                           state.generation);
             EndDisabled(!canPromote);
@@ -236,17 +236,17 @@ namespace {
         const bool canWait = (living || external(1)) && CanRequest(state, mod::debug::Action::Wait);
         const bool canDismiss = (occupied || external(2)) && CanRequest(state, mod::debug::Action::Dismiss);
         BeginDisabled(!canFollow);
-        if (ImGuiMCP::Button("Follow All"))
+        if (ImGuiMCP::Button(mod::debug::PartyActionName(mod::debug::Action::Follow)))
             mod::debug::RequestPartyAction(mod::debug::Action::Follow, state.generation);
         EndDisabled(!canFollow);
         ImGuiMCP::SameLine();
         BeginDisabled(!canWait);
-        if (ImGuiMCP::Button("Wait All"))
+        if (ImGuiMCP::Button(mod::debug::PartyActionName(mod::debug::Action::Wait)))
             mod::debug::RequestPartyAction(mod::debug::Action::Wait, state.generation);
         EndDisabled(!canWait);
         ImGuiMCP::SameLine();
         BeginDisabled(!canDismiss);
-        if (ImGuiMCP::Button("Dismiss All"))
+        if (ImGuiMCP::Button(mod::debug::PartyActionName(mod::debug::Action::Dismiss)))
             ConfirmParty(mod::debug::Action::Dismiss, state);
         EndDisabled(!canDismiss);
     }

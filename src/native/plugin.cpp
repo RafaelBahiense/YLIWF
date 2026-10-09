@@ -1,3 +1,4 @@
+#include "RecordNames.h"
 #include <Windows.h>
 
 #include <cstdint>
@@ -12,6 +13,7 @@
 #include "ControllerStorage.h"
 #include "Adapters.h"
 #include "FollowDistance.h"
+#include "PartyRules.h"
 
 namespace {
     RE::TESGlobal* g_playerFollowerCount = nullptr;
@@ -24,6 +26,8 @@ namespace {
     RE::TESFaction* g_potentialFollowerFaction = nullptr;
     RE::TESQuest* g_dialogueFollower = nullptr;
     RE::SpellItem* g_friendlyFireSpell = nullptr;
+    RE::ActorHandle g_dialogueSpeaker;
+    bool g_dialogueOpen = false;
 
     std::unordered_map<RE::FormID, std::uint8_t> g_essOrig{};
     std::int32_t g_slotCapacity = 8;
@@ -32,7 +36,7 @@ namespace {
     std::int32_t GetEffectiveFollowerCap();
     std::int32_t GetTotalFollowerCapFromSettings();
     void SyncParty(bool pull);
-    void ApplyFollowerDialogueGate(RE::Actor* speaker);
+    void ApplyFollowerDialogueGate(RE::Actor* speaker, std::int32_t count = -1);
     bool ApplyFollowerEssential(RE::StaticFunctionTag*, RE::Actor* actor);
     bool RestoreFollowerEssential(RE::StaticFunctionTag*, RE::Actor* actor);
 
@@ -52,18 +56,23 @@ namespace {
 
     void ResolveForms() {
         mod::debug::Trace("Native.ResolveForms.begin");
-        g_playerFollowerCount = ResolveForm<RE::TESGlobal>(0x0BCC98, "Skyrim.esm", "PlayerFollowerCount");
-        g_currentFollowerFaction = ResolveForm<RE::TESFaction>(0x05C84E, "Skyrim.esm", "CurrentFollowerFaction");
-        g_potentialFollowerFaction = ResolveForm<RE::TESFaction>(0x05C84D, "Skyrim.esm", "PotentialFollowerFaction");
-        g_dialogueFollower = ResolveForm<RE::TESQuest>(0x0750BA, "Skyrim.esm", "DialogueFollower");
-        g_canRecruitMore = ResolveForm<RE::TESGlobal>(0x001, kRequiredPluginName, "YLIWF_CanRecruitMore");
-        g_currentFollowerCount = ResolveForm<RE::TESGlobal>(0x002, kRequiredPluginName, "YLIWF_CurrentFollowerCount");
-        g_followerSandbox = ResolveForm<RE::TESGlobal>(0x805, kRequiredPluginName, "YLIWF_FollowerSandbox");
-        g_followerHomes = ResolveForm<RE::TESGlobal>(0x986, kRequiredPluginName, "YLIWF_FollowerHomes");
-        g_followDistance = ResolveForm<RE::TESGlobal>(0x993, kRequiredPluginName, "YLIWF_FollowDistance");
+        g_playerFollowerCount =
+            ResolveForm<RE::TESGlobal>(0x0BCC98, mod::record_names::SkyrimMaster, "PlayerFollowerCount");
+        g_currentFollowerFaction =
+            ResolveForm<RE::TESFaction>(0x05C84E, mod::record_names::SkyrimMaster, "CurrentFollowerFaction");
+        g_potentialFollowerFaction =
+            ResolveForm<RE::TESFaction>(0x05C84D, mod::record_names::SkyrimMaster, "PotentialFollowerFaction");
+        g_dialogueFollower = ResolveForm<RE::TESQuest>(0x0750BA, mod::record_names::SkyrimMaster, "DialogueFollower");
+        g_canRecruitMore = ResolveForm<RE::TESGlobal>(0x001, kRequiredPluginName, mod::record_names::CanRecruitMore);
+        g_currentFollowerCount =
+            ResolveForm<RE::TESGlobal>(0x002, kRequiredPluginName, mod::record_names::CurrentFollowerCount);
+        g_followerSandbox = ResolveForm<RE::TESGlobal>(0x805, kRequiredPluginName, mod::record_names::FollowerSandbox);
+        g_followerHomes = ResolveForm<RE::TESGlobal>(0x986, kRequiredPluginName, mod::record_names::FollowerHomes);
+        g_followDistance = ResolveForm<RE::TESGlobal>(0x993, kRequiredPluginName, mod::record_names::FollowDistance);
         mod::follow_distance::Configure(
-            ResolveForm<RE::TESFaction>(0x994, kRequiredPluginName, "YLIWF_FollowDistanceChoice"));
-        g_friendlyFireSpell = ResolveForm<RE::SpellItem>(0x800, kRequiredPluginName, "YLIWF_CompanionsSafeSpell");
+            ResolveForm<RE::TESFaction>(0x994, kRequiredPluginName, mod::record_names::FollowDistanceChoice));
+        g_friendlyFireSpell =
+            ResolveForm<RE::SpellItem>(0x800, kRequiredPluginName, mod::record_names::ProtectionSpell);
         mod::debug::Configure(
             {g_dialogueFollower, g_currentFollowerFaction, g_potentialFollowerFaction, g_friendlyFireSpell,
              g_playerFollowerCount, g_currentFollowerCount, g_canRecruitMore, GetEffectiveFollowerCap,
@@ -73,12 +82,14 @@ namespace {
              },
              []() { return std::vector<std::pair<std::uint32_t, std::uint8_t>>(g_essOrig.begin(), g_essOrig.end()); },
              GetTotalFollowerCapFromSettings, mod::ui::IsRefreshVisible});
-        mod::controller::Configure({{g_dialogueFollower, g_currentFollowerFaction, g_potentialFollowerFaction,
-                                     [](RE::Actor* actor) { ApplyFollowerEssential(nullptr, actor); }},
-                                    [](RE::Actor* actor) { RestoreFollowerEssential(nullptr, actor); },
-                                    GetEffectiveFollowerCap,
-                                    ResolveForm<RE::TESQuest>(0x961, kRequiredPluginName, "YLIWF_HomeQuest"),
-                                    ResolveForm<RE::TESFaction>(0x960, kRequiredPluginName, "YLIWF_HomeFaction")});
+        mod::controller::Configure(
+            {{g_dialogueFollower, g_currentFollowerFaction, g_potentialFollowerFaction,
+              [](RE::Actor* actor) { ApplyFollowerEssential(nullptr, actor); }},
+             [](RE::Actor* actor) { RestoreFollowerEssential(nullptr, actor); },
+             GetEffectiveFollowerCap,
+             ResolveForm<RE::TESQuest>(0x961, kRequiredPluginName, mod::record_names::HomeQuest),
+             ResolveForm<RE::TESFaction>(0x960, kRequiredPluginName, mod::record_names::HomeFaction),
+             [](std::int32_t count) { ApplyFollowerDialogueGate(nullptr, count); }});
         mod::debug::Trace("Native.ResolveForms.end");
     }
 
@@ -214,7 +225,8 @@ namespace {
         }
         std::int32_t slots = 1;
         for (auto* alias : g_dialogueFollower->aliases) {
-            if (alias && std::string_view(alias->aliasName.c_str()).starts_with("ExtraFollower")) {
+            if (alias &&
+                std::string_view(alias->aliasName.c_str()).starts_with(mod::record_names::aliases::ExtraPrefix)) {
                 ++slots;
             }
         }
@@ -222,22 +234,31 @@ namespace {
         mod::debug::Trace("Native.CountFollowerSlots", nullptr, "slots={}", slots);
     }
 
-    void ApplyFollowerDialogueGate(RE::Actor* speaker) {
+    void ApplyFollowerDialogueGate(RE::Actor* speaker, std::int32_t count) {
+        std::scoped_lock lock(mod::settings::Mutex);
         if (!g_playerFollowerCount)
             return;
 
-        const int count = g_currentFollowerCount ? std::max(static_cast<int>(g_currentFollowerCount->value), 0) : 0;
+        const auto currentSpeaker = g_dialogueSpeaker.get();
+        if (!speaker && g_dialogueOpen)
+            speaker = currentSpeaker.get();
+        if (count < 0)
+            count = g_currentFollowerCount ? std::max(static_cast<int>(g_currentFollowerCount->value), 0) : 0;
         const bool canRecruitMore = count < GetEffectiveFollowerCap();
         const bool hireable = speaker && !speaker->IsDead() && g_potentialFollowerFaction &&
                               speaker->IsInFaction(g_potentialFollowerFaction) && !speaker->IsPlayerTeammate() &&
-                              !(g_currentFollowerFaction && speaker->IsInFaction(g_currentFollowerFaction));
-        g_playerFollowerCount->value =
-            hireable ? (canRecruitMore ? 0.0f : 1.0f) : (count > 0 || mod::adapters::HasFollowers() ? 1.0f : 0.0f);
+                              !(g_currentFollowerFaction && speaker->IsInFaction(g_currentFollowerFaction)) &&
+                              !mod::adapters::Owns(speaker->GetFormID());
+        const bool adapterRecruitable = speaker && !speaker->IsDead() && !speaker->IsPlayerTeammate() &&
+                                        mod::adapters::CanRecruitThroughDialogue(speaker->GetFormID());
+        g_playerFollowerCount->value = mod::party_rules::DialogueFollowerCount(
+            count, GetEffectiveFollowerCap(), hireable, adapterRecruitable, mod::adapters::HasFollowers());
         if (g_canRecruitMore)
             g_canRecruitMore->value = canRecruitMore ? 1.0f : 0.0f;
         mod::debug::TraceLazy("Native.ApplyFollowerDialogueGate", speaker, [&] {
-            return fmt::format("count={} cap={} hireable={} recruit={} vanillaGate={}", count,
-                               GetEffectiveFollowerCap(), hireable, canRecruitMore, g_playerFollowerCount->value);
+            return fmt::format("count={} cap={} hireable={} adapterRecruitable={} recruit={} vanillaGate={}", count,
+                               GetEffectiveFollowerCap(), hireable, adapterRecruitable, canRecruitMore,
+                               g_playerFollowerCount->value);
         });
     }
 
@@ -380,8 +401,13 @@ namespace {
 
         RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* e,
                                               RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override {
-            if (e->menuName == "Main Menu" && e->opening)
+            if (e->menuName == "Main Menu" && e->opening) {
+                std::scoped_lock lock(mod::settings::Mutex);
+                g_dialogueSpeaker.reset();
+                g_dialogueOpen = false;
                 mod::controller::Invalidate();
+                ApplyFollowerDialogueGate(nullptr);
+            }
             if (auto* tasks = SKSE::GetTaskInterface())
                 tasks->AddTask([] { mod::controller::ObservePause(); });
             if (e->menuName == "Dialogue Menu") {
@@ -389,7 +415,13 @@ namespace {
                 mod::debug::Trace("Native.DialogueMenu", nullptr, e->opening ? "opened" : "closed");
                 auto* topics = RE::MenuTopicManager::GetSingleton();
                 auto speaker = (e->opening && topics) ? topics->speaker.get() : nullptr;
+                g_dialogueOpen = e->opening;
+                g_dialogueSpeaker =
+                    speaker && speaker->As<RE::Actor>() ? speaker->As<RE::Actor>()->GetHandle() : RE::ActorHandle{};
                 ApplyFollowerDialogueGate(speaker ? speaker->As<RE::Actor>() : nullptr);
+                // Event delivery may be off-thread. Refresh optional adapter
+                // eligibility on the main thread before the player selects a reply.
+                QueueGameTask([] { ApplyFollowerDialogueGate(nullptr); });
                 if (e->opening && mod::settings::FollowerCrossfire)
                     DeferSyncParty();
             }
@@ -411,6 +443,7 @@ namespace {
             if (auto* actor = e->objectActivated->As<RE::Actor>()) {
                 mod::debug::Trace("Native.PlayerActivate", actor);
                 ApplyFollowerDialogueGate(actor);
+                QueueGameTask([] { ApplyFollowerDialogueGate(nullptr); });
                 mod::controller::Activated(actor);
             }
             return RE::BSEventNotifyControl::kContinue;
@@ -498,6 +531,9 @@ namespace {
     }
 
     void InvalidateGameState() {
+        std::scoped_lock lock(mod::settings::Mutex);
+        g_dialogueSpeaker.reset();
+        g_dialogueOpen = false;
         mod::controller::Invalidate();
         mod::debug::Invalidate();
         RestoreAllEssentialFlags();

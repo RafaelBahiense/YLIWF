@@ -8,7 +8,7 @@ public static class BuildCoordinator
 {
     public static void Run(BuildOptions options)
     {
-        var native = Path.Combine(options.Root, "build/native", options.Configuration.ToLowerInvariant());
+        var native = Path.Combine(options.Root, "build/native", options.Configuration.Preset());
         var plugin = Path.Combine(options.Root, "build/plugin");
         var papyrus = Path.Combine(options.Root, "build/papyrus");
 
@@ -48,7 +48,7 @@ public static class BuildCoordinator
             native += "-clean-" + Guid.NewGuid().ToString("N");
         }
 
-        RunTool(options.Root, "cmake", "--preset", options.Configuration.ToLowerInvariant(),
+        RunTool(options.Root, "cmake", "--preset", options.Configuration.Preset(),
             "-B", native, "-DCOMMONLIB_SSE_FOLDER=" + options.CommonLib);
         string[] targets = options.Target switch
         {
@@ -71,7 +71,7 @@ public static class BuildCoordinator
         RunTool(root, "dotnet", "restore", "tests/tools/ModTools.Tests.csproj",
             "--locked-mode", "--configfile", "tools/NuGet.Config");
         // The launcher already built ModTools; do not rebuild the running executable.
-        RunTool(root, "dotnet", "build", "tests/tools/ModTools.Tests.csproj", "-c", "Release",
+        RunTool(root, "dotnet", "build", "tests/tools/ModTools.Tests.csproj", "-c", BuildConfiguration.Release.CMakeName(),
             "--no-restore", "-p:BuildProjectReferences=false");
         RunTool(root, "dotnet", Path.Combine(root, "tests/tools/bin/Release/net10.0/ModTools.Tests.dll"), root);
         Console.WriteLine("All tests passed.");
@@ -103,7 +103,7 @@ public static class BuildCoordinator
 
     private static void Deploy(string root, string output, string destination)
     {
-        var version = File.ReadAllText(Path.Combine(root, "VERSION")).Trim();
+        var version = File.ReadAllText(Path.Combine(root, ProjectPaths.Version)).Trim();
         using var archive = ZipFile.OpenRead(Path.Combine(output, $"{ModInfo.BinaryName}-{version}.zip"));
         foreach (var entry in archive.Entries)
         {

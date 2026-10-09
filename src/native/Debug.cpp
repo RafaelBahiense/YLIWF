@@ -1,3 +1,5 @@
+#include "RecordNames.h"
+#include "PapyrusNames.h"
 #include "Debug.h"
 #include "Adapters.h"
 #include "FollowDistance.h"
@@ -54,7 +56,7 @@ namespace mod::debug {
             if (!alias || alias->GetVMTypeID() != RE::BGSRefAlias::VMTYPEID)
                 return false;
             const std::string_view name{alias->aliasName.c_str()};
-            return alias->aliasID == 0 || name.starts_with("ExtraFollower");
+            return alias->aliasID == 0 || name.starts_with(mod::record_names::aliases::ExtraPrefix);
         }
 
         mod::follower_view::Space ActorSpace(RE::Actor* actor) {
@@ -274,7 +276,7 @@ namespace mod::debug {
                     if (id != 0 && (id < 2 || id > 8))
                         continue;
                     const auto index = id == 0 ? 0 : id - 1;
-                    const auto expected = id == 0 ? std::string("Follower") : fmt::format("ExtraFollower{:02}", id - 1);
+                    const auto expected = mod::record_names::aliases::FollowerSlot(id);
                     std::string issues;
                     if (alias->GetVMTypeID() != RE::BGSRefAlias::VMTYPEID)
                         mod::debug_rules::AddIssue(
@@ -305,10 +307,10 @@ namespace mod::debug {
                 for (std::size_t index = 0; index < seen.size(); ++index)
                     if (!seen[index])
                         mod::debug_rules::AddIssue(
-                            structureIssues,
-                            fmt::format("missing alias {} ({})", index == 0 ? 0 : index + 1,
-                                        index == 0 ? std::string("Follower") : fmt::format("ExtraFollower{:02}", index))
-                                .c_str());
+                            structureIssues, fmt::format("missing alias {} ({})", index == 0 ? 0 : index + 1,
+                                                         mod::record_names::aliases::FollowerSlot(
+                                                             index == 0 ? 0 : static_cast<std::uint32_t>(index + 1)))
+                                                 .c_str());
             if (!context.vanillaCount)
                 mod::debug_rules::AddIssue(structureIssues, "PlayerFollowerCount global unavailable");
             if (!context.modCount)
@@ -338,9 +340,10 @@ namespace mod::debug {
                             const auto binding = value.GetObject();
                             if (!binding)
                                 return;
-                            if (mod::strings::EqualsIgnoreCase(variable, "::pFollowerAlias_var"))
+                            if (mod::strings::EqualsIgnoreCase(variable, mod::papyrus_names::variables::FollowerAlias))
                                 primary = slots[0] && binding->Resolve(RE::BGSRefAlias::VMTYPEID) == slots[0];
-                            else if (mod::strings::EqualsIgnoreCase(variable, "::pPlayerFollowerCount_var"))
+                            else if (mod::strings::EqualsIgnoreCase(variable,
+                                                                    mod::papyrus_names::variables::PlayerFollowerCount))
                                 vanilla = context.vanillaCount &&
                                           binding->Resolve(static_cast<RE::VMTypeID>(RE::FormType::Global)) ==
                                               context.vanillaCount;
@@ -356,9 +359,9 @@ namespace mod::debug {
             if (result.scriptReady && !result.bindingsReady) {
                 std::vector<std::string_view> invalid;
                 if (!primary)
-                    invalid.emplace_back("pFollowerAlias");
+                    invalid.emplace_back(mod::papyrus_names::properties::FollowerAlias);
                 if (!vanilla)
-                    invalid.emplace_back("pPlayerFollowerCount");
+                    invalid.emplace_back(mod::papyrus_names::properties::PlayerFollowerCount);
                 if (!mod::controller::storage::Available())
                     invalid.emplace_back("native controller state unavailable");
                 result.installationIssues += " (invalid bindings: ";

@@ -13,6 +13,7 @@ namespace mod::controller {
         std::int32_t (*getCap)() = nullptr;
         RE::TESQuest* homeQuest = nullptr;
         RE::TESFaction* homeFaction = nullptr;
+        void (*applyDialogueGate)(std::int32_t count) = nullptr;
     };
 
     void Configure(Context context);

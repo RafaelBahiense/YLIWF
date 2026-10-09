@@ -19,28 +19,28 @@ reproducible source builds.
 
 ESP records are generated from C# so aliases, packages, dialogue and bindings can
 be reviewed and versioned with their implementations. Creation Kit and xEdit
-remain useful for inspection. Dependency pins and release source archives identify
+support inspection. Dependency pins and release source archives identify
 the inputs used to build each release.
 
 ## Native ownership
 
 C++ owns follower policy, commands, timers and controller persistence.
-`DialogueFollowerScript` retains eight vanilla forwarding methods.
+`DialogueFollowerScript` provides eight vanilla forwarding methods.
 Small `YLIWF_Engine` adapters perform engine calls without dependable native
 equivalents and acknowledge completion.
 
 This reduces VM work while preserving interfaces used by quests and dialogue.
-Further offloading requires clear ownership, completion checks and save/load
-testing; performance gains require in-game measurement.
+Native/VM boundaries require clear ownership, completion checks and save/load
+testing. Performance gains require in-game measurement.
 
 ## Completion and persistence
 
 One executor orders requests and verifies their resulting state. Acceptance does
 not mean completion, and a timeout does not authorize replay.
 
-`DialogueFollower` aliases remain the roster. Alias writes mark the quest for
-saving; the SKSE co-save stores pending work and timers. The save investigation
-showed that correct runtime state must also be recorded by the engine.
+`DialogueFollower` aliases are the roster. Alias writes mark the quest for
+saving so the engine persists registrations. The SKSE co-save stores pending
+work and timers.
 
 See [controller contracts](native-controller.md) for queue and save details.
 

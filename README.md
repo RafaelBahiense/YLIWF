@@ -15,8 +15,8 @@ developing debugging and repair tools.
 
 This fork explores a framework centered on native code, with less work in the
 Papyrus VM. It also keeps behavior and plugin records in reviewable source and
-aims to make builds easy to reproduce. Understanding and maintaining that
-foundation comes before new gameplay features.
+aims to make builds easy to reproduce. Its focus is a maintainable foundation
+for studying Skyrim modding and developing follower features.
 See [architecture](docs/architecture.md) for the design.
 
 ## Gameplay features
@@ -56,8 +56,7 @@ unless a dedicated add-on supports them.
 Install optional add-on ZIPs alongside the matching core release.
 
 - **[Serana](docs/follower-adapters.md#serana-example)** (`-Serana.zip`):
-  Follow, Wait, Dismiss and distance controls for already-recruited Serana.
-  Uses her Dawnguard controller without overriding its records or scripts.
+  Makes Serana available to YLIWF's follower controls when her Dawnguard quests allow them.
 
 ## Configuration
 

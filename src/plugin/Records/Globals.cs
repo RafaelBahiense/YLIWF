@@ -10,7 +10,7 @@ internal static partial class FollowerPlugin
         mod.Globals.Add(CreateFollowerSandboxEnabled());
         mod.Globals.Add(new GlobalShort(FollowDistanceGlobalForm, SkyrimRelease.SkyrimSE)
         {
-            EditorID = "YLIWF_FollowDistance",
+            EditorID = RecordNames.FollowDistance,
             Data = 1
         });
     }
@@ -19,7 +19,7 @@ internal static partial class FollowerPlugin
     {
         var canRecruitMore = new GlobalShort(OwnForm(0x000001), SkyrimRelease.SkyrimSE)
         {
-            EditorID = "YLIWF_CanRecruitMore",
+            EditorID = RecordNames.CanRecruitMore,
             Data = 1
         };
         return canRecruitMore;
@@ -29,7 +29,7 @@ internal static partial class FollowerPlugin
     {
         var currentFollowerCount = new GlobalShort(OwnForm(0x000002), SkyrimRelease.SkyrimSE)
         {
-            EditorID = "YLIWF_CurrentFollowerCount",
+            EditorID = RecordNames.CurrentFollowerCount,
             Data = 0
         };
         return currentFollowerCount;
@@ -39,7 +39,7 @@ internal static partial class FollowerPlugin
     {
         var followerHomesEnabled = new GlobalShort(OwnForm(0x000986), SkyrimRelease.SkyrimSE)
         {
-            EditorID = "YLIWF_FollowerHomes",
+            EditorID = RecordNames.FollowerHomes,
             Data = 1
         };
         return followerHomesEnabled;
@@ -49,7 +49,7 @@ internal static partial class FollowerPlugin
     {
         var followerSandboxEnabled = new GlobalShort(OwnForm(0x000805), SkyrimRelease.SkyrimSE)
         {
-            EditorID = "YLIWF_FollowerSandbox",
+            EditorID = RecordNames.FollowerSandbox,
             Data = 0
         };
         return followerSandboxEnabled;

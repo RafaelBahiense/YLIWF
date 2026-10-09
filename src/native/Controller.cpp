@@ -1,3 +1,5 @@
+#include "RecordNames.h"
+#include "PapyrusNames.h"
 #include "Controller.h"
 #include "ControllerExecutor.h"
 #include "ExecutorRules.h"
@@ -16,6 +18,8 @@
 #include <type_traits>
 
 namespace mod::controller {
+    namespace properties = mod::papyrus_names::properties;
+
     namespace {
         using namespace mod::controller_rules;
         using Script = RE::BSTSmartPointer<RE::BSScript::Object>;
@@ -47,8 +51,8 @@ namespace mod::controller {
             auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
             auto* policy = vm ? vm->GetObjectHandlePolicy() : nullptr;
             if (quest && quest == context.quest && policy)
-                vm->FindBoundObject(policy->GetHandleForObject(RE::FormType::Quest, quest), "DialogueFollowerScript",
-                                    object);
+                vm->FindBoundObject(policy->GetHandleForObject(RE::FormType::Quest, quest),
+                                    mod::papyrus_names::DialogueFollower, object);
             return object && object->IsInitialized() ? object : Script{};
         }
 
@@ -63,7 +67,7 @@ namespace mod::controller {
             if (!alias || alias->owningQuest != context.quest)
                 return false;
             if (alias->aliasID == 1)
-                return mod::strings::EqualsIgnoreCase(alias->aliasName.c_str(), "Animal");
+                return mod::strings::EqualsIgnoreCase(alias->aliasName.c_str(), mod::record_names::aliases::Animal);
             return mod::party_rules::ValidBinding(true, alias->aliasID, alias->aliasName.c_str(), alias->aliasID == 0);
         }
 
@@ -84,8 +88,7 @@ namespace mod::controller {
             for (auto* alias : context.homeQuest->aliases)
                 if (alias && alias->aliasID == static_cast<std::uint32_t>(id)) {
                     auto* ref = skyrim_cast<RE::BGSRefAlias*>(alias);
-                    const auto name =
-                        fmt::format("{}{:02}", id < 8 ? "YLIWF_Home" : "YLIWF_HomeMarkerAlias", id < 8 ? id : id - 8);
+                    const auto name = mod::record_names::aliases::Home(id);
                     return ref && ref->owningQuest == context.homeQuest &&
                                    mod::strings::EqualsIgnoreCase(ref->aliasName.c_str(), name)
                                ? ref
@@ -111,7 +114,7 @@ namespace mod::controller {
         }
 
         std::vector<Slot> Slots(const Script& object) {
-            std::vector<Slot> result{Snapshot(Read<RE::BGSRefAlias*>(object, "pFollowerAlias"), 0)};
+            std::vector<Slot> result{Snapshot(Read<RE::BGSRefAlias*>(object, properties::FollowerAlias), 0)};
             const auto extras = storage::ExtraAliases();
             for (std::size_t i = 0; i < extras.size(); ++i)
                 result.push_back(Snapshot(extras[i], static_cast<std::int32_t>(i + 2)));
@@ -174,7 +177,7 @@ namespace mod::controller {
                 return false;
             auto* actor = storage::Actor(command.actor);
             const auto slots = Slots(object);
-            const auto animal = Snapshot(Read<RE::BGSRefAlias*>(object, "pAnimalAlias"), 1);
+            const auto animal = Snapshot(Read<RE::BGSRefAlias*>(object, properties::AnimalAlias), 1);
             const auto request = CaptureRequest(object, static_cast<int>(command.operation), actor, command.selected,
                                                 command.message, command.sayLine, slots.size());
             if ((command.operation == Operation::HomeAssign || command.operation == Operation::HomeRemove) &&
@@ -406,7 +409,7 @@ namespace mod::controller {
                 return false;
             if (command == Effect::Release) {
                 auto slots = Slots(object);
-                const auto animal = Snapshot(Read<RE::BGSRefAlias*>(object, "pAnimalAlias"), 1);
+                const auto animal = Snapshot(Read<RE::BGSRefAlias*>(object, properties::AnimalAlias), 1);
                 if (Find(slots, actor->GetFormID()) || animal.actor == actor->GetFormID())
                     return reject("actor is registered again");
             }
@@ -414,7 +417,7 @@ namespace mod::controller {
                 return reject("actor is dead");
             if (command == Effect::Waiting) {
                 auto slots = Slots(object);
-                const auto animal = Snapshot(Read<RE::BGSRefAlias*>(object, "pAnimalAlias"), 1);
+                const auto animal = Snapshot(Read<RE::BGSRefAlias*>(object, properties::AnimalAlias), 1);
                 if (!Find(slots, actor->GetFormID()) && animal.actor != actor->GetFormID())
                     return reject("actor is unregistered");
             }
@@ -455,10 +458,10 @@ namespace mod::controller {
                     faction = context.currentFaction;
                     break;
                 case Check::DismissedFaction:
-                    faction = Read<RE::TESFaction*>(object, "pDismissedFollower");
+                    faction = Read<RE::TESFaction*>(object, properties::DismissedFollower);
                     break;
                 case Check::HirelingFaction:
-                    faction = Read<RE::TESFaction*>(object, "pCurrentHireling");
+                    faction = Read<RE::TESFaction*>(object, properties::CurrentHireling);
                     break;
                 case Check::HomeFaction:
                     faction = context.homeFaction;
@@ -486,7 +489,7 @@ namespace mod::controller {
             if (check.kind == Check::FollowerAlias || check.kind == Check::HomeAlias)
                 return VerifyAliasExpectation(check);
             if (check.kind == Check::AnimalCount) {
-                auto* global = Read<RE::TESGlobal*>(object, "pPlayerAnimalCount");
+                auto* global = Read<RE::TESGlobal*>(object, properties::PlayerAnimalCount);
                 if (!global || global->value != check.value)
                     return "Animal count was not published";
                 return {};
@@ -507,7 +510,7 @@ namespace mod::controller {
             }
             // Activation may change the vanilla dialogue gate after publication;
             // it must remain binary, not equal the party count.
-            auto* vanillaGate = Read<RE::TESGlobal*>(object, "pPlayerFollowerCount");
+            auto* vanillaGate = Read<RE::TESGlobal*>(object, properties::PlayerFollowerCount);
             if (!vanillaGate || (vanillaGate->value != 0 && vanillaGate->value != 1))
                 return "Vanilla follower dialogue gate is missing or invalid";
             return {};
@@ -523,7 +526,7 @@ namespace mod::controller {
             }
             if (auto failure = VerifyFollowerCounts(object); !failure.empty())
                 return failure;
-            if (Read<std::int32_t>(object, "iFollowerDismiss"))
+            if (Read<std::int32_t>(object, properties::FollowerDismiss))
                 return "Dismissal dialogue flag is still set";
             return {};
         }

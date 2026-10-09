@@ -63,9 +63,24 @@ namespace yliwf::sdk {
         // Optional v1 extension. Main thread, synchronous; change only distance,
         // never recruit, resume waiting, dismiss or bypass quest restrictions.
         std::uint32_t (*setFollowDistance)(void*, ActorID, FollowDistance) = nullptr;
+        // Optional v1 extension. Read-only, main thread: may the actor be
+        // recruited through its owner's dialogue, ignoring only the vanilla
+        // one-follower limit? Return 1 only when the owner's restrictions allow it.
+        std::uint32_t (*canRecruitThroughDialogue)(void*, ActorID) = nullptr;
     };
 
     inline constexpr std::uint32_t BaseAdapterSize = offsetof(Adapter, setFollowDistance);
+
+    inline bool HasFollowDistance(const Adapter& adapter) {
+        return adapter.size >= offsetof(Adapter, setFollowDistance) + sizeof(adapter.setFollowDistance) &&
+               adapter.setFollowDistance;
+    }
+
+    inline bool HasRecruitmentEligibility(const Adapter& adapter) {
+        return adapter.size >=
+                   offsetof(Adapter, canRecruitThroughDialogue) + sizeof(adapter.canRecruitThroughDialogue) &&
+               adapter.canRecruitThroughDialogue;
+    }
 
     struct API {
         std::uint32_t size = sizeof(API);
@@ -88,6 +103,7 @@ namespace yliwf::sdk {
     using QueryAPI = const API* (*)(std::uint32_t version);
     static_assert(std::is_standard_layout_v<Adapter> && std::is_standard_layout_v<API>);
     static_assert(sizeof(void*) == 8 && sizeof(FollowerState) == 204 && BaseAdapterSize == 56 &&
-                      sizeof(Adapter) == 64 && BaseAPISize == 24 && sizeof(API) == 32,
+                      offsetof(Adapter, canRecruitThroughDialogue) == 64 && sizeof(Adapter) == 72 &&
+                      BaseAPISize == 24 && sizeof(API) == 32,
                   "Follower adapter API v1 requires the standard x64 structure layout");
 }

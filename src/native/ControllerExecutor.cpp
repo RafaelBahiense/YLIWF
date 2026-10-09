@@ -1,3 +1,5 @@
+#include "PapyrusNames.h"
+#include "RecordNames.h"
 #include "ControllerExecutor.h"
 
 #include "ControllerRules.h"
@@ -17,6 +19,8 @@
 #include <chrono>
 
 namespace mod::controller::executor {
+    namespace properties = mod::papyrus_names::properties;
+
     namespace {
         using namespace storage;
         using namespace controller_rules;
@@ -94,7 +98,7 @@ namespace mod::controller::executor {
             if (!storage::Get().active)
                 return;
             const auto request = storage::Active().request;
-            Write(object, "iFollowerDismiss", 0);
+            Write(object, properties::FollowerDismiss, 0);
             const bool verified = detail::Complete(succeeded);
             ReturnWaiters(object, request, verified);
             Wake();
@@ -105,7 +109,7 @@ namespace mod::controller::executor {
                 return;
             storage::Active().succeeded = succeeded;
             if (!succeeded)
-                Write(object, "iFollowerDismiss", 0);
+                Write(object, properties::FollowerDismiss, 0);
             PublishCounts(object);
         }
 
@@ -130,6 +134,8 @@ namespace mod::controller::executor {
             if (!executor_rules::CanAcknowledge(true, active.ticket, active.Cursor(), active.phase, ticket, cursor))
                 return;
             if (active.phase == Phase::Counts) {
+                if (ContextData().applyDialogueGate)
+                    ContextData().applyDialogueGate(detail::Count());
                 Complete(Object(), succeeded && active.succeeded);
                 return;
             }
@@ -171,12 +177,12 @@ namespace mod::controller::executor {
             storage::Active().phase = phase;
             auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
             RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
-            const auto script = std::string(mod::info::ScriptPrefix) + "_Engine";
+            const auto* script = mod::info::EngineScript;
             // Completion is acknowledged from the saved adapter stack, never from
             // an unsaved C++ callback. Accepted calls must not be replayed on load.
             const bool accepted =
                 vm && vm->DispatchStaticCall(
-                          script.c_str(), function,
+                          script, function,
                           RE::MakeFunctionArguments(static_cast<RE::TESQuest*>(ContextData().quest),
                                                     std::int32_t{storage::Get().ticket},
                                                     std::int32_t{storage::Active().Cursor()}, std::move(args)...),
@@ -190,7 +196,7 @@ namespace mod::controller::executor {
             storage::Active().phase = Phase::Counts;
             const auto count = detail::Count();
             auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-            auto* vanilla = Read<RE::TESGlobal*>(object, "pPlayerFollowerCount");
+            auto* vanilla = Read<RE::TESGlobal*>(object, properties::PlayerFollowerCount);
             auto* party = storage::PartyCount();
             auto* gate = storage::RecruitGate();
             if (!vanilla || !party || !gate || !vm) {
@@ -200,6 +206,10 @@ namespace mod::controller::executor {
             storage::Get().followerCount = count;
             // Use the same effective-cap provider as the planner (perk/Speech modes).
             const auto values = party_rules::CountGlobals(count, detail::Cap(), adapters::HasFollowers());
+            if (ContextData().applyDialogueGate)
+                ContextData().applyDialogueGate(count);
+            else
+                vanilla->value = values.vanillaCount;
             const bool accepted = Bridge(object, Phase::Counts, "Counts", vanilla, party, gate, values.vanillaCount,
                                          values.partyCount, values.recruitGate);
             if (!accepted)
@@ -214,7 +224,7 @@ namespace mod::controller::executor {
             auto* slot = Alias(IsHomeEffect(effect) ? ContextData().homeQuest : ContextData().quest, id);
             switch (effect) {
                 case Effect::Prepare: {
-                    if (auto* dismissed = Read<RE::TESFaction*>(object, "pDismissedFollower"))
+                    if (auto* dismissed = Read<RE::TESFaction*>(object, properties::DismissedFollower))
                         actor->RemoveFromFaction(dismissed);
                     const auto& context = ContextData();
                     if (context.currentFaction &&
@@ -236,7 +246,7 @@ namespace mod::controller::executor {
                     if (ContextData().currentFaction)
                         actor->RemoveFromFaction(ContextData().currentFaction);
                     if (actor->IsDead())
-                        if (auto* hireling = Read<RE::TESFaction*>(object, "pCurrentHireling"))
+                        if (auto* hireling = Read<RE::TESFaction*>(object, properties::CurrentHireling))
                             actor->RemoveFromFaction(hireling);
                     actor->AsActorValueOwner()->SetActorValue(RE::ActorValue::kWaitingForPlayer, 0);
                     actor->EvaluatePackage();
@@ -291,34 +301,32 @@ namespace mod::controller::executor {
                     }
                     return false;
                 case Effect::Cleanup:
-                    if (auto* dismissed = Read<RE::TESFaction*>(object, "pDismissedFollower"))
+                    if (auto* dismissed = Read<RE::TESFaction*>(object, properties::DismissedFollower))
                         actor->AddToFaction(dismissed, 0);
-                    if (auto* hireling = Read<RE::TESFaction*>(object, "pCurrentHireling"))
+                    if (auto* hireling = Read<RE::TESFaction*>(object, properties::CurrentHireling))
                         actor->RemoveFromFaction(hireling);
                     actor->AsActorValueOwner()->SetActorValue(RE::ActorValue::kWaitingForPlayer, 0);
                     for (auto* item :
-                         std::array<RE::TESBoundObject*, 2>{Read<RE::TESObjectWEAP*>(object, "FollowerHuntingBow"),
-                                                            Read<RE::TESAmmo*>(object, "FollowerIronArrow")})
+                         std::array<RE::TESBoundObject*, 2>{Read<RE::TESObjectWEAP*>(object, properties::HuntingBow),
+                                                            Read<RE::TESAmmo*>(object, properties::IronArrow)})
                         if (item)
                             actor->RemoveItem(item, 999, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
                     return true;
                 case Effect::Message: {
-                    constexpr std::array names{"FollowerDismissMessage",
-                                               "FollowerDismissMessageWedding",
-                                               "FollowerDismissMessageCompanions",
-                                               "FollowerDismissMessageCompanionsMale",
-                                               "FollowerDismissMessageCompanionsFemale",
-                                               "FollowerDismissMessageWait"};
-                    const auto* name =
-                        argument == -2 ? "AnimalDismissMessage" : names[argument >= 0 && argument < 6 ? argument : 0];
+                    constexpr std::array names{
+                        properties::FollowerDismissMessage,         properties::WeddingDismissMessage,
+                        properties::CompanionsDismissMessage,       properties::CompanionsMaleDismissMessage,
+                        properties::CompanionsFemaleDismissMessage, properties::WaitDismissMessage};
+                    const auto* name = argument == -2 ? properties::AnimalDismissMessage
+                                                      : names[argument >= 0 && argument < 6 ? argument : 0];
                     return Bridge(object, Phase::Engine, "Message", Read<RE::BGSMessage*>(object, name));
                 }
                 case Effect::Hireling:
-                    if (auto* quest = Read<RE::TESQuest*>(object, "HirelingRehireScript"))
+                    if (auto* quest = Read<RE::TESQuest*>(object, properties::HirelingRehire))
                         return Bridge(object, Phase::Engine, "Hireling", quest, actor->GetActorBase());
                     return true;
                 case Effect::DismissLine:
-                    if (!Write(object, "iFollowerDismiss", 1))
+                    if (!Write(object, properties::FollowerDismiss, 1))
                         return false;
                     storage::Active().delay = 2.0f;
                     storage::Active().phase = Phase::Delay;
@@ -326,7 +334,7 @@ namespace mod::controller::executor {
                     RefreshClock();
                     return true;
                 case Effect::EndDismissLine:
-                    return Write(object, "iFollowerDismiss", 0);
+                    return Write(object, properties::FollowerDismiss, 0);
                 case Effect::HideObjective:
                     return Bridge(object, Phase::Engine, "Objective", ContextData().quest, argument);
                 case Effect::Speaker:
@@ -341,7 +349,8 @@ namespace mod::controller::executor {
                     if (!argument)
                         actor->AsActorValueOwner()->SetActorValue(RE::ActorValue::kVariable04, 0);
                     return Bridge(object, Phase::Engine, "SetGlobal",
-                                  Read<RE::TESGlobal*>(object, "pPlayerAnimalCount"), static_cast<float>(argument));
+                                  Read<RE::TESGlobal*>(object, properties::PlayerAnimalCount),
+                                  static_cast<float>(argument));
                 case Effect::HomeMove: {
                     auto* marker = Alias(ContextData().homeQuest, id + 8);
                     if (!marker || !marker->GetReference())
@@ -487,13 +496,14 @@ namespace mod::controller::executor {
             auto* data = RE::TESDataHandler::GetSingleton();
             auto* gate = data ? data->LookupForm<RE::TESGlobal>(0x001, mod::info::PluginFile) : nullptr;
             auto* count = data ? data->LookupForm<RE::TESGlobal>(0x002, mod::info::PluginFile) : nullptr;
-            auto* vanilla = data ? data->LookupForm<RE::TESGlobal>(0xBCC98, "Skyrim.esm") : nullptr;
+            auto* vanilla = data ? data->LookupForm<RE::TESGlobal>(0xBCC98, mod::record_names::SkyrimMaster) : nullptr;
             if (!gate || !count || !vanilla)
                 return false;
-            for (const auto* name : {"pFollowerAlias", "pPlayerFollowerCount"})
+            for (const auto* name : {properties::FollowerAlias, properties::PlayerFollowerCount})
                 if (!Field(object, name))
                     return false;
-            if (!Write(object, "pFollowerAlias", slots[0]) || !Write(object, "pPlayerFollowerCount", vanilla))
+            if (!Write(object, properties::FollowerAlias, slots[0]) ||
+                !Write(object, properties::PlayerFollowerCount, vanilla))
                 return false;
             debug::NotifyStateChanged();
             return true;
@@ -539,7 +549,7 @@ namespace mod::controller::executor {
             auto* dialogue = reference ? reference->As<RE::Actor>() : nullptr;
             auto* speaker = lastSpeaker ? lastSpeaker : storage::Actor(storage::Get().speaker);
             auto slots = storage::ExtraAliases();
-            auto* primary = Read<RE::BGSRefAlias*>(object, "pFollowerAlias");
+            auto* primary = Read<RE::BGSRefAlias*>(object, properties::FollowerAlias);
             slots.insert(slots.begin(), primary);
             for (auto* actor : {dialogue, speaker})
                 if (actor)
@@ -594,7 +604,7 @@ namespace mod::controller::executor {
         }
 
         RE::Actor* Animal() {
-            auto* alias = Read<RE::BGSRefAlias*>(Object(), "pAnimalAlias");
+            auto* alias = Read<RE::BGSRefAlias*>(Object(), properties::AnimalAlias);
             return alias ? alias->GetActorReference() : nullptr;
         }
 
@@ -635,7 +645,7 @@ namespace mod::controller::executor {
                 return false;
             auto object = Object();
             auto slots = storage::ExtraAliases();
-            slots.push_back(Read<RE::BGSRefAlias*>(object, "pFollowerAlias"));
+            slots.push_back(Read<RE::BGSRefAlias*>(object, properties::FollowerAlias));
             return std::ranges::any_of(slots,
                                        [actor](auto* slot) { return slot && slot->GetActorReference() == actor; });
         }

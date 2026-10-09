@@ -52,7 +52,7 @@ public static partial class PapyrusCompiler
         runner ??= ProcessRunner.Run;
         foreach (var script in new[] { ModInfo.NativeScript })
         {
-            if (!File.Exists(Path.Combine(root, "src/papyrus/core", script + ".psc")))
+            if (!File.Exists(Path.Combine(root, ProjectPaths.CoreScripts, script + ".psc")))
             {
                 throw new InvalidDataException($"mod.json scriptPrefix does not match the existing {script} source. Script identities must remain stable for existing saves.");
             }
@@ -61,14 +61,14 @@ public static partial class PapyrusCompiler
         var patchInputs = patch ? BuildReceipt.CaptureInputs(root, BuildComponent.Papyrus3Dnpc) : null;
         var stage = Path.Combine(Path.GetFullPath(output), ".staging-" + Guid.NewGuid().ToString("N"));
         var core = Path.Combine(stage, "Source/Scripts");
-        StageCore(Path.Combine(root, "src/papyrus/core"), core);
+        StageCore(Path.Combine(root, ProjectPaths.CoreScripts), core);
         var groups = new List<(string Source, string Staging, string Destination, string[] Imports)> {
-            (core, Path.Combine(stage, "Scripts"), Path.Combine(output, "Scripts"), new[] { core }.Concat(imports).ToArray())
+            (core, Path.Combine(stage, ProjectPaths.ScriptsOutput), Path.Combine(output, ProjectPaths.ScriptsOutput), new[] { core }.Concat(imports).ToArray())
         };
         if (patch)
         {
-            var source = Path.Combine(root, "src/papyrus/patches/3dnpc");
-            groups.Add((source, Path.Combine(stage, "Patches/3DNPC/Scripts"), Path.Combine(output, "Patches/3DNPC/Scripts"), new[] { source, core }.Concat(imports).ToArray()));
+            var source = Path.Combine(root, ProjectPaths.Patch3DnpcScripts);
+            groups.Add((source, Path.Combine(stage, ProjectPaths.Patch3DnpcOutput), Path.Combine(output, ProjectPaths.Patch3DnpcOutput), new[] { source, core }.Concat(imports).ToArray()));
         }
         var completed = new List<(string[] Outputs, string Destination)>();
         foreach (var (source, staging, destination, groupImports) in groups)

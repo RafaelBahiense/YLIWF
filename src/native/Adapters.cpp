@@ -27,6 +27,7 @@ namespace mod::adapters {
         std::map<RequestID, Completion> completions;
         bool loaded = false;
         std::unordered_set<ActorID> knownOwners;
+        std::unordered_set<ActorID> knownRecruitable;
         bool knownPresence = false;
         using Observations = std::map<ActorID, std::tuple<AdapterID, State, std::uint32_t, std::string>>;
         Observations observed;
@@ -38,6 +39,7 @@ namespace mod::adapters {
         }
 
         std::optional<Follower> Inspect(ActorID actor, bool annotatePending = true) {
+            knownRecruitable.erase(actor);
             std::optional<Follower> result;
             for (std::size_t i = 0; i < providers.size(); ++i) {
                 FollowerState state;
@@ -57,7 +59,7 @@ namespace mod::adapters {
                     return result;
                 }
                 result = Follower{actor, static_cast<AdapterID>(i + 1), provider.name, state,
-                                  provider.api.size >= sizeof(Adapter) && provider.api.setFollowDistance};
+                                  HasFollowDistance(provider.api)};
             }
             if (result) {
                 const auto* quest = controller::detail::GetContext().quest;
@@ -79,10 +81,16 @@ namespace mod::adapters {
                                 "Controller command is pending or awaiting a late acknowledgement");
                 }
             }
-            if (result)
+            if (result) {
                 knownOwners.insert(actor);
-            else
+                const auto& provider = providers[result->adapter - 1];
+                if (result->state.state == State::Inactive && HasRecruitmentEligibility(provider.api) &&
+                    !std::ranges::any_of(requests.items, [actor](const auto& item) { return item.actor == actor; }) &&
+                    provider.api.canRecruitThroughDialogue(provider.api.context, actor) == 1)
+                    knownRecruitable.insert(actor);
+            } else {
                 knownOwners.erase(actor);
+            }
             return result;
         }
 
@@ -90,14 +98,17 @@ namespace mod::adapters {
             auto* request = requests.Find(adapter, id);
             if (!request)
                 return;
+            const auto actor = request->actor;
             auto found = completions.find(id);
             Completion completion;
             if (found != completions.end()) {
                 completion = std::move(found->second);
                 completions.erase(found);
             }
-            if (remove)
+            if (remove) {
                 requests.Remove(adapter, id);
+                Inspect(actor, false);  // Dismissal can immediately make dialogue recruitment eligible again.
+            }
             if (completion)
                 completion(success, std::move(reason));
             debug::NotifyStateChanged();
@@ -241,6 +252,17 @@ namespace mod::adapters {
         return knownPresence = false;
     }
 
+    bool CanRecruitThroughDialogue(yliwf::sdk::ActorID actor) {
+        std::scoped_lock lock(settings::Mutex);
+        if (!loaded || !actor)
+            return false;
+        // Activation/menu events can arrive off-thread; providers are queried
+        // only on the main thread, with load/state notifications refreshing this cache.
+        if (MainThread())
+            Inspect(actor);
+        return knownRecruitable.contains(actor);
+    }
+
     void ApplyFollowDistance(bool replaceAll) {
         std::scoped_lock lock(settings::Mutex);
         if (!loaded || !MainThread())
@@ -367,6 +389,7 @@ namespace mod::adapters {
         requests.Reset();
         completions.clear();
         knownOwners.clear();
+        knownRecruitable.clear();
         knownPresence = false;
         observed.clear();
         queuedChanges.clear();

@@ -6,6 +6,7 @@ internal static class BuildTests
     {
         var directory = PrepareConfiguration(root, temporary);
         CheckPathOverrides(directory);
+        CheckConfigurations(directory);
         CheckRepackagingOptions(directory);
         CheckAddonDeclarations(directory);
         Check(Addon.Read(root).Length > 0, "No native add-on declarations found");
@@ -50,6 +51,25 @@ internal static class BuildTests
         Reject(() => BuildOptions.Read(arguments, new HashSet<string> { "--clean" }));
         arguments["--typo"] = "value";
         Reject(() => BuildOptions.Read(arguments, new HashSet<string>()));
+    }
+
+    private static void CheckConfigurations(string directory)
+    {
+        var arguments = new Dictionary<string, string> { ["--root"] = directory };
+        Check(BuildOptions.Read(arguments, new HashSet<string>()).Configuration == BuildConfiguration.Release,
+            "Default build configuration changed");
+        foreach (var configuration in Enum.GetValues<BuildConfiguration>())
+        {
+            arguments["--configuration"] = configuration.CMakeName();
+            var options = BuildOptions.Read(arguments, new HashSet<string>());
+            Check(options.Configuration == configuration && options.Configuration.Preset() == configuration.CMakeName().ToLowerInvariant(),
+                "Build configuration does not select its CMake preset");
+        }
+        foreach (var invalid in new[] { "release", "0", "Unknown" })
+        {
+            arguments["--configuration"] = invalid;
+            Reject(() => BuildOptions.Read(arguments, new HashSet<string>()));
+        }
     }
 
     private static void CheckAddonDeclarations(string directory)

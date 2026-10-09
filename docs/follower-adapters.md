@@ -36,6 +36,7 @@ const auto registration = api->registerAdapter(&adapter);
 | `inspect` | Return 1 for owned actors, including inactive ones; fill state, command bits and optional reason; 0 for unrelated actors |
 | `start` | Recheck eligibility; return `Rejected` without effects, `Completed` after finishing, or `Pending` |
 | `setFollowDistance` (optional) | Apply Close/Normal/Far synchronously, return 1 on success, preserve follow/wait state and respect restrictions |
+| `canRecruitThroughDialogue` (optional) | Read-only: return 1 for an inactive actor eligible for the owner's recruitment dialogue, ignoring only the vanilla one-follower limit |
 
 Callbacks run on the main thread: keep them quick, nonblocking and exception-free.
 Pointers and context must remain valid until process exit; no hot unloading.
@@ -43,21 +44,25 @@ Only fixed-width values, pointers and caller-owned buffers cross the x64 ABI.
 No STL/engine objects, allocation ownership or exceptions cross it.
 Invalid versions, tables, IDs, states and capabilities are rejected.
 
-The original prefixes remain `BaseAPISize` and `BaseAdapterSize`.
-Extensions append `stateChanged` and `setFollowDistance`; check size before
-accessing them, using `CanNotifyState(api)` for notifications.
+The mandatory table prefixes are `BaseAPISize` and `BaseAdapterSize`.
+Optional callbacks are `stateChanged`, `setFollowDistance` and `canRecruitThroughDialogue`.
+Use `CanNotifyState`, `HasFollowDistance` and `HasRecruitmentEligibility` before
+accessing optional callbacks.
 
 Call `stateChanged(registration)` after external state changes. It is thread-safe;
 the host coalesces notifications and checks state/counts on the main thread.
-Notifications do not complete pending commands. Visible captures also discover
-state; no continuous roster polling is added.
+Notifications do not complete pending commands. Roster discovery runs on
+notifications and visible captures, without continuous polling.
 
 For `Pending`, call `complete(registration, request, success, reason)` exactly
 once when finished. It is thread-safe and copies the reason. The host verifies
 the reported final state. Failure must mean finished with a known failure,
 not still executing.
 
-v1 supports Follow, Wait and Dismiss for active followers, not recruitment.
+v1 commands support Follow, Wait and Dismiss for active followers. Optional
+recruitment eligibility relaxes the count gate only for that dialogue speaker;
+the owner's dialogue still recruits and enforces quest conditions. Background
+count updates preserve this gate, and closing dialogue restores follower presence.
 
 ## Distance preferences
 
@@ -84,9 +89,12 @@ saved VM stacks.
 
 ## Serana example
 
-[Serana.cpp](../src/addons/serana/native/Serana.cpp) validates the initialized
-`DLC1_NPCMentalModelScript`, actor/alias bindings, properties and methods.
-State comes from that controller.
+[Serana.cpp](../src/addons/serana/native/Serana.cpp) connects YLIWF's follower
+controls to `DLC1_NPCMentalModelScript`. Dawnguard owns recruitment and quest behavior;
+the adapter validates its live bindings and respects its restrictions.
+
+Recruitment eligibility requires dismissal, `CanFollow`, no `LockedIn` or
+`TurnOffComeWithMe`, and compatible live bindings.
 
 | Command | Dawnguard method | Guard |
 | --- | --- | --- |
@@ -114,10 +122,11 @@ src/addons/<addon>/
   native/       # C++ and headers
   plugin/       # Optional ESP source
   papyrus/      # Optional scripts
+  tests/native/ # Native test entry points (*_test.cpp)
 ```
 
-Create folders only when needed. CMake discovers each add-on's `native/**/*.cpp`;
-ESP/script components need build integration when introduced.
+Create folders only when needed. Automatic build discovery supports native
+components; ESP/script components require explicit build integration.
 
 ```json
 {"name": "Example"}
@@ -125,6 +134,8 @@ ESP/script components need build integration when introduced.
 
 CMake discovers manifests, applies shared configuration and adds DLLs to
 `native_plugins`. ModTools records hashes and packages separate ZIPs with notices.
+Add-on `*_test.cpp` files become separate CTest executables in `native_tests`.
+Generic host/API tests live under the root `tests/` folder.
 No per-add-on build-script edits are needed.
 Full builds require all declared DLLs; repackaging includes only supplied DLLs
 with matching source-manifest hashes.

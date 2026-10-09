@@ -1,5 +1,7 @@
 #pragma once
 
+#include "PapyrusNames.h"
+
 #include "Strings.h"
 
 #include <cstdint>
@@ -11,7 +13,7 @@
 // Engine-independent checks: shared by the menu/dump and the regression tests.
 namespace mod::debug_rules {
     inline bool IsFollowerScript(std::string_view name) {
-        return mod::strings::EqualsIgnoreCase(name, "DialogueFollowerScript");
+        return mod::strings::EqualsIgnoreCase(name, mod::papyrus_names::DialogueFollower);
     }
 
     inline bool CurrentGame(std::uint64_t expected, std::uint64_t current, bool ready) {

@@ -10,6 +10,23 @@
 
 namespace mod::settings {
     namespace {
+        namespace ini {
+            constexpr char General[] = "General";
+            constexpr char Debug[] = "Debug";
+            constexpr char MaxFollowers[] = "iMaxFollowers";
+            constexpr char LimitMode[] = "bFollowerOptionSelector";
+            constexpr char SpeechLevelsPerSlot[] = "iSpeechLevelsPerSlot";
+            constexpr char Perks[] = "sPerkForms";
+            constexpr char Essential[] = "bFollowerEssential";
+            constexpr char FriendlyFire[] = "bFriendlyFireProtection";
+            constexpr char Sandbox[] = "bFollowerSandbox";
+            constexpr char Crossfire[] = "bFollowerCrossfireProtection";
+            constexpr char Homes[] = "bFollowerHomes";
+            constexpr char FollowDistance[] = "iFollowDistance";
+            constexpr char DebugEnabled[] = "bEnabled";
+            constexpr char FlowLogging[] = "bFlowLogging";
+        }
+
         std::string_view DefaultValue(const char* section, const char* key) {
             return settings_rules::IniValue(settings_defaults::Ini, section, key).value_or("");
         }
@@ -127,22 +144,22 @@ namespace mod::settings {
             SaveStatus.clear();
 
         CreateMissingIni();
-        MaxExtraFollowers = ReadInteger("General", "iMaxFollowers", 1, 8) - 1;
-        FollowerPerkOption = ReadInteger("General", "bFollowerOptionSelector", 0, 2);
+        MaxExtraFollowers = ReadInteger(ini::General, ini::MaxFollowers, 1, 8) - 1;
+        FollowerPerkOption = ReadInteger(ini::General, ini::LimitMode, 0, 2);
         SpeechLevelsPerSlot =
-            ReadInteger("General", "iSpeechLevelsPerSlot", 1, std::numeric_limits<std::int32_t>::max());
+            ReadInteger(ini::General, ini::SpeechLevelsPerSlot, 1, std::numeric_limits<std::int32_t>::max());
 
-        ParsePerkListIntoSpecs(ReadText("General", "sPerkForms"));
+        ParsePerkListIntoSpecs(ReadText(ini::General, ini::Perks));
         BuildPerkListBuffer();
 
-        FollowerEssential = ReadBoolean("General", "bFollowerEssential");
-        FriendlyFire = ReadBoolean("General", "bFriendlyFireProtection");
-        FollowerSandbox = ReadBoolean("General", "bFollowerSandbox");
-        FollowerCrossfire = ReadBoolean("General", "bFollowerCrossfireProtection");
-        FollowerHomes = ReadBoolean("General", "bFollowerHomes");
-        FollowDistance = ReadInteger("General", "iFollowDistance", 0, 2);
-        mod::debug::OptionsEnabled = ReadBoolean("Debug", "bEnabled");
-        mod::debug::SetLogging(ReadBoolean("Debug", "bFlowLogging"));
+        FollowerEssential = ReadBoolean(ini::General, ini::Essential);
+        FriendlyFire = ReadBoolean(ini::General, ini::FriendlyFire);
+        FollowerSandbox = ReadBoolean(ini::General, ini::Sandbox);
+        FollowerCrossfire = ReadBoolean(ini::General, ini::Crossfire);
+        FollowerHomes = ReadBoolean(ini::General, ini::Homes);
+        FollowDistance = ReadInteger(ini::General, ini::FollowDistance, 0, 2);
+        mod::debug::OptionsEnabled = ReadBoolean(ini::Debug, ini::DebugEnabled);
+        mod::debug::SetLogging(ReadBoolean(ini::Debug, ini::FlowLogging));
         mod::debug::Trace("Settings.Load", nullptr, force ? "forced" : "initial");
     }
 
@@ -160,22 +177,22 @@ namespace mod::settings {
             failedKeys += key;
             logger::error("Could not save INI setting [{}] {} to {} (Windows error {})", section, key, kIniPath, error);
         };
-        auto writeInt = [&](const char* key, int val) { write("General", key, std::to_string(val).c_str()); };
+        auto writeInt = [&](const char* key, int val) { write(ini::General, key, std::to_string(val).c_str()); };
 
-        writeInt("iMaxFollowers", MaxExtraFollowers + 1);
-        writeInt("bFollowerOptionSelector", FollowerPerkOption);
-        writeInt("iSpeechLevelsPerSlot", SpeechLevelsPerSlot);
-        writeInt("bFollowerEssential", FollowerEssential ? 1 : 0);
-        writeInt("bFriendlyFireProtection", FriendlyFire ? 1 : 0);
-        writeInt("bFollowerSandbox", FollowerSandbox ? 1 : 0);
-        writeInt("bFollowerCrossfireProtection", FollowerCrossfire ? 1 : 0);
-        writeInt("bFollowerHomes", FollowerHomes ? 1 : 0);
-        writeInt("iFollowDistance", FollowDistance);
+        writeInt(ini::MaxFollowers, MaxExtraFollowers + 1);
+        writeInt(ini::LimitMode, FollowerPerkOption);
+        writeInt(ini::SpeechLevelsPerSlot, SpeechLevelsPerSlot);
+        writeInt(ini::Essential, FollowerEssential ? 1 : 0);
+        writeInt(ini::FriendlyFire, FriendlyFire ? 1 : 0);
+        writeInt(ini::Sandbox, FollowerSandbox ? 1 : 0);
+        writeInt(ini::Crossfire, FollowerCrossfire ? 1 : 0);
+        writeInt(ini::Homes, FollowerHomes ? 1 : 0);
+        writeInt(ini::FollowDistance, FollowDistance);
         ParsePerkListIntoSpecs(PerkListBuffer);
         BuildPerkListBuffer();
-        write("General", "sPerkForms", PerkListBuffer);
-        write("Debug", "bFlowLogging", mod::debug::Logging.load() ? "1" : "0");
-        write("Debug", "bEnabled", mod::debug::OptionsEnabled.load() ? "1" : "0");
+        write(ini::General, ini::Perks, PerkListBuffer);
+        write(ini::Debug, ini::FlowLogging, mod::debug::Logging.load() ? "1" : "0");
+        write(ini::Debug, ini::DebugEnabled, mod::debug::OptionsEnabled.load() ? "1" : "0");
         const bool saved = failedKeys.empty();
         SaveStatus = saved ? fmt::format("Settings saved to {}.", kIniPath)
                            : fmt::format(

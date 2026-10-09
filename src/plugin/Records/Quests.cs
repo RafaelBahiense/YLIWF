@@ -23,99 +23,99 @@ internal static partial class FollowerPlugin
         };
         var animalDismissMessageProperty = new ScriptObjectProperty
         {
-            Name = "AnimalDismissMessage",
+            Name = PapyrusNames.Properties.AnimalDismissMessage,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x0FF23B))
         };
         dialogueFollowerScript.Properties.Add(animalDismissMessageProperty);
         var followerDismissMessageProperty = new ScriptObjectProperty
         {
-            Name = "FollowerDismissMessage",
+            Name = PapyrusNames.Properties.FollowerDismissMessage,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x0FF23A))
         };
         dialogueFollowerScript.Properties.Add(followerDismissMessageProperty);
         var followerDismissMessageCompanionsProperty = new ScriptObjectProperty
         {
-            Name = "FollowerDismissMessageCompanions",
+            Name = PapyrusNames.Properties.CompanionsDismissMessage,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x0FFCE1))
         };
         dialogueFollowerScript.Properties.Add(followerDismissMessageCompanionsProperty);
         var followerDismissMessageCompanionsFemaleProperty = new ScriptObjectProperty
         {
-            Name = "FollowerDismissMessageCompanionsFemale",
+            Name = PapyrusNames.Properties.CompanionsFemaleDismissMessage,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x0FFCE3))
         };
         dialogueFollowerScript.Properties.Add(followerDismissMessageCompanionsFemaleProperty);
         var followerDismissMessageCompanionsMaleProperty = new ScriptObjectProperty
         {
-            Name = "FollowerDismissMessageCompanionsMale",
+            Name = PapyrusNames.Properties.CompanionsMaleDismissMessage,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x0FFCE2))
         };
         dialogueFollowerScript.Properties.Add(followerDismissMessageCompanionsMaleProperty);
         var followerDismissMessageWaitProperty = new ScriptObjectProperty
         {
-            Name = "FollowerDismissMessageWait",
+            Name = PapyrusNames.Properties.WaitDismissMessage,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x0FFCE4))
         };
         dialogueFollowerScript.Properties.Add(followerDismissMessageWaitProperty);
         var followerDismissMessageWeddingProperty = new ScriptObjectProperty
         {
-            Name = "FollowerDismissMessageWedding",
+            Name = PapyrusNames.Properties.WeddingDismissMessage,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x0FFCE0))
         };
         dialogueFollowerScript.Properties.Add(followerDismissMessageWeddingProperty);
         var followerHuntingBowProperty = new ScriptObjectProperty
         {
-            Name = "FollowerHuntingBow",
+            Name = PapyrusNames.Properties.HuntingBow,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x10E2DD))
         };
         dialogueFollowerScript.Properties.Add(followerHuntingBowProperty);
         var followerIronArrowProperty = new ScriptObjectProperty
         {
-            Name = "FollowerIronArrow",
+            Name = PapyrusNames.Properties.IronArrow,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x10E2DE))
         };
         dialogueFollowerScript.Properties.Add(followerIronArrowProperty);
         var hirelingRehireScriptProperty = new ScriptObjectProperty
         {
-            Name = "HirelingRehireScript",
+            Name = PapyrusNames.Properties.HirelingRehire,
             Object = new FormLink<ISkyrimMajorRecordGetter>(DialogueFollowerQuestForm)
         };
         dialogueFollowerScript.Properties.Add(hirelingRehireScriptProperty);
         var animalAliasProperty = new ScriptObjectProperty
         {
-            Name = "pAnimalAlias",
+            Name = PapyrusNames.Properties.AnimalAlias,
             Object = new FormLink<ISkyrimMajorRecordGetter>(DialogueFollowerQuestForm),
             Alias = 1
         };
         dialogueFollowerScript.Properties.Add(animalAliasProperty);
         var currentHirelingProperty = new ScriptObjectProperty
         {
-            Name = "pCurrentHireling",
+            Name = PapyrusNames.Properties.CurrentHireling,
             Object = new FormLink<ISkyrimMajorRecordGetter>(CurrentHirelingFactionForm)
         };
         dialogueFollowerScript.Properties.Add(currentHirelingProperty);
         var dismissedFollowerProperty = new ScriptObjectProperty
         {
-            Name = "pDismissedFollower",
+            Name = PapyrusNames.Properties.DismissedFollower,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x05C84C))
         };
         dialogueFollowerScript.Properties.Add(dismissedFollowerProperty);
         var followerAliasProperty = new ScriptObjectProperty
         {
-            Name = "pFollowerAlias",
+            Name = PapyrusNames.Properties.FollowerAlias,
             Object = new FormLink<ISkyrimMajorRecordGetter>(DialogueFollowerQuestForm),
             Alias = 0
         };
         dialogueFollowerScript.Properties.Add(followerAliasProperty);
         var playerAnimalCountProperty = new ScriptObjectProperty
         {
-            Name = "pPlayerAnimalCount",
+            Name = PapyrusNames.Properties.PlayerAnimalCount,
             Object = new FormLink<ISkyrimMajorRecordGetter>(SkyrimForm(0x05C84A))
         };
         dialogueFollowerScript.Properties.Add(playerAnimalCountProperty);
         var playerFollowerCountProperty = new ScriptObjectProperty
         {
-            Name = "pPlayerFollowerCount",
+            Name = PapyrusNames.Properties.PlayerFollowerCount,
             Object = new FormLink<ISkyrimMajorRecordGetter>(PlayerFollowerCountForm)
         };
         dialogueFollowerScript.Properties.Add(playerFollowerCountProperty);
@@ -469,7 +469,7 @@ internal static partial class FollowerPlugin
         dialogueFollowerQuest.NextAliasID = 9;
         var followerAlias = new QuestAlias
         {
-            Name = "Follower",
+            Name = RecordNames.Aliases.Follower,
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
@@ -485,7 +485,7 @@ internal static partial class FollowerPlugin
         var extraFollower01Alias = new QuestAlias
         {
             ID = 2,
-            Name = "ExtraFollower01",
+            Name = RecordNames.Aliases.Extra(1),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
@@ -501,7 +501,7 @@ internal static partial class FollowerPlugin
         var extraFollower02Alias = new QuestAlias
         {
             ID = 3,
-            Name = "ExtraFollower02",
+            Name = RecordNames.Aliases.Extra(2),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
@@ -517,7 +517,7 @@ internal static partial class FollowerPlugin
         var extraFollower03Alias = new QuestAlias
         {
             ID = 4,
-            Name = "ExtraFollower03",
+            Name = RecordNames.Aliases.Extra(3),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
@@ -533,7 +533,7 @@ internal static partial class FollowerPlugin
         var extraFollower04Alias = new QuestAlias
         {
             ID = 5,
-            Name = "ExtraFollower04",
+            Name = RecordNames.Aliases.Extra(4),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
@@ -549,7 +549,7 @@ internal static partial class FollowerPlugin
         var extraFollower05Alias = new QuestAlias
         {
             ID = 6,
-            Name = "ExtraFollower05",
+            Name = RecordNames.Aliases.Extra(5),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
@@ -565,7 +565,7 @@ internal static partial class FollowerPlugin
         var extraFollower06Alias = new QuestAlias
         {
             ID = 7,
-            Name = "ExtraFollower06",
+            Name = RecordNames.Aliases.Extra(6),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
@@ -581,7 +581,7 @@ internal static partial class FollowerPlugin
         var extraFollower07Alias = new QuestAlias
         {
             ID = 8,
-            Name = "ExtraFollower07",
+            Name = RecordNames.Aliases.Extra(7),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
@@ -597,7 +597,7 @@ internal static partial class FollowerPlugin
         var animalAlias = new QuestAlias
         {
             ID = 1,
-            Name = "Animal",
+            Name = RecordNames.Aliases.Animal,
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected
         };
         animalAlias.Factions.Add(new FormLink<IFactionGetter>(CurrentFollowerFactionForm));
@@ -612,7 +612,7 @@ internal static partial class FollowerPlugin
     {
         var homeQuest = new Quest(OwnForm(0x000961), SkyrimRelease.SkyrimSE)
         {
-            EditorID = "YLIWF_HomeQuest",
+            EditorID = RecordNames.HomeQuest,
             Flags = Quest.Flag.StartGameEnabled | Quest.Flag.AllowRepeatedStages | (Quest.Flag)0x10,
             Priority = (byte)(10),
             Type = Quest.TypeEnum.Misc,
@@ -620,7 +620,7 @@ internal static partial class FollowerPlugin
         };
         var yliwfHome00Alias = new QuestAlias
         {
-            Name = "YLIWF_Home00",
+            Name = RecordNames.Aliases.Home(0),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved
         };
         yliwfHome00Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000970)));
@@ -629,7 +629,7 @@ internal static partial class FollowerPlugin
         var yliwfHome01Alias = new QuestAlias
         {
             ID = 1,
-            Name = "YLIWF_Home01",
+            Name = RecordNames.Aliases.Home(1),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved
         };
         yliwfHome01Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000971)));
@@ -638,7 +638,7 @@ internal static partial class FollowerPlugin
         var yliwfHome02Alias = new QuestAlias
         {
             ID = 2,
-            Name = "YLIWF_Home02",
+            Name = RecordNames.Aliases.Home(2),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved
         };
         yliwfHome02Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000972)));
@@ -647,7 +647,7 @@ internal static partial class FollowerPlugin
         var yliwfHome03Alias = new QuestAlias
         {
             ID = 3,
-            Name = "YLIWF_Home03",
+            Name = RecordNames.Aliases.Home(3),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved
         };
         yliwfHome03Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000973)));
@@ -656,7 +656,7 @@ internal static partial class FollowerPlugin
         var yliwfHome04Alias = new QuestAlias
         {
             ID = 4,
-            Name = "YLIWF_Home04",
+            Name = RecordNames.Aliases.Home(4),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved
         };
         yliwfHome04Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000974)));
@@ -665,7 +665,7 @@ internal static partial class FollowerPlugin
         var yliwfHome05Alias = new QuestAlias
         {
             ID = 5,
-            Name = "YLIWF_Home05",
+            Name = RecordNames.Aliases.Home(5),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved
         };
         yliwfHome05Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000975)));
@@ -674,7 +674,7 @@ internal static partial class FollowerPlugin
         var yliwfHome06Alias = new QuestAlias
         {
             ID = 6,
-            Name = "YLIWF_Home06",
+            Name = RecordNames.Aliases.Home(6),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved
         };
         yliwfHome06Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000976)));
@@ -683,7 +683,7 @@ internal static partial class FollowerPlugin
         var yliwfHome07Alias = new QuestAlias
         {
             ID = 7,
-            Name = "YLIWF_Home07",
+            Name = RecordNames.Aliases.Home(7),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved
         };
         yliwfHome07Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000977)));
@@ -692,7 +692,7 @@ internal static partial class FollowerPlugin
         var yliwfHomeMarkerAlias00Alias = new QuestAlias
         {
             ID = 8,
-            Name = "YLIWF_HomeMarkerAlias00",
+            Name = RecordNames.Aliases.HomeMarker(0),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved,
             ForcedReference = new FormLinkNullable<IPlacedGetter>(OwnForm(0x000951)),
             VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null)
@@ -701,7 +701,7 @@ internal static partial class FollowerPlugin
         var yliwfHomeMarkerAlias01Alias = new QuestAlias
         {
             ID = 9,
-            Name = "YLIWF_HomeMarkerAlias01",
+            Name = RecordNames.Aliases.HomeMarker(1),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved,
             ForcedReference = new FormLinkNullable<IPlacedGetter>(OwnForm(0x000952)),
             VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null)
@@ -710,7 +710,7 @@ internal static partial class FollowerPlugin
         var yliwfHomeMarkerAlias02Alias = new QuestAlias
         {
             ID = 10,
-            Name = "YLIWF_HomeMarkerAlias02",
+            Name = RecordNames.Aliases.HomeMarker(2),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved,
             ForcedReference = new FormLinkNullable<IPlacedGetter>(OwnForm(0x000953)),
             VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null)
@@ -719,7 +719,7 @@ internal static partial class FollowerPlugin
         var yliwfHomeMarkerAlias03Alias = new QuestAlias
         {
             ID = 11,
-            Name = "YLIWF_HomeMarkerAlias03",
+            Name = RecordNames.Aliases.HomeMarker(3),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved,
             ForcedReference = new FormLinkNullable<IPlacedGetter>(OwnForm(0x000954)),
             VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null)
@@ -728,7 +728,7 @@ internal static partial class FollowerPlugin
         var yliwfHomeMarkerAlias04Alias = new QuestAlias
         {
             ID = 12,
-            Name = "YLIWF_HomeMarkerAlias04",
+            Name = RecordNames.Aliases.HomeMarker(4),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved,
             ForcedReference = new FormLinkNullable<IPlacedGetter>(OwnForm(0x000955)),
             VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null)
@@ -737,7 +737,7 @@ internal static partial class FollowerPlugin
         var yliwfHomeMarkerAlias05Alias = new QuestAlias
         {
             ID = 13,
-            Name = "YLIWF_HomeMarkerAlias05",
+            Name = RecordNames.Aliases.HomeMarker(5),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved,
             ForcedReference = new FormLinkNullable<IPlacedGetter>(OwnForm(0x000956)),
             VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null)
@@ -746,7 +746,7 @@ internal static partial class FollowerPlugin
         var yliwfHomeMarkerAlias06Alias = new QuestAlias
         {
             ID = 14,
-            Name = "YLIWF_HomeMarkerAlias06",
+            Name = RecordNames.Aliases.HomeMarker(6),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved,
             ForcedReference = new FormLinkNullable<IPlacedGetter>(OwnForm(0x000957)),
             VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null)
@@ -755,7 +755,7 @@ internal static partial class FollowerPlugin
         var yliwfHomeMarkerAlias07Alias = new QuestAlias
         {
             ID = 15,
-            Name = "YLIWF_HomeMarkerAlias07",
+            Name = RecordNames.Aliases.HomeMarker(7),
             Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.AllowReserved,
             ForcedReference = new FormLinkNullable<IPlacedGetter>(OwnForm(0x000958)),
             VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null)

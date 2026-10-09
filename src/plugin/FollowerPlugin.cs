@@ -4,7 +4,7 @@ using Mutagen.Bethesda.Skyrim;
 internal static partial class FollowerPlugin
 {
     private static readonly ModKey OwnMod = ModKey.FromFileName(ModInfo.PluginFile);
-    private static readonly ModKey SkyrimMaster = ModKey.FromFileName("Skyrim.esm");
+    private static readonly ModKey SkyrimMaster = ModKey.FromFileName(RecordNames.SkyrimMaster);
     private const string CustomTopicSubtype = "CUST";
     private static FormKey OwnForm(uint id) => new(OwnMod, id);
     private static FormKey SkyrimForm(uint id) => new(SkyrimMaster, id);

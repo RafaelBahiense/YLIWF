@@ -79,6 +79,25 @@ namespace {
         return 1;
     }
 
+    std::uint32_t CanRecruitThroughDialogue(void*, ActorID actor) {
+        FollowerState state;
+        if (!Inspect(nullptr, actor, &state) || state.state != State::Inactive || serana->IsPlayerTeammate())
+            return 0;
+        const auto object = papyrus::Bound(mentalModel, Script);
+        const auto following = papyrus::Boolean(object, "IsFollowing");
+        const auto waiting = papyrus::Boolean(object, "IsWaiting");
+        const auto dismissed = papyrus::Boolean(object, "IsDismissed");
+        const auto locked = papyrus::Boolean(object, "LockedIn");
+        const auto canFollow = papyrus::Boolean(object, "CanFollow");
+        const auto dialogueBlocked = papyrus::Boolean(object, "TurnOffComeWithMe");
+        if (!following || !waiting || !dismissed || !locked || !canFollow || !dialogueBlocked)
+            return 0;
+        return mod::serana_rules::CanRecruitThroughDialogue(
+                   {*following, *waiting, *dismissed, *locked, false, false, *canFollow}, *dialogueBlocked)
+                   ? 1u
+                   : 0u;
+    }
+
     class Completion final : public RE::BSScript::IStackCallbackFunctor {
     public:
         Completion(RequestID request, ActorID actor, Command command)
@@ -213,7 +232,8 @@ namespace {
                                   Enumerate,
                                   Inspect,
                                   Start,
-                                  SetFollowDistance};
+                                  SetFollowDistance,
+                                  CanRecruitThroughDialogue};
             registration = host->registerAdapter(&adapter);
             if (!registration)
                 SKSE::log::warn("Serana adapter registration rejected");

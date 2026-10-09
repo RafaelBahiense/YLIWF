@@ -99,7 +99,7 @@ mod::debug::TraceLazy("Native.ApplyFollowerDialogueGate", speaker, [&] {
 });
 ```
 
-Arguments still evaluate before a call. Use `TraceLazy` for expensive getters;
+Arguments evaluate before a call. Use `TraceLazy` for expensive getters;
 its callback runs synchronously.
 
 Papyrus helpers `Debug`, `DebugInt`, `DebugBool` and `DebugForm` check the flag

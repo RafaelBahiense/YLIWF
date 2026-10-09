@@ -9,7 +9,8 @@ and persistence contracts.
 | --- | --- |
 | Policy and plans | `ControllerRules.h` |
 | Admission, queue, bindings and verification | `Controller.cpp` |
-| Effects, scheduling and continuations | `ControllerExecutor.cpp` |
+| Effects and continuations | `ControllerExecutor.cpp` |
+| Deadline scheduling | `DeadlineScheduler.h`, `DeadlineScheduler.cpp` |
 | Native saves | `ControllerState.h`, `StateCodec.h`, `ControllerStorage.cpp` |
 | Eight vanilla forwarding methods | `DialogueFollowerScript.psc` |
 | Mechanical engine calls | `YLIWF_Engine.psc` |
@@ -37,9 +38,9 @@ active plan, queue, actor handles, progress, delays, deadlines, receipts and
 latent callers. Explicit little-endian fields avoid pointers and padding.
 Runtime structures use named fields; packing belongs only to the codec.
 
-Operation/effect IDs and record layouts remain stable. Retired IDs are reserved;
+Operation/effect IDs and record layouts are fixed. Unused IDs are reserved;
 effect 10 (`ReservedUpdate`) resumes as a no-op. Primary exchange references its
-second actor through the existing actor pool. This format does not migrate
+second actor through the saved actor pool. This format does not migrate
 SFF/YLIF saves.
 
 SKSE remaps retained handles on load. Missing handles for accepted work block
@@ -47,8 +48,8 @@ execution; an unavailable speaker hint can be cleared. Bounded invalid or
 unsupported records remain blocked diagnostics when saved again. Recovery needs
 the original save pair and matching build, not another save's load-order table.
 
-Extra aliases and mod globals resolve from the canonical plugin.
-There is no separately reconstructed follower roster.
+Extra aliases and mod globals resolve from the canonical plugin; aliases are
+the sole authoritative roster.
 
 ## Requests and completion
 
@@ -97,8 +98,8 @@ report an unknown outcome. Timeout never permits replay or overlapping repair.
 Invalid saved phases and caller tables remain blocked.
 
 Install matching DLL/PEX files and upgrade while idle. Keep `.ess` and `.skse`
-together. Papyrus queues and suspended old executor bytecode are not converted.
-Saves without the native record start an empty queue; aliases still own the roster.
+together. Upgrades do not convert pending work from incompatible script builds.
+Saves without the native record start an empty queue and use the alias roster.
 Saved command UI tickets are cleared; unaccepted tasks use generation guards.
 
 Binding repair validates the canonical quest and repairs vanilla primary/count

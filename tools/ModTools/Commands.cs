@@ -12,7 +12,8 @@ public static class Commands
     public const string Package = "package";
     public const string Generate = "generate";
     public const string Inspect = "inspect";
-    private const string Include3Dnpc = "--include-3dnpc";
+    internal const string Include3Dnpc = "--include-3dnpc";
+    internal const string Clean = "--clean";
 
     public static int Run(string[] args)
     {
@@ -21,7 +22,7 @@ public static class Commands
         var flags = new HashSet<string>();
         for (var i = 1; i < args.Length; ++i)
         {
-            if (args[i] == Include3Dnpc || args[i] == "--clean")
+            if (args[i] == Include3Dnpc || args[i] == Clean)
             {
                 flags.Add(args[i]);
                 continue;

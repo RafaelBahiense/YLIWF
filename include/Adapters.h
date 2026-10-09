@@ -19,6 +19,7 @@ namespace mod::adapters {
     std::vector<Follower> Followers(bool annotatePending = true);  // Main thread; quest-backed, never saved as aliases.
     bool Owns(yliwf::sdk::ActorID actor);
     bool HasFollowers();
+    bool CanRecruitThroughDialogue(yliwf::sdk::ActorID actor);
     void ApplyFollowDistance(bool replaceAll = false);
     bool SetFollowDistance(yliwf::sdk::ActorID actor, std::int32_t preset);
     bool Request(yliwf::sdk::ActorID actor, yliwf::sdk::Command command, Completion completion);

@@ -11,7 +11,7 @@ public static class SourceSnapshot
     public static Dictionary<string, string> ProjectFiles(string root)
     {
         var files = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var name in new[] { "README.md", "LICENSE", "NOTICE", "CREDITS.md", "VERSION", "mod.json", "global.json", "CMakeLists.txt", "CMakePresets.json", "vcpkg.json", "vcpkg-configuration.json", ".editorconfig", ".gitignore", "setup.ps1", "build.ps1" })
+        foreach (var name in new[] { "README.md", ProjectPaths.License, ProjectPaths.Notice, ProjectPaths.Credits, ProjectPaths.Version, ProjectPaths.Identity, "global.json", "CMakeLists.txt", "CMakePresets.json", "vcpkg.json", "vcpkg-configuration.json", ".editorconfig", ".gitignore", "setup.ps1", "build.ps1" })
         {
             var path = Path.Combine(root, name);
             if (File.Exists(path))
@@ -73,7 +73,7 @@ public static class SourceSnapshot
             var notices = Path.Combine(nativeBuild, "vcpkg_installed/x64-windows-static/share", port, "copyright");
             files["licenses/" + port + ".txt"] = notices;
         }
-        files["licenses/CommonLibSSE-NG.txt"] = Path.Combine(commonLib, "LICENSE");
+        files["licenses/CommonLibSSE-NG.txt"] = Path.Combine(commonLib, ProjectPaths.License);
         foreach (var (name, path) in files.Where(file => file.Key.StartsWith("licenses/", StringComparison.Ordinal)))
         {
             if (!File.Exists(path))
@@ -103,7 +103,7 @@ public static class SourceSnapshot
             [ManifestFields.ArchiveTimestamp] = timestamp.ToUnixTimeSeconds(),
             [ManifestFields.Kind] = ArchiveKind,
             [ManifestFields.DllHash] = Artifacts.HashFile(dll),
-            [ManifestFields.Version] = File.ReadAllText(Path.Combine(root, "VERSION")).Trim(),
+            [ManifestFields.Version] = File.ReadAllText(Path.Combine(root, ProjectPaths.Version)).Trim(),
             [ManifestFields.Plugin] = ModInfo.PluginFile,
             [ManifestFields.NativeDependencies] = Ports.Prepend("CommonLibSSE-NG").ToArray(),
             [ManifestFields.BuildInputs] = "See docs/build-release.md and tools/dependencies.json. General-purpose compiler tools and Bethesda Creation Kit imports are obtained separately."
@@ -144,7 +144,7 @@ public static class SourceSnapshot
             Artifacts.ValidateName(name);
         }
 
-        foreach (var required in new[] { "LICENSE", "NOTICE", "CREDITS.md", "mod.json", "build.ps1", "src/native/plugin.cpp", "src/plugin/FollowerPlugin.cs", "src/papyrus/core/DialogueFollowerScript.psc", "tools/ModTools/ModTools.csproj" })
+        foreach (var required in new[] { ProjectPaths.License, ProjectPaths.Notice, ProjectPaths.Credits, ProjectPaths.Identity, "build.ps1", "src/native/plugin.cpp", "src/plugin/FollowerPlugin.cs", "src/papyrus/core/DialogueFollowerScript.psc", ProjectPaths.ToolProject })
         {
             if (archive.GetEntry(required) == null)
             {
@@ -180,8 +180,8 @@ public static class SourceSnapshot
             foreach (var (name, path) in ProjectFiles(root).Where(file => file.Key.StartsWith("src/", StringComparison.Ordinal) ||
                 file.Key.StartsWith("include/", StringComparison.Ordinal) || file.Key.StartsWith("cmake/", StringComparison.Ordinal) ||
                 (file.Key.StartsWith("tools/ModTools/", StringComparison.Ordinal) && file.Key.EndsWith(".cs", StringComparison.Ordinal)) ||
-                file.Key is "setup.ps1" or "build.ps1" or "tools/Environment.ps1" or "tools/dependencies.json" or "tools/paths.json" ||
-                file.Key is "CMakeLists.txt" or "CMakePresets.json" or "assets/settings.ini" or "mod.json" or "VERSION" or "vcpkg.json" or "vcpkg-configuration.json" or "global.json" or "tools/ModTools/ModTools.csproj" or "tools/ModTools/packages.lock.json"))
+                file.Key is "setup.ps1" or "build.ps1" or "tools/Environment.ps1" or "tools/dependencies.json" or ProjectPaths.PathDefaults ||
+                file.Key is "CMakeLists.txt" or "CMakePresets.json" or "assets/settings.ini" or ProjectPaths.Identity or ProjectPaths.Version or "vcpkg.json" or "vcpkg-configuration.json" or "global.json" or ProjectPaths.ToolProject or ProjectPaths.ToolLock))
             {
                 if (!hashes.TryGetProperty(name, out var checksum) || checksum.GetString() != Artifacts.HashFile(path))
                 {

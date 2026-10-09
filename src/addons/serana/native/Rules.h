@@ -12,6 +12,11 @@ namespace mod::serana_rules {
         bool canFollow = true;
     };
 
+    inline bool CanRecruitThroughDialogue(const ControllerState& value, bool dialogueBlocked) {
+        return value.dismissed && !value.following && !value.waiting && value.canFollow && !value.locked &&
+               !dialogueBlocked;
+    }
+
     inline std::optional<std::array<bool, 3>> DistanceFlags(yliwf::sdk::FollowDistance distance) {
         using yliwf::sdk::FollowDistance;
         if (static_cast<unsigned>(distance) > 2)

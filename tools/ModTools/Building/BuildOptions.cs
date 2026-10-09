@@ -9,33 +9,20 @@ public enum BuildTarget
 
 public sealed record BuildOptions
 {
-    public required string Root
-    { get; init; }
-    public BuildTarget Target
-    { get; init; }
-    public string Configuration { get; init; } = "Release";
-    public bool Clean
-    { get; init; }
-    public bool Include3Dnpc
-    { get; init; }
-    public required string CommonLib
-    { get; init; }
-    public required string Vcpkg
-    { get; init; }
-    public required string Compiler
-    { get; init; }
-    public required string Flags
-    { get; init; }
-    public required string[] Imports
-    { get; init; }
-    public required string Output
-    { get; init; }
-    public string? Dll
-    { get; init; }
-    public string? SourceArchive
-    { get; init; }
-    public string? DeployTo
-    { get; init; }
+    public required string Root { get; init; }
+    public BuildTarget Target { get; init; }
+    public BuildConfiguration Configuration { get; init; } = BuildConfiguration.Release;
+    public bool Clean { get; init; }
+    public bool Include3Dnpc { get; init; }
+    public required string CommonLib { get; init; }
+    public required string Vcpkg { get; init; }
+    public required string Compiler { get; init; }
+    public required string Flags { get; init; }
+    public required string[] Imports { get; init; }
+    public required string Output { get; init; }
+    public string? Dll { get; init; }
+    public string? SourceArchive { get; init; }
+    public string? DeployTo { get; init; }
 
     public static BuildOptions Read(IReadOnlyDictionary<string, string> options, IReadOnlySet<string> switches)
     {
@@ -52,15 +39,15 @@ public sealed record BuildOptions
 
         foreach (var flag in switches)
         {
-            if (flag is not ("--clean" or "--include-3dnpc"))
+            if (flag is not (Commands.Clean or Commands.Include3Dnpc))
             {
                 throw new ArgumentException($"Unknown build switch: {flag}");
             }
         }
 
         var root = Path.GetFullPath(options.GetValueOrDefault("--root") ?? Directory.GetCurrentDirectory());
-        var local = Path.Combine(root, ".tools/local.json");
-        using var defaults = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "tools/paths.json")));
+        var local = Path.Combine(root, ProjectPaths.LocalPaths);
+        using var defaults = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ProjectPaths.PathDefaults)));
         using var document = File.Exists(local) ? JsonDocument.Parse(File.ReadAllText(local)) : null;
         string Resolve(string option, string property)
         {
@@ -78,11 +65,8 @@ public sealed record BuildOptions
             throw new ArgumentException($"Unknown build target: {targetText}");
         }
 
-        var configuration = options.GetValueOrDefault("--configuration") ?? "Release";
-        if (configuration is not ("Release" or "Debug" or "RelWithDebInfo"))
-        {
-            throw new ArgumentException($"Unknown configuration: {configuration}");
-        }
+        var configuration = BuildConfigurations.Parse(options.GetValueOrDefault("--configuration") ??
+            BuildConfiguration.Release.CMakeName());
 
         var imports = defaults.RootElement.GetProperty("Imports").EnumerateArray().Select(item => item.GetString()!).ToArray();
         if (options.TryGetValue("--imports", out var list))
@@ -100,8 +84,8 @@ public sealed record BuildOptions
             Root = root,
             Target = target,
             Configuration = configuration,
-            Clean = switches.Contains("--clean"),
-            Include3Dnpc = switches.Contains("--include-3dnpc"),
+            Clean = switches.Contains(Commands.Clean),
+            Include3Dnpc = switches.Contains(Commands.Include3Dnpc),
             CommonLib = Resolve("commonlib", "CommonLib"),
             Vcpkg = Resolve("vcpkg", "Vcpkg"),
             Compiler = Resolve("compiler", "Compiler"),

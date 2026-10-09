@@ -11,4 +11,5 @@ namespace mod::info {
     inline constexpr char IniPath[] = "Data\\SKSE\\Plugins\\@MOD_BINARY_NAME@.ini";
     inline constexpr char ScriptPrefix[] = "@MOD_SCRIPT_PREFIX@";
     inline constexpr char NativeScript[] = "@MOD_SCRIPT_PREFIX@_SKSE";
+    inline constexpr char EngineScript[] = "@MOD_SCRIPT_PREFIX@_Engine";
 }

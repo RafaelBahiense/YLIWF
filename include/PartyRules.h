@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Strings.h"
+#include "RecordNames.h"
 
 #include <algorithm>
 #include <array>
@@ -13,11 +14,9 @@ namespace mod::party_rules {
         if (!ownerMatches)
             return false;
         if (primary)
-            return aliasID == 0 && mod::strings::EqualsIgnoreCase(name, "Follower");
-        constexpr std::array<std::string_view, 7> names{"ExtraFollower01", "ExtraFollower02", "ExtraFollower03",
-                                                        "ExtraFollower04", "ExtraFollower05", "ExtraFollower06",
-                                                        "ExtraFollower07"};
-        return aliasID >= 2 && aliasID <= 8 && mod::strings::EqualsIgnoreCase(name, names[aliasID - 2]);
+            return aliasID == 0 && mod::strings::EqualsIgnoreCase(name, record_names::aliases::Follower);
+        return aliasID >= 2 && aliasID <= 8 &&
+               mod::strings::EqualsIgnoreCase(name, record_names::aliases::Extras[aliasID - 2]);
     }
 
     struct Slot {
@@ -75,5 +74,13 @@ namespace mod::party_rules {
         count = std::max(count, 0);
         cap = std::max(cap, 1);
         return {count > 0 || questFollower ? 1.0f : 0.0f, static_cast<float>(count), count < cap ? 1.0f : 0.0f};
+    }
+
+    inline float DialogueFollowerCount(std::int32_t count, std::int32_t cap, bool vanillaRecruitable,
+                                       bool adapterRecruitable, bool questFollower) {
+        if (adapterRecruitable)
+            return 0.0f;  // External recruitment consumes no vanilla alias slot.
+        const auto values = CountGlobals(count, cap, questFollower);
+        return vanillaRecruitable ? (values.recruitGate ? 0.0f : 1.0f) : values.vanillaCount;
     }
 }

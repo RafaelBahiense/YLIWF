@@ -124,7 +124,7 @@ public static class Artifacts
             [$"SKSE/Plugins/{Dll}"] = dll
         };
         AddNotices(root, files, dependencyNotices);
-        foreach (var script in ScriptOutputs(Path.Combine(root, "src/papyrus/core"), scripts))
+        foreach (var script in ScriptOutputs(Path.Combine(root, ProjectPaths.CoreScripts), scripts))
         {
             files.Add("Scripts/" + Path.GetFileName(script), script);
         }
@@ -133,7 +133,7 @@ public static class Artifacts
     }
     public static void AddNotices(string root, Dictionary<string, string> files, IReadOnlyDictionary<string, string> dependencyNotices)
     {
-        foreach (var name in new[] { "LICENSE", "NOTICE", "CREDITS.md" })
+        foreach (var name in ProjectPaths.ReleaseNotices)
         {
             files[$"{ModInfo.Identity.DocumentationDirectory}/{name}"] = Path.Combine(root, name);
         }
@@ -276,14 +276,14 @@ public static class Artifacts
     public static void Package(string root, string esp, string dll, string papyrus, string output, bool patch, BuildMode mode, string? sourceArchive = null, string? commonLib = null, string? vcpkg = null, string? nativeBuild = null)
     {
         BuildReceipt.Validate(root, BuildComponent.Plugin, [esp], BuildReceipt.PluginPath(esp));
-        var scripts = Path.Combine(papyrus, "Scripts");
-        BuildReceipt.Validate(root, BuildComponent.PapyrusCore, ScriptOutputs(Path.Combine(root, "src/papyrus/core"), scripts), Path.Combine(scripts, BuildReceipt.ScriptsFile));
+        var scripts = Path.Combine(papyrus, ProjectPaths.ScriptsOutput);
+        BuildReceipt.Validate(root, BuildComponent.PapyrusCore, ScriptOutputs(Path.Combine(root, ProjectPaths.CoreScripts), scripts), Path.Combine(scripts, BuildReceipt.ScriptsFile));
         if (patch)
         {
-            var patchScripts = Path.Combine(papyrus, "Patches/3DNPC/Scripts");
-            BuildReceipt.Validate(root, BuildComponent.Papyrus3Dnpc, ScriptOutputs(Path.Combine(root, "src/papyrus/patches/3dnpc"), patchScripts), Path.Combine(patchScripts, BuildReceipt.ScriptsFile));
+            var patchScripts = Path.Combine(papyrus, ProjectPaths.Patch3DnpcOutput);
+            BuildReceipt.Validate(root, BuildComponent.Papyrus3Dnpc, ScriptOutputs(Path.Combine(root, ProjectPaths.Patch3DnpcScripts), patchScripts), Path.Combine(patchScripts, BuildReceipt.ScriptsFile));
         }
-        var version = File.ReadAllText(Path.Combine(root, "VERSION")).Trim();
+        var version = File.ReadAllText(Path.Combine(root, ProjectPaths.Version)).Trim();
         if (!Version.TryParse(version, out var parsedVersion) || parsedVersion.Build < 0)
         {
             throw new InvalidDataException("VERSION must contain three or four numeric components");
@@ -324,7 +324,7 @@ public static class Artifacts
                 timestamp = new DateTimeOffset(sourceZip.GetEntry(Manifest)!.LastWriteTime.DateTime, TimeSpan.Zero);
             }
             var destination = Path.Combine(output, $"{ModInfo.BinaryName}-{version}.zip");
-            pending.Add((PrepareZip(destination, CoreFiles(root, esp, dll, Path.Combine(papyrus, "Scripts"), dependencyNotices), metadata, timestamp, includeManifest: false), destination));
+            pending.Add((PrepareZip(destination, CoreFiles(root, esp, dll, Path.Combine(papyrus, ProjectPaths.ScriptsOutput), dependencyNotices), metadata, timestamp, includeManifest: false), destination));
             foreach (var addon in Addon.Read(root))
             {
                 var addonDll = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(dll))!, addon.DllFile);
@@ -341,7 +341,7 @@ public static class Artifacts
             }
             if (patch)
             {
-                var files = ScriptOutputs(Path.Combine(root, "src/papyrus/patches/3dnpc"), Path.Combine(papyrus, "Patches/3DNPC/Scripts")).ToDictionary(file => "Scripts/" + Path.GetFileName(file), file => file);
+                var files = ScriptOutputs(Path.Combine(root, ProjectPaths.Patch3DnpcScripts), Path.Combine(papyrus, ProjectPaths.Patch3DnpcOutput)).ToDictionary(file => "Scripts/" + Path.GetFileName(file), file => file);
                 AddNotices(root, files, dependencyNotices);
                 destination = Path.Combine(output, $"{ModInfo.BinaryName}-{version}-3DNPC.zip");
                 pending.Add((PrepareZip(destination, files, metadata, timestamp, includeManifest: false), destination));
