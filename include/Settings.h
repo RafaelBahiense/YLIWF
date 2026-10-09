@@ -27,6 +27,7 @@ namespace mod::settings {
     inline bool FollowerSandbox = false;
     inline bool FollowerCrossfire = false;
     inline bool FollowerHomes = false;
+    inline std::int32_t FollowDistance = 1;
     inline char PerkListBuffer[2048]{};
     inline bool Loaded = false;
     inline std::string SaveStatus;
@@ -35,6 +36,7 @@ namespace mod::settings {
     inline void (*SandboxCallback)() = nullptr;
     inline void (*CrossfireCallback)() = nullptr;
     inline void (*HomesCallback)() = nullptr;
+    inline void (*FollowDistanceCallback)() = nullptr;
     inline void (*EssentialCallback)() = nullptr;
     void Load(bool force = false);
     bool Save();

@@ -3,6 +3,8 @@
 #include "Settings.h"
 #include "Debug.h"
 #include "DebugRules.h"
+#include "FollowDistance.h"
+#include <array>
 #include <charconv>
 #include <unordered_set>
 
@@ -208,6 +210,20 @@ namespace {
             row.distanceUnavailable.empty() ? "Position unavailable." : row.distanceUnavailable.c_str());
     }
 
+    void RenderFollowerDistance(const mod::debug::Follower& row, const mod::debug::Snapshot& state) {
+        if (!row.distanceAvailable || row.aliasID == 1) return;
+        const bool disabled = !CanRequest(state, mod::debug::Action::Follow) || row.dead;
+        ImGuiMCP::Text("Follow distance%s:", row.individualDistance ? " (individual)" : "");
+        constexpr std::array labels{"Close##distance", "Normal##distance", "Far##distance"};
+        BeginDisabled(disabled);
+        for (int preset = 0; preset < static_cast<int>(labels.size()); ++preset) {
+            if (preset) ImGuiMCP::SameLine();
+            if (ImGuiMCP::RadioButton(labels[preset], row.followDistance == preset))
+                mod::follow_distance::Request(row.formID, static_cast<std::int32_t>(row.aliasID), preset, state.generation);
+        }
+        EndDisabled(disabled);
+    }
+
     void RenderFollowerRepairs(const mod::debug::Follower& row, const mod::debug::Snapshot& state) {
         if (!ImGuiMCP::CollapsingHeader("Diagnostics and repairs")) return;
         ImGuiMCP::Text("Slot %s (alias %u)", row.aliasName.c_str(), row.aliasID);
@@ -233,6 +249,7 @@ namespace {
         ImGuiMCP::Text("- %s%s", FollowerStatus(row), row.aliasID == 0 ? " (Primary)" : "");
         RenderFollowerPosition(row);
         RenderFollowerCommands(row, state);
+        RenderFollowerDistance(row, state);
         if (debug) RenderFollowerRepairs(row, state);
     }
 
@@ -455,6 +472,21 @@ void __stdcall mod::ui::RenderSettings() {
 
     ImGuiMCP::Spacing();
 
+    ImGuiMCP::SeparatorText("FOLLOWING DISTANCE");
+    constexpr std::array distanceLabels{"Close", "Normal", "Far"};
+    for (int preset = 0; preset < static_cast<int>(distanceLabels.size()); ++preset) {
+        if (preset) ImGuiMCP::SameLine();
+        if (StyledRadio(distanceLabels[preset], "", mod::settings::FollowDistance == preset)) {
+            mod::settings::FollowDistance = preset;
+            changed = true;
+            if (mod::settings::FollowDistanceCallback) mod::settings::FollowDistanceCallback();
+        }
+    }
+    if (ImGuiMCP::Button("Apply to all followers")) {
+        if (mod::settings::FollowDistanceCallback) mod::settings::FollowDistanceCallback();
+    }
+    HelpMarker("Selecting a preset or Apply to all replaces individual choices for the current party.\nEach follower also has their own distance control on Followers.\nChoices follow the actor and are stored in game saves; Save keeps the default for newly configured followers.\nPaths, combat and sandboxing may change actual spacing.");
+    ImGuiMCP::Spacing();
     ImGuiMCP::SeparatorText("FEATURES");
 
     {

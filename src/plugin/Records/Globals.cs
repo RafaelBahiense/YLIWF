@@ -8,6 +8,11 @@ internal static partial class FollowerPlugin
         mod.Globals.Add(CreateCurrentFollowerCount());
         mod.Globals.Add(CreateFollowerHomesEnabled());
         mod.Globals.Add(CreateFollowerSandboxEnabled());
+        mod.Globals.Add(new GlobalShort(FollowDistanceGlobalForm, SkyrimRelease.SkyrimSE)
+        {
+            EditorID = "YLIWF_FollowDistance",
+            Data = 1
+        });
     }
 
     private static GlobalShort CreateCanRecruitMore()

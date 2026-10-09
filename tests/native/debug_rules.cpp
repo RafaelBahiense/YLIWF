@@ -10,6 +10,7 @@
 #include "SettingsDefaults.h"
 #include "SettingsFile.h"
 #include "FollowerView.h"
+#include "FollowDistanceRules.h"
 
 #include <cassert>
 #include <iostream>
@@ -50,12 +51,32 @@ template <> struct fmt::formatter<TraceValue> : fmt::formatter<int> {
 
 int main() {
     {
+        using namespace mod::follow_distance;
+        for (int preset = 0; preset < 3; ++preset) {
+            const auto individual = Decode(Encode(preset, true), 1);
+            const auto party = Decode(Encode(preset, false), 1);
+            assert(individual.preset == preset && individual.individual);
+            assert(party.preset == preset && !party.individual);
+        }
+        assert(Decode(-1, 2).preset == 2 && !Decode(-1, 2).individual);
+        assert(Decode(42, -1).preset == 1);
+        // Global Far replaces a Close override; changing one actor afterward
+        // leaves the other actor's saved party-applied Far choice intact.
+        int first = Encode(0, true), second = Encode(1, true);
+        first = second = Encode(2, false);
+        assert(Decode(first, 1).preset == 2 && !Decode(first, 1).individual);
+        first = Encode(0, true);
+        assert(Decode(first, 1).preset == 0 && Decode(second, 1).preset == 2);
+        assert(Decode(second, 0).preset == 2); // Save choice wins over a different INI default.
+    }
+    {
         using namespace mod::settings_rules;
         assert(IniValue("[General]\r\n Value = 2 ; note\r\n[Debug]\r\nValue=1\r\n", "general", "value") == "2");
         assert(!IniValue("[Debug]\nValue=1\n", "General", "Value"));
         assert(IniValue(mod::settings_defaults::Ini, "General", "sPerkForms") == "");
         assert(ParseInteger(*IniValue(mod::settings_defaults::Ini, "General", "iMaxFollowers"), 1, 8) == 8);
         assert(ParseInteger(*IniValue(mod::settings_defaults::Ini, "General", "bFollowerHomes"), 0, 1) == 0);
+        assert(ParseInteger(*IniValue(mod::settings_defaults::Ini, "General", "iFollowDistance"), 0, 2) == 1);
         assert(ParseInteger(" 2 // comment", 0, 2) == 2);
         for (auto text : {"", "invalid", "1junk", "-1", "3", "9999999999999"}) assert(!ParseInteger(text, 0, 2));
         assert(!ParseInteger("2", 0, 1)); // Boolean options accept only zero or one.

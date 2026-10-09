@@ -180,11 +180,31 @@ try
     BuildReceipt.Write(root, BuildComponent.Plugin, BuildReceipt.CaptureInputs(root, BuildComponent.Plugin), [esp], BuildReceipt.PluginPath(esp));
     using (var loaded = SkyrimMod.CreateFromBinaryOverlay(esp, SkyrimRelease.SkyrimSE))
     {
-        Check(loaded.EnumerateMajorRecords().Count() == 62, "Record count changed");
+        Check(loaded.EnumerateMajorRecords().Count() == 67, "Record count changed");
         Check(loaded.ModHeader.Author == ModInfo.Identity.Author, "Plugin header did not use centralized author");
         var questKey = FormKey.Factory("0750BA:Skyrim.esm");
         var quest = loaded.Quests.Single(q => q.FormKey == questKey);
         Check(quest.EditorID == "DialogueFollower", "Wrong follower quest");
+        var distanceGlobal = FormKey.Factory("000993:" + ModInfo.PluginFile);
+        var distanceFaction = FormKey.Factory("000994:" + ModInfo.PluginFile);
+        Check(loaded.Factions.Single(faction => faction.FormKey == distanceFaction).Flags.HasFlag(Faction.FactionFlag.HiddenFromPC), "Distance marker is not hidden metadata");
+        Check(((IGlobalShortGetter)loaded.Globals.Single(global => global.FormKey == distanceGlobal)).Data == 1, "Distance does not default to Normal");
+        float[] minimumRadii = [128, 256, 512], maximumRadii = [192, 384, 768];
+        for (var preset = 0; preset < 3; ++preset)
+        {
+            var packageKey = new FormKey(mod.ModKey, (uint)(0x990 + preset));
+            var package = loaded.Packages.Single(p => p.FormKey == packageKey);
+            Check(package.PackageTemplate.FormKey == FormKey.Factory("0D530D:Skyrim.esm"), "Preset does not use the vanilla follow/wait template");
+            Check(((IPackageDataFloatGetter)package.Data[1]).Data == minimumRadii[preset] &&
+                ((IPackageDataFloatGetter)package.Data[2]).Data == maximumRadii[preset], "Preset follow radii are incorrect");
+            var conditions = package.Conditions.Cast<IConditionFloatGetter>().ToArray();
+            Check(conditions.Length == 2 && conditions[0].ComparisonValue == preset && conditions[1].ComparisonValue == preset + 3 &&
+                conditions[0].Flags.HasFlag(Condition.Flag.OR) && !conditions[1].Flags.HasFlag(Condition.Flag.OR) &&
+                conditions.All(condition => ((IGetFactionRankConditionDataGetter)condition.Data).Faction.Link.FormKey == distanceFaction),
+                "Distance packages do not select individual/party actor ranks independently");
+            Check(quest.Aliases.Where(alias => alias.ID != 1).All(alias => alias.PackageData.Count(p => p.FormKey == packageKey) == 1), "Human alias is missing a distance preset");
+            Check(!quest.Aliases.Single(alias => alias.ID == 1).PackageData.Any(p => p.FormKey == packageKey), "Distance preset affects the animal alias");
+        }
         var script = quest.VirtualMachineAdapter!.Scripts.Single(s => s.Name == "DialogueFollowerScript");
         Check(!script.Properties.Any(p => p.Name is "ExtraAliases" or "CanRecruitMore" or "CurrentFollowerCount"), "Native bindings leaked back into the vanilla facade");
         Check(((IScriptObjectPropertyGetter)script.Properties.Single(p => p.Name == "pPlayerFollowerCount")).Object.FormKey == FormKey.Factory("0BCC98:Skyrim.esm"), "Vanilla follower count binding changed");

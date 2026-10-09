@@ -70,7 +70,7 @@ configure_file(cmake/SettingsDefaults.h.in generated/SettingsDefaults.h @ONLY)
 set(PLUGIN_BINARY_NAME "${MOD_BINARY_NAME}")
 configure_file(cmake/plugin_info.cpp.in plugin_info.cpp @ONLY)
 add_library(mod SHARED
-  src/native/plugin.cpp src/native/Debug.cpp src/native/UI.cpp src/native/Settings.cpp src/native/Controller.cpp src/native/ControllerExecutor.cpp src/native/ControllerStorage.cpp
+  src/native/plugin.cpp src/native/Debug.cpp src/native/UI.cpp src/native/Settings.cpp src/native/Controller.cpp src/native/ControllerExecutor.cpp src/native/ControllerStorage.cpp src/native/FollowDistance.cpp
   include/PCH.h include/Debug.h include/DebugRules.h include/Refresh.h include/FollowerView.h include/UI.h include/Settings.h include/SettingsRules.h include/SettingsFile.h
   include/Party.h include/PartyRules.h include/Strings.h include/Controller.h include/ControllerRules.h include/CommandRules.h include/ControllerStorage.h include/ControllerState.h include/ControllerRuntime.h include/StateCodec.h include/ControllerExecutor.h include/ExecutorRules.h include/NativeLatent.h
   "${CMAKE_CURRENT_BINARY_DIR}/version.rc" "${CMAKE_CURRENT_BINARY_DIR}/plugin_info.cpp")

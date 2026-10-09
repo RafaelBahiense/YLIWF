@@ -113,6 +113,7 @@ namespace mod::settings {
         FollowerSandbox = ReadBoolean("General", "bFollowerSandbox");
         FollowerCrossfire = ReadBoolean("General", "bFollowerCrossfireProtection");
         FollowerHomes = ReadBoolean("General", "bFollowerHomes");
+        FollowDistance = ReadInteger("General", "iFollowDistance", 0, 2);
         mod::debug::OptionsEnabled = ReadBoolean("Debug", "bEnabled");
         mod::debug::SetLogging(ReadBoolean("Debug", "bFlowLogging"));
         mod::debug::Trace("Settings.Load", nullptr, force ? "forced" : "initial");
@@ -140,6 +141,7 @@ namespace mod::settings {
         writeInt("bFollowerSandbox", FollowerSandbox ? 1 : 0);
         writeInt("bFollowerCrossfireProtection", FollowerCrossfire ? 1 : 0);
         writeInt("bFollowerHomes", FollowerHomes ? 1 : 0);
+        writeInt("iFollowDistance", FollowDistance);
         ParsePerkListIntoSpecs(PerkListBuffer);
         BuildPerkListBuffer();
         write("General", "sPerkForms", PerkListBuffer);

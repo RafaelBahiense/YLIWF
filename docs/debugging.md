@@ -11,6 +11,15 @@ list. **Debug options** reveal installation diagnostics,
 IDs, empty slots, repairs, and actor inspection/recruitment. **Log mod flow** is
 independent; both switches default to off.
 
+**Settings → Following distance** selects Close, Normal or Far for human YLIWF
+followers. Selecting a preset or
+**Apply to all followers** replaces individual choices for the current roster.
+Each row on **Followers** also offers Close, Normal and Far for that actor alone.
+Choices are saved on the actor and survive save/load and primary-slot promotion;
+**Save** in Settings retains the default for newly configured followers.
+The animal alias is excluded. Normal uses the
+vanilla follow radii; pathfinding, combat and idle sandboxing can change actual spacing.
+
 Follow All and Wait All apply to unique living followers; Dismiss All requires
 confirmation and includes dead registrations. Group commands target the roster
 at submission and report verified results per follower. The animal is excluded.

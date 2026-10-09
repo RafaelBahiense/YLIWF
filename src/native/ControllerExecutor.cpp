@@ -8,6 +8,7 @@
 #include "Strings.h"
 #include "NativeLatent.h"
 #include "ExecutorRules.h"
+#include "FollowDistance.h"
 
 #include <atomic>
 #include <bit>
@@ -174,6 +175,7 @@ namespace mod::controller::executor {
                 const auto& context = ContextData();
                 if (context.currentFaction && (argument == 1 || (context.potentialFaction && actor->IsInFaction(context.potentialFaction))) && !actor->IsInFaction(context.currentFaction)) actor->AddToFaction(context.currentFaction, 0);
                 if (context.applyProtection) context.applyProtection(actor);
+                follow_distance::ApplyActor(actor);
                 const auto waiting = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kWaitingForPlayer);
                 if (argument == 0 || (waiting != 0 && waiting != 1)) actor->AsActorValueOwner()->SetActorValue(RE::ActorValue::kWaitingForPlayer, 0);
                 actor->EvaluatePackage(); return true;

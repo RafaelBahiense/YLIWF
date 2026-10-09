@@ -40,6 +40,7 @@ and their rationale.
   recruitment.
 - Set a fixed party limit or unlock slots through perks or Speech levels.
 - Assign follower homes and enable idle sandboxing.
+- Choose Close, Normal or Far following distance for the whole party or individual followers.
 - Configure essential status, friendly-fire protection, and crossfire protection.
 
 ## Diagnostics and repair

@@ -10,6 +10,9 @@ internal static partial class FollowerPlugin
 
     private static void AddPackages(SkyrimMod mod)
     {
+        mod.Packages.Add(CreateFollowDistancePackage(0x000990, "Close", 0, 128, 192));
+        mod.Packages.Add(CreateFollowDistancePackage(0x000991, "Normal", 1, 256, 384));
+        mod.Packages.Add(CreateFollowDistancePackage(0x000992, "Far", 2, 512, 768));
         mod.Packages.Add(CreateFollowerIdleSandboxPackage());
         mod.Packages.Add(CreateFollowerIdleSandbox01Package());
         mod.Packages.Add(CreateFollowerIdleSandbox02Package());

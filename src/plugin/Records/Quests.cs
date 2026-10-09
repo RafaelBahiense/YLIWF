@@ -478,6 +478,7 @@ internal static partial class FollowerPlugin
         followerAlias.Factions.Add(new FormLink<IFactionGetter>(SkyrimForm(0x0750B8)));
         followerAlias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000806)));
         followerAlias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000803)));
+        AddFollowDistancePackages(followerAlias);
         followerAlias.PackageData.Add(new FormLink<IPackageGetter>(SkyrimForm(0x05C84B)));
         followerAlias.VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null);
         dialogueFollowerQuest.Aliases.Add(followerAlias);
@@ -493,6 +494,7 @@ internal static partial class FollowerPlugin
         extraFollower01Alias.Factions.Add(new FormLink<IFactionGetter>(SkyrimForm(0x0750B8)));
         extraFollower01Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000806)));
         extraFollower01Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000004)));
+        AddFollowDistancePackages(extraFollower01Alias);
         extraFollower01Alias.PackageData.Add(new FormLink<IPackageGetter>(SkyrimForm(0x05C84B)));
         extraFollower01Alias.VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null);
         dialogueFollowerQuest.Aliases.Add(extraFollower01Alias);
@@ -508,6 +510,7 @@ internal static partial class FollowerPlugin
         extraFollower02Alias.Factions.Add(new FormLink<IFactionGetter>(SkyrimForm(0x0750B8)));
         extraFollower02Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000806)));
         extraFollower02Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000005)));
+        AddFollowDistancePackages(extraFollower02Alias);
         extraFollower02Alias.PackageData.Add(new FormLink<IPackageGetter>(SkyrimForm(0x05C84B)));
         extraFollower02Alias.VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null);
         dialogueFollowerQuest.Aliases.Add(extraFollower02Alias);
@@ -523,6 +526,7 @@ internal static partial class FollowerPlugin
         extraFollower03Alias.Factions.Add(new FormLink<IFactionGetter>(SkyrimForm(0x0750B8)));
         extraFollower03Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000806)));
         extraFollower03Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000006)));
+        AddFollowDistancePackages(extraFollower03Alias);
         extraFollower03Alias.PackageData.Add(new FormLink<IPackageGetter>(SkyrimForm(0x05C84B)));
         extraFollower03Alias.VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null);
         dialogueFollowerQuest.Aliases.Add(extraFollower03Alias);
@@ -538,6 +542,7 @@ internal static partial class FollowerPlugin
         extraFollower04Alias.Factions.Add(new FormLink<IFactionGetter>(SkyrimForm(0x0750B8)));
         extraFollower04Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000806)));
         extraFollower04Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000007)));
+        AddFollowDistancePackages(extraFollower04Alias);
         extraFollower04Alias.PackageData.Add(new FormLink<IPackageGetter>(SkyrimForm(0x05C84B)));
         extraFollower04Alias.VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null);
         dialogueFollowerQuest.Aliases.Add(extraFollower04Alias);
@@ -553,6 +558,7 @@ internal static partial class FollowerPlugin
         extraFollower05Alias.Factions.Add(new FormLink<IFactionGetter>(SkyrimForm(0x0750B8)));
         extraFollower05Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000806)));
         extraFollower05Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000008)));
+        AddFollowDistancePackages(extraFollower05Alias);
         extraFollower05Alias.PackageData.Add(new FormLink<IPackageGetter>(SkyrimForm(0x05C84B)));
         extraFollower05Alias.VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null);
         dialogueFollowerQuest.Aliases.Add(extraFollower05Alias);
@@ -568,6 +574,7 @@ internal static partial class FollowerPlugin
         extraFollower06Alias.Factions.Add(new FormLink<IFactionGetter>(SkyrimForm(0x0750B8)));
         extraFollower06Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000806)));
         extraFollower06Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000009)));
+        AddFollowDistancePackages(extraFollower06Alias);
         extraFollower06Alias.PackageData.Add(new FormLink<IPackageGetter>(SkyrimForm(0x05C84B)));
         extraFollower06Alias.VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null);
         dialogueFollowerQuest.Aliases.Add(extraFollower06Alias);
@@ -583,6 +590,7 @@ internal static partial class FollowerPlugin
         extraFollower07Alias.Factions.Add(new FormLink<IFactionGetter>(SkyrimForm(0x0750B8)));
         extraFollower07Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000806)));
         extraFollower07Alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(0x000003)));
+        AddFollowDistancePackages(extraFollower07Alias);
         extraFollower07Alias.PackageData.Add(new FormLink<IPackageGetter>(SkyrimForm(0x05C84B)));
         extraFollower07Alias.VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null);
         dialogueFollowerQuest.Aliases.Add(extraFollower07Alias);

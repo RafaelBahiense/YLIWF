@@ -51,6 +51,8 @@ namespace mod::debug {
         std::uint32_t aliasID = 0, formID = 0, baseID = 0, cellID = 0, packageID = 0;
         std::string aliasName, name, issues;
         std::string location = "Unknown", distanceUnavailable;
+        std::int32_t followDistance = 1;
+        bool individualDistance = false, distanceAvailable = true;
         std::optional<double> distanceMeters;
         bool dead = false, teammate = false, currentFaction = false, potentialFaction = false;
         bool loaded = false, essential = false, protectedActor = false, crossfire = false;

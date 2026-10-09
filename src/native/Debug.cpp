@@ -1,4 +1,5 @@
 #include "Debug.h"
+#include "FollowDistance.h"
 
 #include "DebugRules.h"
 #include "Controller.h"
@@ -96,6 +97,10 @@ namespace mod::debug {
             row.protectedActor = actor->IsProtected();
             row.crossfire = context.protectionSpell && actor->HasSpell(context.protectionSpell);
             row.waiting = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kWaitingForPlayer);
+            const auto distance = follow_distance::Read(actor);
+            row.followDistance = distance.preset;
+            row.individualDistance = distance.individual;
+            row.distanceAvailable = follow_distance::Available();
             CapturePosition(row, actor);
             return row;
         }

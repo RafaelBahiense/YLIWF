@@ -10,6 +10,7 @@
 #include "Debug.h"
 #include "Controller.h"
 #include "ControllerStorage.h"
+#include "FollowDistance.h"
 
 namespace {
     RE::TESGlobal* g_playerFollowerCount = nullptr;
@@ -17,6 +18,7 @@ namespace {
     RE::TESGlobal* g_currentFollowerCount = nullptr;
     RE::TESGlobal* g_followerSandbox = nullptr;
     RE::TESGlobal* g_followerHomes = nullptr;
+    RE::TESGlobal* g_followDistance = nullptr;
     RE::TESFaction* g_currentFollowerFaction = nullptr;
     RE::TESFaction* g_potentialFollowerFaction = nullptr;
     RE::TESQuest* g_dialogueFollower = nullptr;
@@ -56,6 +58,8 @@ namespace {
         g_currentFollowerCount = ResolveForm<RE::TESGlobal>(0x002, kRequiredPluginName, "YLIWF_CurrentFollowerCount");
         g_followerSandbox = ResolveForm<RE::TESGlobal>(0x805, kRequiredPluginName, "YLIWF_FollowerSandbox");
         g_followerHomes = ResolveForm<RE::TESGlobal>(0x986, kRequiredPluginName, "YLIWF_FollowerHomes");
+        g_followDistance = ResolveForm<RE::TESGlobal>(0x993, kRequiredPluginName, "YLIWF_FollowDistance");
+        mod::follow_distance::Configure(ResolveForm<RE::TESFaction>(0x994, kRequiredPluginName, "YLIWF_FollowDistanceChoice"));
         g_friendlyFireSpell = ResolveForm<RE::SpellItem>(0x800, kRequiredPluginName, "YLIWF_CompanionsSafeSpell");
         mod::debug::Configure({g_dialogueFollower, g_currentFollowerFaction, g_potentialFollowerFaction, g_friendlyFireSpell,
             g_playerFollowerCount, g_currentFollowerCount, g_canRecruitMore, GetEffectiveFollowerCap,
@@ -124,6 +128,11 @@ namespace {
         std::scoped_lock lock(mod::settings::Mutex);
         mod::debug::Trace("Native.ApplyHomes", nullptr, mod::settings::FollowerHomes ? "on" : "off");
         if (g_followerHomes) g_followerHomes->value = mod::settings::FollowerHomes ? 1.0f : 0.0f;
+    }
+    void ApplyFollowDistance() {
+        std::scoped_lock lock(mod::settings::Mutex);
+        if (g_followDistance) g_followDistance->value = static_cast<float>(mod::settings::FollowDistance);
+        mod::follow_distance::ApplyAll();
     }
 
     bool HasPerkFromSpec(const std::string& file, std::uint32_t localID) {
@@ -419,6 +428,7 @@ namespace {
         DeferSyncParty();
         mod::debug::GameLoaded();
         mod::controller::GameLoaded();
+        mod::follow_distance::Loaded();
     }
 
     void OnMessage(SKSE::MessagingInterface::Message* msg) {
@@ -450,6 +460,7 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
     mod::settings::FriendlyFireCallback = []() { QueueGameTask(ApplyFriendlyFire); };
     mod::settings::SandboxCallback = []() { QueueGameTask(ApplySandbox); };
     mod::settings::HomesCallback = []() { QueueGameTask(ApplyHomes); };
+    mod::settings::FollowDistanceCallback = []() { QueueGameTask(ApplyFollowDistance); };
     mod::settings::EssentialCallback = []() { DeferSyncParty(); };
     mod::settings::CrossfireCallback = []() { DeferSyncParty(); };
 
