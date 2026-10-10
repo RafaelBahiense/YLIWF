@@ -17,6 +17,10 @@ namespace mod::serana_rules {
                !dialogueBlocked;
     }
 
+    inline bool CanReceiveCombatProtection(const ControllerState& value) {
+        return value.following && !value.dismissed && !value.locked && value.canFollow;
+    }
+
     inline std::optional<std::array<bool, 3>> DistanceFlags(yliwf::sdk::FollowDistance distance) {
         using yliwf::sdk::FollowDistance;
         if (static_cast<unsigned>(distance) > 2)

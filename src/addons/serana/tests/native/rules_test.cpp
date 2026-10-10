@@ -114,6 +114,23 @@ namespace {
         Check(!DistanceFlags(following, static_cast<FollowDistance>(3)), "Invalid distance accepted");
     }
 
+    void CheckCombatProtectionRestrictions() {
+        using mod::serana_rules::CanReceiveCombatProtection;
+        auto controller = FollowingSerana();
+        Check(CanReceiveCombatProtection(controller), "Following Serana cannot receive combat protection");
+        controller.waiting = true;
+        Check(CanReceiveCombatProtection(controller), "Waiting removes combat protection");
+        controller.locked = true;
+        Check(!CanReceiveCombatProtection(controller), "Protection bypasses Dawnguard quest ownership");
+        controller.locked = false;
+        controller.canFollow = false;
+        Check(!CanReceiveCombatProtection(controller), "Protection bypasses CanFollow");
+        Check(!CanReceiveCombatProtection(DismissedSerana()), "Dismissed Serana retains protection");
+        controller = FollowingSerana();
+        controller.dismissed = true;
+        Check(!CanReceiveCombatProtection(controller), "Inconsistent controller receives protection");
+    }
+
     void CheckFollowDistanceRestrictions() {
         using mod::serana_rules::DistanceFlags;
 
@@ -141,6 +158,7 @@ int main() {
     CheckDialogueRecruitmentRestrictions();
     CheckFollowDistancePresets();
     CheckFollowDistanceRestrictions();
+    CheckCombatProtectionRestrictions();
 
     std::cout << "Serana command, quest restriction, recruitment, and distance tests passed.\n";
 }

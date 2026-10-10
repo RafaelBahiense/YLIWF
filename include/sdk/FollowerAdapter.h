@@ -67,6 +67,9 @@ namespace yliwf::sdk {
         // recruited through its owner's dialogue, ignoring only the vanilla
         // one-follower limit? Return 1 only when the owner's restrictions allow it.
         std::uint32_t (*canRecruitThroughDialogue)(void*, ActorID) = nullptr;
+        // Optional v1 extension. Read-only, main thread: may the host apply its
+        // combat-protection ability? Does not grant essential status or ownership.
+        std::uint32_t (*canReceiveCombatProtection)(void*, ActorID) = nullptr;
     };
 
     inline constexpr std::uint32_t BaseAdapterSize = offsetof(Adapter, setFollowDistance);
@@ -80,6 +83,12 @@ namespace yliwf::sdk {
         return adapter.size >=
                    offsetof(Adapter, canRecruitThroughDialogue) + sizeof(adapter.canRecruitThroughDialogue) &&
                adapter.canRecruitThroughDialogue;
+    }
+
+    inline bool HasCombatProtection(const Adapter& adapter) {
+        return adapter.size >=
+                   offsetof(Adapter, canReceiveCombatProtection) + sizeof(adapter.canReceiveCombatProtection) &&
+               adapter.canReceiveCombatProtection;
     }
 
     struct API {
@@ -103,7 +112,8 @@ namespace yliwf::sdk {
     using QueryAPI = const API* (*)(std::uint32_t version);
     static_assert(std::is_standard_layout_v<Adapter> && std::is_standard_layout_v<API>);
     static_assert(sizeof(void*) == 8 && sizeof(FollowerState) == 204 && BaseAdapterSize == 56 &&
-                      offsetof(Adapter, canRecruitThroughDialogue) == 64 && sizeof(Adapter) == 72 &&
+                      offsetof(Adapter, canRecruitThroughDialogue) == 64 &&
+                      offsetof(Adapter, canReceiveCombatProtection) == 72 && sizeof(Adapter) == 80 &&
                       BaseAPISize == 24 && sizeof(API) == 32,
                   "Follower adapter API v1 requires the standard x64 structure layout");
 }

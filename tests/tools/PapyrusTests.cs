@@ -68,6 +68,8 @@ internal static class PapyrusTests
         var previousCulture = CultureInfo.CurrentCulture;
         try
         {
+            // Turkish casing exposes culture-dependent identifier handling (the Turkish-I problem).
+            // https://learn.microsoft.com/en-us/dotnet/standard/base-types/best-practices-strings#ordinal-string-operations
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("tr-TR");
             Check(SourcePreparation.ScriptName("; Scriptname LineComment\r\n;/ Scriptname BlockComment /;\r\n{Scriptname Documentation}\r\nSCRIPTNAME Actor extends Form\r\n") == "Actor", "Script header parsing depends on locale or includes comments");
             Fails(() => SourcePreparation.ScriptName("Scriptname Actor\nScriptname Other\n"));

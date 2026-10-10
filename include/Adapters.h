@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+namespace RE {
+    class SpellItem;
+}
+
 namespace mod::adapters {
     using Completion = std::function<void(bool, std::string)>;
 
@@ -20,6 +24,8 @@ namespace mod::adapters {
     bool Owns(yliwf::sdk::ActorID actor);
     bool HasFollowers();
     bool CanRecruitThroughDialogue(yliwf::sdk::ActorID actor);
+    void ConfigureCombatProtection(RE::SpellItem* ability);
+    void ApplyCombatProtection();
     void ApplyFollowDistance(bool replaceAll = false);
     bool SetFollowDistance(yliwf::sdk::ActorID actor, std::int32_t preset);
     bool Request(yliwf::sdk::ActorID actor, yliwf::sdk::Command command, Completion completion);

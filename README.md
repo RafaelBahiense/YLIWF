@@ -56,7 +56,7 @@ unless a dedicated add-on supports them.
 Install optional add-on ZIPs alongside the matching core release.
 
 - **[Serana](docs/follower-adapters.md#serana-example)** (`-Serana.zip`):
-  Makes Serana available to YLIWF's follower controls when her Dawnguard quests allow them.
+  Makes Serana available to YLIWF's follower controls and combat protection when her Dawnguard quests allow them.
 
 ## Configuration
 

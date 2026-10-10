@@ -10,8 +10,9 @@ See the [available add-ons](../README.md#add-ons).
 Active followers appear in Followers and participate in party commands when
 allowed. They retain their owner's state, aliases and recruitment.
 
-They do not consume YLIWF slots or receive its packages, protection, homes,
-timers or primary promotion. The vanilla presence flag includes active external
+They do not consume YLIWF slots or receive its packages, essential-status changes,
+homes, timers or primary promotion. Combat protection requires adapter opt-in.
+The vanilla presence flag includes active external
 followers; YLIWF's count and recruitment limit remain separate.
 Duplicate claims or an actor already in YLIWF aliases disable commands.
 
@@ -37,6 +38,7 @@ const auto registration = api->registerAdapter(&adapter);
 | `start` | Recheck eligibility; return `Rejected` without effects, `Completed` after finishing, or `Pending` |
 | `setFollowDistance` (optional) | Apply Close/Normal/Far synchronously, return 1 on success, preserve follow/wait state and respect restrictions |
 | `canRecruitThroughDialogue` (optional) | Read-only: return 1 for an inactive actor eligible for the owner's recruitment dialogue, ignoring only the vanilla one-follower limit |
+| `canReceiveCombatProtection` (optional) | Read-only: return 1 when the host may apply its crossfire-protection ability; respect quest restrictions |
 
 Callbacks run on the main thread: keep them quick, nonblocking and exception-free.
 Pointers and context must remain valid until process exit; no hot unloading.
@@ -45,8 +47,9 @@ No STL/engine objects, allocation ownership or exceptions cross it.
 Invalid versions, tables, IDs, states and capabilities are rejected.
 
 The mandatory table prefixes are `BaseAPISize` and `BaseAdapterSize`.
-Optional callbacks are `stateChanged`, `setFollowDistance` and `canRecruitThroughDialogue`.
-Use `CanNotifyState`, `HasFollowDistance` and `HasRecruitmentEligibility` before
+Optional callbacks are `stateChanged`, `setFollowDistance`, `canRecruitThroughDialogue`
+and `canReceiveCombatProtection`.
+Use `CanNotifyState`, `HasFollowDistance`, `HasRecruitmentEligibility` and `HasCombatProtection` before
 accessing optional callbacks.
 
 Call `stateChanged(registration)` after external state changes. It is thread-safe;
@@ -75,6 +78,11 @@ Blocked followers retain a global choice for later; their individual controls
 are disabled. Callbacks must recheck eligibility before modifying state.
 
 ## Commands and saves
+
+Crossfire protection uses the core setting and ability for eligible living
+followers. The host removes it on dismissal, restriction or disabling the setting,
+and reconciles saved abilities on load. It does not change essential flags.
+Player friendly-fire protection also covers player teammates.
 
 The host queues at most 16 requests, one outstanding per actor, and serializes
 controller calls. Eligibility is checked again at dispatch.
@@ -110,6 +118,9 @@ other changes. Events are hints, not proof Papyrus has finished.
 Distance sets exactly one of `FollowDistanceClose`, `FollowDistanceMedium`
 or `FollowDistanceFar`, after validating all three. AI reevaluates only on change.
 Blocked/inactive controllers wait until eligible.
+
+Combat protection applies while following or waiting with `CanFollow` and no
+`LockedIn` restriction. Quest, location, combat and death events refresh eligibility.
 
 Replacement scripts must preserve the controller's behavior as well as its
 interface; validate compatibility in game.

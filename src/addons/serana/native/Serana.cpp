@@ -98,6 +98,23 @@ namespace {
                    : 0u;
     }
 
+    std::uint32_t CanReceiveCombatProtection(void*, ActorID actor) {
+        FollowerState state;
+        if (!Inspect(nullptr, actor, &state) || !Supports(state, Command::Follow))
+            return 0;
+        const auto object = papyrus::Bound(mentalModel, Script);
+        const auto following = papyrus::Boolean(object, "IsFollowing");
+        const auto dismissed = papyrus::Boolean(object, "IsDismissed");
+        const auto locked = papyrus::Boolean(object, "LockedIn");
+        const auto canFollow = papyrus::Boolean(object, "CanFollow");
+        if (!following || !dismissed || !locked || !canFollow)
+            return 0;
+        return mod::serana_rules::CanReceiveCombatProtection(
+                   {.following = *following, .dismissed = *dismissed, .locked = *locked, .canFollow = *canFollow})
+                   ? 1u
+                   : 0u;
+    }
+
     class Completion final : public RE::BSScript::IStackCallbackFunctor {
     public:
         Completion(RequestID request, ActorID actor, Command command)
@@ -185,7 +202,9 @@ namespace {
 
     class StateEvents final : public RE::BSTEventSink<RE::TESQuestStageEvent>,
                               public RE::BSTEventSink<RE::TESQuestStartStopEvent>,
-                              public RE::BSTEventSink<RE::TESActorLocationChangeEvent> {
+                              public RE::BSTEventSink<RE::TESActorLocationChangeEvent>,
+                              public RE::BSTEventSink<RE::TESCombatEvent>,
+                              public RE::BSTEventSink<RE::TESDeathEvent> {
         static bool DawnguardQuest(RE::FormID id) {
             return id && mentalModel && (id & 0xFF000000) == (mentalModel->GetFormID() & 0xFF000000);
         }
@@ -211,6 +230,20 @@ namespace {
                 NotifyState();
             return RE::BSEventNotifyControl::kContinue;
         }
+
+        RE::BSEventNotifyControl ProcessEvent(const RE::TESCombatEvent* event,
+                                              RE::BSTEventSource<RE::TESCombatEvent>*) override {
+            if (event && event->actor.get() == serana)
+                NotifyState();
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
+        RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* event,
+                                              RE::BSTEventSource<RE::TESDeathEvent>*) override {
+            if (event && event->actorDying.get() == serana)
+                NotifyState();
+            return RE::BSEventNotifyControl::kContinue;
+        }
     };
 
     void OnMessage(SKSE::MessagingInterface::Message* message) {
@@ -233,7 +266,8 @@ namespace {
                                   Inspect,
                                   Start,
                                   SetFollowDistance,
-                                  CanRecruitThroughDialogue};
+                                  CanRecruitThroughDialogue,
+                                  CanReceiveCombatProtection};
             registration = host->registerAdapter(&adapter);
             if (!registration)
                 SKSE::log::warn("Serana adapter registration rejected");
@@ -249,6 +283,8 @@ namespace {
                 events->AddEventSink<RE::TESQuestStageEvent>(&stateEvents);
                 events->AddEventSink<RE::TESQuestStartStopEvent>(&stateEvents);
                 events->AddEventSink<RE::TESActorLocationChangeEvent>(&stateEvents);
+                events->AddEventSink<RE::TESCombatEvent>(&stateEvents);
+                events->AddEventSink<RE::TESDeathEvent>(&stateEvents);
             }
         }
     }

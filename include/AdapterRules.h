@@ -16,6 +16,10 @@ namespace mod::adapter_rules {
                adapter.name && *adapter.name && adapter.enumerate && adapter.inspect && adapter.start;
     }
 
+    inline bool CombatProtection(bool enabled, State state, bool eligible, bool dead, bool nativeOwned) {
+        return enabled && eligible && !dead && !nativeOwned && (state == State::Following || state == State::Waiting);
+    }
+
     // A timed-out call remains quarantined until its late acknowledgement or a
     // save load. It must not be issued again while its effects are uncertain.
     struct Ticket {

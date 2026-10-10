@@ -26,6 +26,8 @@ namespace mod::adapters {
         adapter_rules::Requests requests;
         std::map<RequestID, Completion> completions;
         bool loaded = false;
+        RE::SpellItem* protectionAbility = nullptr;
+        std::unordered_set<ActorID> protectedActors;
         std::unordered_set<ActorID> knownOwners;
         std::unordered_set<ActorID> knownRecruitable;
         bool knownPresence = false;
@@ -36,6 +38,37 @@ namespace mod::adapters {
         bool MainThread() {
             auto* main = RE::Main::GetSingleton();
             return main && main->threadID == GetCurrentThreadId();
+        }
+
+        std::vector<ActorID> EnumeratedActors() {
+            std::vector<ActorID> result;
+            for (const auto& provider : providers) {
+                std::array<ActorID, 256> actors{};
+                const auto count = provider.api.enumerate(provider.api.context, actors.data(),
+                                                          static_cast<std::uint32_t>(actors.size()));
+                if (count > actors.size()) {
+                    logger::warn("Follower adapter {} exceeded enumeration capacity", provider.id);
+                    continue;
+                }
+                for (std::uint32_t i = 0; i < count; ++i)
+                    if (actors[i] && std::ranges::find(result, actors[i]) == result.end() &&
+                        RE::TESForm::LookupByID<RE::Actor>(actors[i]))
+                        result.push_back(actors[i]);
+            }
+            return result;
+        }
+
+        bool NativeOwned(ActorID actor) {
+            const auto* quest = controller::detail::GetContext().quest;
+            if (!quest)
+                return false;
+            for (auto* alias : quest->aliases) {
+                const auto* reference = skyrim_cast<RE::BGSRefAlias*>(alias);
+                const auto* occupant = reference ? reference->GetActorReference() : nullptr;
+                if (occupant && occupant->GetFormID() == actor)
+                    return true;
+            }
+            return false;
         }
 
         std::optional<Follower> Inspect(ActorID actor, bool annotatePending = true) {
@@ -108,6 +141,7 @@ namespace mod::adapters {
             if (remove) {
                 requests.Remove(adapter, id);
                 Inspect(actor, false);  // Dismissal can immediately make dialogue recruitment eligible again.
+                ApplyCombatProtection();
             }
             if (completion)
                 completion(success, std::move(reason));
@@ -189,6 +223,7 @@ namespace mod::adapters {
                     return;
                 queuedChanges.erase(adapter);
                 auto current = Observe();
+                ApplyCombatProtection();
                 if (current == observed)
                     return;
                 observed = std::move(current);
@@ -208,25 +243,10 @@ namespace mod::adapters {
 
     std::vector<Follower> Followers(bool annotatePending) {
         std::vector<Follower> result;
-        std::vector<ActorID> seen;
-        for (const auto& provider : providers) {
-            std::array<ActorID, 256> actors{};
-            const auto count =
-                provider.api.enumerate(provider.api.context, actors.data(), static_cast<std::uint32_t>(actors.size()));
-            if (count > actors.size()) {
-                logger::warn("Follower adapter {} exceeded enumeration capacity", provider.id);
-                continue;
-            }
-            for (std::uint32_t i = 0; i < count; ++i) {
-                if (!actors[i] || std::ranges::find(seen, actors[i]) != seen.end())
-                    continue;
-                if (!RE::TESForm::LookupByID<RE::Actor>(actors[i]))
-                    continue;
-                seen.push_back(actors[i]);
-                auto follower = Inspect(actors[i], annotatePending);
-                if (follower && follower->state.state != State::Inactive)
-                    result.push_back(std::move(*follower));
-            }
+        for (const auto actor : EnumeratedActors()) {
+            auto follower = Inspect(actor, annotatePending);
+            if (follower && follower->state.state != State::Inactive)
+                result.push_back(std::move(*follower));
         }
         return result;
     }
@@ -242,6 +262,7 @@ namespace mod::adapters {
         std::scoped_lock lock(settings::Mutex);
         if (!MainThread())
             return knownPresence;
+        ApplyCombatProtection();
         for (const auto& follower : Followers()) {
             const auto* actor = RE::TESForm::LookupByID<RE::Actor>(follower.actor);
             if (actor && !actor->IsDead() &&
@@ -261,6 +282,50 @@ namespace mod::adapters {
         if (MainThread())
             Inspect(actor);
         return knownRecruitable.contains(actor);
+    }
+
+    void ConfigureCombatProtection(RE::SpellItem* ability) {
+        protectionAbility = ability;
+    }
+
+    void ApplyCombatProtection() {
+        std::scoped_lock lock(settings::Mutex);
+        if (!loaded || !MainThread() || !protectionAbility)
+            return;
+        auto candidates = EnumeratedActors();
+        for (const auto actor : protectedActors)
+            if (std::ranges::find(candidates, actor) == candidates.end())
+                candidates.push_back(actor);
+        for (const auto id : candidates) {
+            auto* actor = RE::TESForm::LookupByID<RE::Actor>(id);
+            if (!actor || actor == RE::PlayerCharacter::GetSingleton())
+                continue;
+            if (NativeOwned(id)) {
+                // The native roster controls this actor's ability, even with conflicting claims.
+                protectedActors.erase(id);
+                continue;
+            }
+            const auto follower = Inspect(id, false);
+            bool eligible = false;
+            if (follower && HasCombatProtection(providers[follower->adapter - 1].api)) {
+                const auto& provider = providers[follower->adapter - 1];
+                eligible = provider.api.canReceiveCombatProtection(provider.api.context, id) == 1;
+            }
+            const bool want = adapter_rules::CombatProtection(settings::FollowerCrossfire,
+                                                              follower ? follower->state.state : State::Unavailable,
+                                                              eligible, actor->IsDead(), false);
+            if (actor->HasSpell(protectionAbility) != want) {
+                if (want)
+                    actor->AddSpell(protectionAbility);
+                else
+                    actor->RemoveSpell(protectionAbility);
+                debug::Trace("Native.AdapterCombatProtection", actor, want ? "added" : "removed");
+            }
+            if (want)
+                protectedActors.insert(id);
+            else
+                protectedActors.erase(id);
+        }
     }
 
     void ApplyFollowDistance(bool replaceAll) {
@@ -393,10 +458,12 @@ namespace mod::adapters {
         knownPresence = false;
         observed.clear();
         queuedChanges.clear();
+        protectedActors.clear();
     }
 
     void GameLoaded() {
         loaded = true;
+        ApplyCombatProtection();
         ApplyFollowDistance();
         observed = Observe();
         HasFollowers();

@@ -73,6 +73,7 @@ namespace {
             ResolveForm<RE::TESFaction>(0x994, kRequiredPluginName, mod::record_names::FollowDistanceChoice));
         g_friendlyFireSpell =
             ResolveForm<RE::SpellItem>(0x800, kRequiredPluginName, mod::record_names::ProtectionSpell);
+        mod::adapters::ConfigureCombatProtection(g_friendlyFireSpell);
         mod::debug::Configure(
             {g_dialogueFollower, g_currentFollowerFaction, g_potentialFollowerFaction, g_friendlyFireSpell,
              g_playerFollowerCount, g_currentFollowerCount, g_canRecruitMore, GetEffectiveFollowerCap,
@@ -320,6 +321,7 @@ namespace {
     void SyncParty(bool pull) {
         std::scoped_lock lock(mod::settings::Mutex);
         mod::debug::Trace("Native.SyncParty.begin", nullptr, pull ? "pull=true" : "pull=false");
+        mod::adapters::ApplyCombatProtection();
         if (!g_dialogueFollower)
             return;
         auto* player = RE::PlayerCharacter::GetSingleton();

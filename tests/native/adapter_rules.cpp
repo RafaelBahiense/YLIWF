@@ -9,7 +9,8 @@ namespace {
     using mod::adapter_rules::Valid;
 
     static_assert(sizeof(void*) == 8 && sizeof(FollowerState) == 204 && BaseAdapterSize == 56 &&
-                  offsetof(Adapter, canRecruitThroughDialogue) == 64 && sizeof(Adapter) == 72 && BaseAPISize == 24 &&
+                  offsetof(Adapter, canRecruitThroughDialogue) == 64 &&
+                  offsetof(Adapter, canReceiveCombatProtection) == 72 && sizeof(Adapter) == 80 && BaseAPISize == 24 &&
                   sizeof(API) == 32);
 
     void Check(bool condition, const char* message) {
@@ -28,6 +29,7 @@ namespace {
         adapter.start = [](void*, ActorID, Command, RequestID, char*, std::uint32_t) { return StartResult::Pending; };
         adapter.setFollowDistance = [](void*, ActorID, FollowDistance) { return 1u; };
         adapter.canRecruitThroughDialogue = [](void*, ActorID) { return 1u; };
+        adapter.canReceiveCombatProtection = [](void*, ActorID) { return 1u; };
         return adapter;
     }
 
@@ -44,15 +46,21 @@ namespace {
         Check(!Valid(Adapter{}), "Incomplete adapter accepted");
 
         auto adapter = ValidAdapter();
-        Check(HasFollowDistance(adapter) && HasRecruitmentEligibility(adapter), "Optional callbacks unavailable");
+        Check(HasFollowDistance(adapter) && HasRecruitmentEligibility(adapter) && HasCombatProtection(adapter),
+              "Optional callbacks unavailable");
+
+        adapter.size = offsetof(Adapter, canReceiveCombatProtection);
+        Check(HasFollowDistance(adapter) && HasRecruitmentEligibility(adapter) && !HasCombatProtection(adapter),
+              "Recruitment v1 table exposes a missing protection tail");
+        Check(Valid(adapter), "Recruitment v1 table rejected after extension");
 
         adapter.size = offsetof(Adapter, canRecruitThroughDialogue);
-        Check(HasFollowDistance(adapter) && !HasRecruitmentEligibility(adapter),
+        Check(HasFollowDistance(adapter) && !HasRecruitmentEligibility(adapter) && !HasCombatProtection(adapter),
               "Distance-only v1 table lost its callback or exposes a missing recruitment tail");
         Check(Valid(adapter), "Valid version-one adapter rejected");
 
         adapter.size = BaseAdapterSize;
-        Check(!HasFollowDistance(adapter) && !HasRecruitmentEligibility(adapter),
+        Check(!HasFollowDistance(adapter) && !HasRecruitmentEligibility(adapter) && !HasCombatProtection(adapter),
               "Original v1 table exposes optional callbacks");
         Check(Valid(adapter), "Original v1 adapter rejected after extension");
 
@@ -71,6 +79,20 @@ namespace {
         following.commands = AllCommands;
         following.commands |= 128;
         Check(!Supports(following, Command::Follow), "Invalid capability bits accepted");
+    }
+
+    void CheckCombatProtectionOwnership() {
+        using mod::adapter_rules::CombatProtection;
+        Check(CombatProtection(true, State::Following, true, false, false) &&
+                  CombatProtection(true, State::Waiting, true, false, false),
+              "Active eligible followers do not receive protection");
+        Check(!CombatProtection(false, State::Following, true, false, false), "Disabled protection remains active");
+        Check(!CombatProtection(true, State::Inactive, true, false, false) &&
+                  !CombatProtection(true, State::Unavailable, true, false, false),
+              "Dismissed or conflicting followers retain protection");
+        Check(!CombatProtection(true, State::Following, false, false, false), "Provider opt-out ignored");
+        Check(!CombatProtection(true, State::Following, true, true, false), "Dead actor receives protection");
+        Check(!CombatProtection(true, State::Following, true, false, true), "Adapter changes native-owned protection");
     }
 
     void CheckRequestOwnershipAndQuarantine() {
@@ -106,6 +128,7 @@ int main() {
     CheckHostNotificationCompatibility();
     CheckAdapterTableCompatibility();
     CheckInvalidCapabilityBits();
+    CheckCombatProtectionOwnership();
     CheckRequestOwnershipAndQuarantine();
 
     std::cout << "Adapter ABI, capabilities, ownership, quarantine, and load-generation tests passed.\n";
