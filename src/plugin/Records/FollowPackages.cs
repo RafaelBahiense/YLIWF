@@ -40,7 +40,7 @@ internal static partial class FollowerPlugin
             Data = new GetFactionRankConditionData { Faction = { Link = { FormKey = FollowDistanceFactionForm } } },
             ComparisonValue = preset + 3
         });
-        PackageDataTarget PlayerTarget() => new()
+        static PackageDataTarget PlayerTarget() => new()
         {
             Type = PackageDataTarget.Types.SingleRef,
             Target = new PackageTargetSpecificReference { Reference = new FormLink<IPlacedGetter>(PlayerReferenceForm) }
@@ -68,6 +68,8 @@ internal static partial class FollowerPlugin
     private static void AddFollowDistancePackages(QuestAlias alias)
     {
         foreach (var id in new uint[] { 0x000990, 0x000991, 0x000992 })
+        {
             alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(id)));
+        }
     }
 }

@@ -2,6 +2,14 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Lint C# and C++",
+            "type": "process",
+            "command": "powershell",
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/lint.ps1"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": ["$msCompile", "$gcc"]
+        },
+        {
             "label": "Build release",
             "type": "process",
             "command": "powershell",

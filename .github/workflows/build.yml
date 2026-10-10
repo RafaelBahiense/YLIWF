@@ -67,4 +67,7 @@ jobs:
       - name: Compile, test, and generate ESP
         shell: powershell
         run: ./build.ps1 -Target Verify
+      - name: Lint C# and C++
+        shell: powershell
+        run: ./lint.ps1 -NativeAnalysis
       # Game/Creation Kit import sources are external inputs.

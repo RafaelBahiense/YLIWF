@@ -1,5 +1,7 @@
 using System.Text.Json;
 
+namespace Yliwf;
+
 // Shared by plugin authoring and build tools; embedded so commands also work outside the repo.
 public sealed record ModIdentity(string DisplayName, string ShortName, string PluginFile, string BinaryName, string ScriptPrefix, string Author, string Version)
 {

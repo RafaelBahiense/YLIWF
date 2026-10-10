@@ -62,6 +62,8 @@ namespace {
                 slot->occupied = true;
                 slot->dead = false;
             } else if (effect == Effect::Clear) {
+                if (!slot)
+                    return false;
                 slot->actor = 0;
                 slot->occupied = false;
                 slot->dead = false;
@@ -115,10 +117,19 @@ namespace {
             return Execute(Build(slots, {}, For(operation, actor)));
         }
     };
-}
 
-int main() {
-    {
+    static_assert(mod::command_rules::Capacity == 16);
+    static_assert(static_cast<int>(mod::command_rules::State::Verified) == 4 &&
+                  static_cast<int>(mod::command_rules::State::Failed) == 5);
+
+    void TestClearRejectsMissingAlias() {
+        Game game;
+        Plan invalid;
+        invalid.Add(Effect::Clear, 999, 200);
+        assert(!game.Execute(invalid));
+    }
+
+    void TestVersionOneSaveLayout() {
         using namespace mod::controller::storage;
         // Fixed fixture for the current YLIWF co-save format (version one), independent of the encoder.
         // This checks save-format stability; it is not an SFF/YLIF migration fixture.
@@ -149,12 +160,18 @@ int main() {
                                Operation::ReservedPop, Operation::ReservedAddExtra, Operation::ReservedClearDead})
             assert(!SupportedOperation(operation) && !Build({}, {}, {.operation = operation}).accepted);
     }
-    {
+
+    void TestEmptySaveRoundTrip() {
         using namespace mod::controller::storage;
         State state;
         assert(ValidState(state));
         State decoded;
         assert(DecodeState(EncodeState(state), decoded) && decoded == state);
+    }
+
+    mod::controller::storage::State SavedEngineState() {
+        using namespace mod::controller::storage;
+        State state;
         // Save at an accepted engine call: loading must preserve its phase and offset.
         state.ticket = 7;
         state.sequence = 10;
@@ -170,8 +187,22 @@ int main() {
         state.callers = {{10, 42, 300, "DialogueFollowerScript", "DismissFollower"}};
         state.sequence = 11;
         state.queue = {{11, Operation::Follow, 400, -1, 0, 1, 0}};
+        return state;
+    }
+
+    void TestPendingEngineCallRoundTrip() {
+        using namespace mod::controller::storage;
+        auto state = SavedEngineState();
+        State decoded;
         const auto bytes = EncodeState(state);
         assert(!bytes.empty() && DecodeState(bytes, decoded) && decoded == state);
+    }
+
+    void TestSaveRejectsMalformedData() {
+        using namespace mod::controller::storage;
+        auto state = SavedEngineState();
+        State decoded;
+        const auto bytes = EncodeState(state);
         // Every truncation and trailing data is rejected without replacing current state.
         for (std::size_t size = 0; size < bytes.size(); ++size) {
             State sentinel = state;
@@ -200,6 +231,12 @@ int main() {
         for (std::size_t i = 32; i < 36; ++i)
             oversized[i] = 0xFF;
         assert(!DecodeState(oversized, decoded));
+    }
+
+    void TestSaveHandleRemappingIsTransactional() {
+        using namespace mod::controller::storage;
+        auto state = SavedEngineState();
+        State decoded;
         auto remapped = state;
         assert(RemapState(remapped, [](std::uint64_t& handle) {
             handle += 1000;
@@ -218,11 +255,22 @@ int main() {
         auto optionalSpeaker = state;
         assert(RemapState(optionalSpeaker, [](std::uint64_t& handle) { return handle != 100; }) &&
                !optionalSpeaker.speaker);
+    }
+
+    void TestSaveClearsUITickets() {
+        using namespace mod::controller::storage;
+        auto state = SavedEngineState();
         auto checkpoint = state;
         checkpoint.active->debugTicket = checkpoint.queue[0].debugTicket = 73;
         ClearUITickets(checkpoint);
         assert(!checkpoint.active->debugTicket && !checkpoint.queue[0].debugTicket &&
                checkpoint.queue[0] == state.queue[0]);
+    }
+
+    void TestLatentCallerIdentity() {
+        using namespace mod::controller::storage;
+        auto state = SavedEngineState();
+        State decoded;
         state.callers[0].result = 1;
         assert(DecodeState(EncodeState(state), decoded) && decoded.callers[0].result == 1);
         auto caller = state.callers[0];
@@ -235,6 +283,13 @@ int main() {
         same = caller;
         same.self++;
         assert(!SameCaller(caller, same));
+    }
+
+    void TestSavedDelaysAndReservedEffects() {
+        using namespace mod::controller::storage;
+        auto state = SavedEngineState();
+        State decoded;
+        state.callers[0].result = 1;
         // Pause/delay remains a native save field rather than a restarted two seconds.
         state.active->phase = Phase::Delay;
         state.active->delay = 1.25f;
@@ -247,6 +302,13 @@ int main() {
         state.active->steps = {{Effect::ReservedUpdate, -1, 0, 0}};
         assert(DecodeState(EncodeState(state), decoded) && decoded == state);
         assert(Build({}, {}, {}).steps.empty());  // An idle Sync needs only completion/count publication.
+    }
+
+    void TestSavedPrimarySwapAndHandleRemapping() {
+        using namespace mod::controller::storage;
+        auto state = SavedEngineState();
+        State decoded;
+        state.callers[0].result = 1;
         // Both captured swap actors survive save/load and SKSE handle remapping.
         state.active->operation = Operation::PromotePrimary;
         state.active->phase = Phase::Engine;
@@ -274,7 +336,8 @@ int main() {
                expectations[1].alias == 2 && expectations[1].actor == 0 && expectations[1].value == 0);
         assert(IsHomeEffect(Effect::HomeEvaluate) && !IsHomeEffect(Effect::SwapPrimary));
     }
-    {
+
+    void TestWaitingDeadlinesAndPrimarySwap() {
         using namespace mod::executor_rules;
         std::array<float, 9> deadlines{};
         assert(SetDeadline(deadlines, 0, 100.0f) && deadlines[0] == 172.0f);
@@ -293,11 +356,19 @@ int main() {
         const auto swapped = deadlines;
         assert(!SwapPrimaryDeadlines(deadlines, 1, true) && !SwapPrimaryDeadlines(deadlines, 9, true) &&
                deadlines == swapped);
+    }
+
+    void TestPausedAndReloadedDismissalDelay() {
+        using namespace mod::executor_rules;
         // A saved delay resumes its remaining duration; pause/load time cannot consume it.
         const auto saved = Remaining(2, 0.75f, false, false);
         assert(saved == 1.25f && Remaining(saved, 100, true, false) == saved);
         assert(Remaining(saved, 100, false, true) == saved && Remaining(saved, 100, false, false) == 0);
         assert(ValidDelay(0) && ValidDelay(2) && !ValidDelay(-1) && !ValidDelay(3));
+    }
+
+    void TestEngineAcknowledgementIdentity() {
+        using namespace mod::executor_rules;
         // Saved engine calls acknowledge once at the same ticket/offset; never replay.
         assert(CanAcknowledge(true, 7, 3, Phase::Engine, 7, 3));
         assert(CanAcknowledge(true, 7, 3, Phase::Counts, 7, 3));
@@ -307,7 +378,8 @@ int main() {
         assert(!CanAcknowledge(true, 7, 3, Phase::Delay, 7, 3));
         assert(!KnownPhase(static_cast<Phase>(4)));
     }
-    {
+
+    void TestPartyTargetSelection() {
         const std::array<Slot, 6> slots{{{0, 101, true, true},
                                          {2, 102, true, true},
                                          {3, 101, true, true},
@@ -319,6 +391,9 @@ int main() {
         assert(PartyTargets(slots, Operation::Dismiss) == (std::vector<std::uint32_t>{101, 102, 103}));
         assert(PartyTargets(slots, Operation::Recruit).empty());
         assert(PartyTargets({}, Operation::Dismiss).empty());
+    }
+
+    void TestPartyCapacityAndProgress() {
         using namespace mod::command_rules;
         assert(CanAppend(8, 8, 100) && CanAppend(0, 16, 100));
         assert(!CanAppend(9, 8, 100) && !CanAppend(0, 0, 100));
@@ -331,7 +406,8 @@ int main() {
         GroupProgress success({1});
         assert(success.Record(1, true) && success.Done() && success.failed == 0);
     }
-    {
+
+    void TestPartyCommandsResolvePromotedSlots() {
         // Commands resolve actors again after every promotion, never stale slot IDs.
         for (auto operation : {Operation::Follow, Operation::Wait, Operation::Dismiss}) {
             Game game;
@@ -360,7 +436,8 @@ int main() {
             assert(Count(game.slots) == (operation == Operation::Dismiss ? 0 : 8));
         }
     }
-    {
+
+    void TestPartyDismissalClearsDuplicateAndDeadSlots() {
         Game game;
         game.slots = {
             {0, 101, true, true}, {2, 101, true, true}, {3, 102, true, true, true}, {4, 103, true, true, true}};
@@ -386,10 +463,8 @@ int main() {
         orphan.selected = -1;
         assert(!Build(game.slots, {}, orphan).accepted);  // Ordinary requests retain their ownership check.
     }
-    static_assert(mod::command_rules::Capacity == 16);
-    static_assert(static_cast<int>(mod::command_rules::State::Verified) == 4 &&
-                  static_cast<int>(mod::command_rules::State::Failed) == 5);
-    {
+
+    void TestQueueAdmissionAndMaintenanceCoalescing() {
         using namespace mod::command_rules;
         using mod::controller::storage::Command;
         std::vector<Command> queue{{1, Operation::Sync}};
@@ -407,7 +482,8 @@ int main() {
         assert(!CanStartImmediately(true, true, false, false, true, 0));
         assert(!CanStartImmediately(true, true, false, false, false, 1));
     }
-    {
+
+    void TestAcknowledgementsUseFinalPlanState() {
         using namespace mod::command_rules;
         const std::vector<mod::controller::storage::Step> plan{{Effect::Assign, 0, 100, 1},
                                                                {Effect::Waiting, -1, 100, 1},
@@ -432,7 +508,10 @@ int main() {
         std::size_t resumedOffset = 2;                // Saved executor already acknowledged two steps.
         assert(!Acknowledgement(resumedOffset, 1, plan.size()));
         assert(Acknowledgement(resumedOffset, 5, plan.size()));
+    }
 
+    void TestCommandClockExcludesPausedTime() {
+        using namespace mod::command_rules;
         ActiveClock clock;
         const auto start = clock.last;
         clock.Observe(start + std::chrono::seconds(10), true);
@@ -443,8 +522,8 @@ int main() {
         clock.Progress(start + std::chrono::seconds(121), false);
         assert(clock.elapsed.count() == 0);  // Late progress clears the warning, without replay.
     }
-    Game game;
-    {
+
+    void TestPrimaryPromotionPreservesPartyState() {
         Game party;
         for (std::uint32_t id = 100; id < 104; ++id)
             assert(party.Run(Operation::Recruit, id));
@@ -483,116 +562,165 @@ int main() {
         assert(emptyPrimary.slots[0].actor == 100 && !emptyPrimary.slots[1].occupied && Count(emptyPrimary.slots) == 1);
         assert(emptyPrimary.actors[100].waiting && emptyPrimary.actors[100].timer);
     }
-    for (std::uint32_t id = 100; id < 104; ++id)
-        assert(game.Run(Operation::Recruit, id));
-    assert(Count(game.slots) == 4 && game.slots[0].actor == 100);
-    assert(!game.Run(Operation::Recruit, 104));
-    assert(game.Run(Operation::Recruit, 102));  // Repeated recruitment does not change the primary or count.
-    assert(Count(game.slots) == 4 && game.slots[0].actor == 100);
-    auto reduced = game.For(Operation::Sync);
-    reduced.cap = 1;
-    assert(game.Execute(Build(game.slots, {}, reduced)) && Count(game.slots) == 4);
-    assert(game.Run(Operation::Wait, 102));
-    assert(game.actors[102].waiting && game.actors[102].timer);
-    assert(game.Run(Operation::Follow, 102));
-    assert(!game.actors[102].waiting && !game.actors[102].timer);
-    assert(game.Run(Operation::Timeout, 102));  // A queued timeout after Follow cannot dismiss the actor.
-    assert(Find(game.slots, 102));
-    assert(game.Run(Operation::Wait, 100));
-    assert(game.Run(Operation::Unload, 100) && game.actors[100].timer);
 
-    // Resume the same dismissal plan after its latent line, without rebuilding from a second roster.
-    const auto dismissal = Build(game.slots, {}, game.For(Operation::Dismiss, 100));
-    std::size_t resume = 0;
-    for (; resume < dismissal.steps.size(); ++resume) {
-        assert(game.Step(dismissal, resume));
-        if (dismissal.steps[resume].effect == Effect::DismissLine) {
-            ++resume;
-            break;
+    void TestRecruitmentWaitingAndDismissalContinuation() {
+        Game game;
+        for (std::uint32_t id = 100; id < 104; ++id)
+            assert(game.Run(Operation::Recruit, id));
+        assert(Count(game.slots) == 4 && game.slots[0].actor == 100);
+        assert(!game.Run(Operation::Recruit, 104));
+        assert(game.Run(Operation::Recruit, 102));  // Repeated recruitment does not change the primary or count.
+        assert(Count(game.slots) == 4 && game.slots[0].actor == 100);
+        auto reduced = game.For(Operation::Sync);
+        reduced.cap = 1;
+        assert(game.Execute(Build(game.slots, {}, reduced)) && Count(game.slots) == 4);
+        assert(game.Run(Operation::Wait, 102));
+        assert(game.actors[102].waiting && game.actors[102].timer);
+        assert(game.Run(Operation::Follow, 102));
+        assert(!game.actors[102].waiting && !game.actors[102].timer);
+        assert(game.Run(Operation::Timeout, 102));  // A queued timeout after Follow cannot dismiss the actor.
+        assert(Find(game.slots, 102));
+        assert(game.Run(Operation::Wait, 100));
+        assert(game.Run(Operation::Unload, 100) && game.actors[100].timer);
+
+        // Resume the same dismissal plan after its latent line, without rebuilding from a second roster.
+        const auto dismissal = Build(game.slots, {}, game.For(Operation::Dismiss, 100));
+        std::size_t resume = 0;
+        for (; resume < dismissal.steps.size(); ++resume) {
+            assert(game.Step(dismissal, resume));
+            if (dismissal.steps[resume].effect == Effect::DismissLine) {
+                ++resume;
+                break;
+            }
         }
+        assert(game.dismissLine == 1 && game.slots[0].actor == 100);
+        auto loaded = game;
+        const auto savedPlan = dismissal;
+        assert(loaded.Execute(savedPlan, resume));
+        assert(loaded.slots[0].actor == 101 && Count(loaded.slots) == 3);
+        assert(!loaded.actors[100].teammate && !loaded.actors[100].protectedActor && loaded.dismissLine == 0);
+        assert(!loaded.Run(Operation::Dismiss, 100));  // Repeated events cannot evict the promoted primary.
+        assert(loaded.Run(Operation::Recruit, 104) && loaded.slots[0].actor == 101);
+        assert(loaded.Run(Operation::Dismiss, 103) && loaded.slots[0].actor == 101);
+
+        // An external alias edit during the dismissal wait is detected before clearing its new occupant.
+        auto external = game;
+        external.slots[0].actor = 999;
+        assert(!external.Execute(savedPlan, resume));
+        assert(external.slots[0].actor == 999);
     }
-    assert(game.dismissLine == 1 && game.slots[0].actor == 100);
-    auto loaded = game;
-    const auto savedPlan = dismissal;
-    assert(loaded.Execute(savedPlan, resume));
-    assert(loaded.slots[0].actor == 101 && Count(loaded.slots) == 3);
-    assert(!loaded.actors[100].teammate && !loaded.actors[100].protectedActor && loaded.dismissLine == 0);
-    assert(!loaded.Run(Operation::Dismiss, 100));  // Repeated events cannot evict the promoted primary.
-    assert(loaded.Run(Operation::Recruit, 104) && loaded.slots[0].actor == 101);
-    assert(loaded.Run(Operation::Dismiss, 103) && loaded.slots[0].actor == 101);
 
-    // An external alias edit during the dismissal wait is detected before clearing its new occupant.
-    auto external = game;
-    external.slots[0].actor = 999;
-    assert(!external.Execute(savedPlan, resume));
-    assert(external.slots[0].actor == 999);
+    void TestReconciliationClearsDuplicatesAndDeadSlots() {
+        Game duplicates;
+        duplicates.slots[0] = {0, 100, true, true};
+        duplicates.slots[1] = {2, 100, true, true};
+        duplicates.slots[2] = {3, 200, true, true, true};
+        assert(duplicates.Run(Operation::Repair, 100));
+        assert(duplicates.slots[0].actor == 100 && duplicates.slots[1].actor == 0);
+        assert(duplicates.Run(Operation::Sync));
+        assert(duplicates.slots[2].actor == 0 && Count(duplicates.slots) == 1);
+        duplicates.slots[0].dead = true;
+        assert(duplicates.Run(Operation::Death, 100) && Count(duplicates.slots) == 0);
+    }
 
-    Game duplicates;
-    duplicates.slots[0] = {0, 100, true, true};
-    duplicates.slots[1] = {2, 100, true, true};
-    duplicates.slots[2] = {3, 200, true, true, true};
-    assert(duplicates.Run(Operation::Repair, 100));
-    assert(duplicates.slots[0].actor == 100 && duplicates.slots[1].actor == 0);
-    assert(duplicates.Run(Operation::Sync));
-    assert(duplicates.slots[2].actor == 0 && Count(duplicates.slots) == 1);
-    duplicates.slots[0].dead = true;
-    assert(duplicates.Run(Operation::Death, 100) && Count(duplicates.slots) == 0);
+    void TestReconciliationPreservesResurrectedFollower() {
+        Game resurrected;
+        resurrected.slots[0] = {0, 100, true, true, true};
+        const auto cleanup = Build(resurrected.slots, {}, resurrected.For(Operation::Sync));
+        resurrected.slots[0].dead = false;
+        assert(!resurrected.Execute(cleanup) && resurrected.slots[0].actor == 100);
+    }
 
-    Game resurrected;
-    resurrected.slots[0] = {0, 100, true, true, true};
-    const auto cleanup = Build(resurrected.slots, {}, resurrected.For(Operation::Sync));
-    resurrected.slots[0].dead = false;
-    assert(!resurrected.Execute(cleanup) && resurrected.slots[0].actor == 100);
+    void TestDialogueCommandsPromoteLivingFollower() {
+        Game dialogue;
+        dialogue.slots[0] = {0, 100, true, true, true};
+        dialogue.slots[1] = {2, 200, true, true};
+        assert(dialogue.Run(Operation::DialogueWait, 100));
+        assert(dialogue.slots[0].actor == 200 && dialogue.actors[200].waiting && dialogue.actors[200].timer);
+        assert(dialogue.Run(Operation::DialogueDismiss, 200) && Count(dialogue.slots) == 0);
+    }
 
-    Game dialogue;
-    dialogue.slots[0] = {0, 100, true, true, true};
-    dialogue.slots[1] = {2, 200, true, true};
-    assert(dialogue.Run(Operation::DialogueWait, 100));
-    assert(dialogue.slots[0].actor == 200 && dialogue.actors[200].waiting && dialogue.actors[200].timer);
-    assert(dialogue.Run(Operation::DialogueDismiss, 200) && Count(dialogue.slots) == 0);
+    void TestUnavailableSlotsAndAnimalOwnership() {
+        Game unavailable;
+        unavailable.slots[0].valid = false;
+        assert(!unavailable.Run(Operation::Recruit, 100));
+        unavailable.slots[0].valid = true;
+        unavailable.slots[0].occupied = true;  // Non-actor references stay occupied.
+        assert(unavailable.Run(Operation::Recruit, 100) && unavailable.slots[0].actor == 0);
+        auto adopt = unavailable.For(Operation::Adopt, 200);
+        assert(!Build(unavailable.slots, {}, adopt).accepted);
+        adopt.recruitable = true;
+        assert(unavailable.Execute(Build(unavailable.slots, {}, adopt)));
+        auto release = unavailable.For(Operation::Release, 100);
+        release.orphan = true;
+        assert(!Build(unavailable.slots, {}, release).accepted);  // Cannot release a managed actor's flags.
+        release.actor = 300;
+        assert(unavailable.Execute(Build(unavailable.slots, {}, release)));
 
-    Game unavailable;
-    unavailable.slots[0].valid = false;
-    assert(!unavailable.Run(Operation::Recruit, 100));
-    unavailable.slots[0].valid = true;
-    unavailable.slots[0].occupied = true;  // Non-actor references stay occupied.
-    assert(unavailable.Run(Operation::Recruit, 100) && unavailable.slots[0].actor == 0);
-    auto adopt = unavailable.For(Operation::Adopt, 200);
-    assert(!Build(unavailable.slots, {}, adopt).accepted);
-    adopt.recruitable = true;
-    assert(unavailable.Execute(Build(unavailable.slots, {}, adopt)));
-    auto release = unavailable.For(Operation::Release, 100);
-    release.orphan = true;
-    assert(!Build(unavailable.slots, {}, release).accepted);  // Cannot release a managed actor's flags.
-    release.actor = 300;
-    assert(unavailable.Execute(Build(unavailable.slots, {}, release)));
+        Slot animal{1, 400, true, true};
+        auto recruit = unavailable.For(Operation::Recruit, 400);
+        assert(!Build(unavailable.slots, animal, recruit).accepted);
+        assert(!Build(unavailable.slots, animal, unavailable.For(Operation::AnimalRecruit, 500)).accepted);
+        assert(Build(unavailable.slots, animal, unavailable.For(Operation::AnimalWait, 400)).accepted);
+    }
 
-    Slot animal{1, 400, true, true};
-    auto recruit = unavailable.For(Operation::Recruit, 400);
-    assert(!Build(unavailable.slots, animal, recruit).accepted);
-    assert(!Build(unavailable.slots, animal, unavailable.For(Operation::AnimalRecruit, 500)).accepted);
-    assert(Build(unavailable.slots, animal, unavailable.For(Operation::AnimalWait, 400)).accepted);
+    void TestHomeCapacityAndMarkerValidation() {
+        Game game;
+        std::array<Slot, 8> homes;
+        std::array<bool, 8> markers;
+        markers.fill(true);
+        for (int i = 0; i < 8; ++i)
+            homes[i] = {i, static_cast<std::uint32_t>(i + 1), true, true};
+        auto home = game.For(Operation::HomeAssign, 100);
+        assert(!Home(homes, markers, home).accepted);  // Full home roster leaves all previous residents untouched.
+        homes[4].actor = 100;
+        assert(Home(homes, markers, home).accepted);  // Reassign a full roster's existing resident.
+        markers[4] = false;
+        assert(!Home(homes, markers, home).accepted);  // Validate the marker before clearing the resident.
+        home.operation = Operation::HomeRemove;
+        assert(Home(homes, markers, home).accepted);
+    }
 
-    std::array<Slot, 8> homes;
-    std::array<bool, 8> markers;
-    markers.fill(true);
-    for (int i = 0; i < 8; ++i)
-        homes[i] = {i, static_cast<std::uint32_t>(i + 1), true, true};
-    auto home = unavailable.For(Operation::HomeAssign, 100);
-    assert(!Home(homes, markers, home).accepted);  // Full home roster leaves all previous residents untouched.
-    homes[4].actor = 100;
-    assert(Home(homes, markers, home).accepted);  // Reassign a full roster's existing resident.
-    markers[4] = false;
-    assert(!Home(homes, markers, home).accepted);  // Validate the marker before clearing the resident.
-    home.operation = Operation::HomeRemove;
-    assert(Home(homes, markers, home).accepted);
+    void TestLargestRecruitmentPlanFitsWireLimit() {
+        std::vector<Slot> allDead{{0, 100, true, true, true}};
+        for (int i = 2; i <= 8; ++i)
+            allDead.push_back({i, static_cast<std::uint32_t>(100 + i), true, true, true});
+        Request worst{Operation::Recruit, 999, -1, 0, 1, 8, true};
+        const auto biggest = Build(allDead, {}, worst);
+        assert(biggest.accepted && biggest.steps.size() * 2 + 1 <= 128);
+    }
 
-    std::vector<Slot> allDead{{0, 100, true, true, true}};
-    for (int i = 2; i <= 8; ++i)
-        allDead.push_back({i, static_cast<std::uint32_t>(100 + i), true, true, true});
-    Request worst{Operation::Recruit, 999, -1, 0, 1, 8, true};
-    const auto biggest = Build(allDead, {}, worst);
-    assert(biggest.accepted && biggest.steps.size() * 2 + 1 <= 128);
+}
+
+int main() {
+    TestClearRejectsMissingAlias();
+    TestVersionOneSaveLayout();
+    TestEmptySaveRoundTrip();
+    TestPendingEngineCallRoundTrip();
+    TestSaveRejectsMalformedData();
+    TestSaveHandleRemappingIsTransactional();
+    TestSaveClearsUITickets();
+    TestLatentCallerIdentity();
+    TestSavedDelaysAndReservedEffects();
+    TestSavedPrimarySwapAndHandleRemapping();
+    TestWaitingDeadlinesAndPrimarySwap();
+    TestPausedAndReloadedDismissalDelay();
+    TestEngineAcknowledgementIdentity();
+    TestPartyTargetSelection();
+    TestPartyCapacityAndProgress();
+    TestPartyCommandsResolvePromotedSlots();
+    TestPartyDismissalClearsDuplicateAndDeadSlots();
+    TestQueueAdmissionAndMaintenanceCoalescing();
+    TestAcknowledgementsUseFinalPlanState();
+    TestCommandClockExcludesPausedTime();
+    TestPrimaryPromotionPreservesPartyState();
+    TestRecruitmentWaitingAndDismissalContinuation();
+    TestReconciliationClearsDuplicatesAndDeadSlots();
+    TestReconciliationPreservesResurrectedFollower();
+    TestDialogueCommandsPromoteLivingFollower();
+    TestUnavailableSlotsAndAnimalOwnership();
+    TestHomeCapacityAndMarkerValidation();
+    TestLargestRecruitmentPlanFitsWireLimit();
     std::cout << "Native controller recruitment, stable aliases, timers, dismissal continuation, stale occupants and "
                  "home policy passed.\n";
 }

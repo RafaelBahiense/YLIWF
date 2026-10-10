@@ -27,19 +27,28 @@ Invoke-ModTools @('inspect', 'build/plugin/You Lead, I Will Follow.esp')
 
 `inspect` lists FormIDs, types and editor IDs. Neither command needs Skyrim masters.
 
-## C# analysis
-
-`.editorconfig` defines style. Use semantic names, remove unused imports and
-prefer initializers. After initializing .NET and restoring:
+## Linting
 
 ```powershell
-foreach ($project in 'tools/ModTools/ModTools.csproj', 'tests/tools/ModTools.Tests.csproj') {
-    dotnet build $project -c Release --no-restore -t:Rebuild -p:AnalysisLevel=latest-recommended -p:EnforceCodeStyleInBuild=true
-    dotnet format $project --no-restore --severity info --verify-no-changes
-}
+./lint.ps1                         # Check C# and C++
+./lint.ps1 -Language CSharp        # C# only
+./lint.ps1 -Language Cpp           # C++ formatting only
+./lint.ps1 -Fix                    # Apply supported formatting/style fixes
+./lint.ps1 -NativeAnalysis         # Also run MSVC static analysis
 ```
 
-Remove `--verify-no-changes` to apply fixes, review them, then run
-`build.ps1 -Target Test`. `SYSLIB1045` suggests generated regexes.
-For a SARIF report, add `-p:ErrorLog=<absolute-path>.sarif`; use separate paths
-under `build/` for each project.
+C# uses SDK analyzers and `dotnet format` with `.editorconfig`, including
+unused imports, initializers and generated-regex suggestions. Unfixable findings
+need a manual change. Compiler/analyzer warnings fail lint; unavailable NuGet
+vulnerability data (`NU1900`) remains a warning.
+
+C++ formatting uses `.clang-format` and Visual Studio's existing Clang-Format;
+`-ClangFormat` selects another executable. Native analysis requires a configured
+native build (`./build.ps1 -Target Native`), checks core/add-on code and native
+tests, and treats findings as errors. Its separate objects leave release flags
+and DLLs untouched; dependency code is excluded from analysis diagnostics.
+Use `-Configuration Debug` to analyze an existing Debug build.
+
+VS Code has **Lint C# and C++**; Windows CI also runs native analysis. Checks
+never rewrite source unless `-Fix` is specified. Review fixes and run relevant
+tests afterward. No additional tool installation is performed.

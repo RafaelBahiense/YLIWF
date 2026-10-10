@@ -1,6 +1,6 @@
-using ModTools.Packaging;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using ModTools.Packaging;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
 using static TestSupport;

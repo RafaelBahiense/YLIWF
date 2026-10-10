@@ -13,6 +13,7 @@ internal sealed class PackagingTests(string root, string temporary, DateTimeOffs
     private readonly string sourceArchive = Path.Combine(temporary, "fixture-source.zip");
     private readonly string invalidNotices = Path.Combine(temporary, "invalid-notices.zip");
     private readonly Dictionary<string, string> sourceFiles = SourceSnapshot.ProjectFiles(root);
+    private static readonly string[] RequiredSourceFiles = ["README.md", "docs/architecture.md", "docs/debugging.md", "docs/build-release.md", "tools/README.md", "assets/settings.ini", "lint.ps1", ".clang-format"];
 
     public void Run()
     {
@@ -29,8 +30,7 @@ internal sealed class PackagingTests(string root, string temporary, DateTimeOffs
 
     private void PrepareDependencies()
     {
-        Check(new[] { "README.md", "docs/architecture.md", "docs/debugging.md", "docs/build-release.md", "tools/README.md", "assets/settings.ini" }
-            .All(sourceFiles.ContainsKey), "Source archive omitted documentation or default settings");
+        Check(RequiredSourceFiles.All(sourceFiles.ContainsKey), "Source archive omitted documentation, lint configuration or default settings");
         Check(!sourceFiles.Keys.Any(name => name.Contains("/bin/", StringComparison.Ordinal) || name.StartsWith("debug-data/", StringComparison.Ordinal) || name.StartsWith(".github/", StringComparison.Ordinal)), "Private data or compiled outputs entered source snapshot");
         Check(sourceFiles.ContainsKey("src/plugin/Records/Quests.cs"), "Source snapshot omitted plugin record definitions");
         // Test-only dependency stubs exercise the source archive contract, not a release.
@@ -81,16 +81,14 @@ internal sealed class PackagingTests(string root, string temporary, DateTimeOffs
         Fails(() => SourceSnapshot.ValidateAddon(sourceArchive, addonDll, addon));
         File.WriteAllBytes(addonDll, originalAddonDll);
         Fails(() => SourceSnapshot.ValidateAddon(sourceArchive, Path.Combine(temporary, "missing-adapter.dll"), addon));
-        using (var snapshot = ZipFile.OpenRead(sourceArchive))
-        {
-            Check(!snapshot.Entries.Any(entry => entry.FullName is "provenance/CMakeCache.txt" or "provenance/compile_commands.json"),
-                "Source snapshot publishes machine-specific compiler paths");
-            Check(snapshot.Entries.All(entry => entry.LastWriteTime.DateTime == archiveTimestamp.DateTime && entry.ExternalAttributes == 0),
-                "Source ZIP date differs from the release or retains file attributes");
-        }
+        using var snapshot = ZipFile.OpenRead(sourceArchive);
+        Check(!snapshot.Entries.Any(entry => entry.FullName is "provenance/CMakeCache.txt" or "provenance/compile_commands.json"),
+            "Source snapshot publishes machine-specific compiler paths");
+        Check(snapshot.Entries.All(entry => entry.LastWriteTime.DateTime == archiveTimestamp.DateTime && entry.ExternalAttributes == 0),
+            "Source ZIP date differs from the release or retains file attributes");
     }
 
-    private IReadOnlyDictionary<string, string> CheckDependencyNotices()
+    private Dictionary<string, string> CheckDependencyNotices()
     {
         var sourceMetadata = new Dictionary<string, object> { ["kind"] = "corresponding source", ["dll_sha256"] = Artifacts.HashFile(dll), ["plugin"] = ModInfo.PluginFile };
         var changedDefaults = Path.Combine(temporary, "different-defaults.ini");
@@ -193,15 +191,16 @@ internal sealed class PackagingTests(string root, string temporary, DateTimeOffs
     private void CheckPublishedArchives(string version, string release, IReadOnlyDictionary<string, string> dependencyNotices)
     {
         foreach (var declaredAddon in Addon.Read(root))
-            using (var archive = ZipFile.OpenRead(Path.Combine(temporary, declaredAddon.ArchiveName)))
-            {
-                Check(archive.GetEntry("SKSE/Plugins/" + declaredAddon.DllFile) != null && archive.GetEntry(Artifacts.Plugin) == null &&
-                    !archive.Entries.Any(entry => entry.FullName.EndsWith(".pex", StringComparison.OrdinalIgnoreCase)), "Native adapter must be a separate DLL-only add-on");
-                CheckInstallNotices(archive, dependencyNotices);
-                var addonSource = Path.Combine(temporary, declaredAddon.SourceArchiveName);
-                SourceSnapshot.Validate(addonSource, dll, root);
-                SourceSnapshot.ValidateAddon(addonSource, Path.Combine(temporary, declaredAddon.DllFile), declaredAddon);
-            }
+        {
+            using var archive = ZipFile.OpenRead(Path.Combine(temporary, declaredAddon.ArchiveName));
+            Check(archive.GetEntry("SKSE/Plugins/" + declaredAddon.DllFile) != null && archive.GetEntry(Artifacts.Plugin) == null &&
+                !archive.Entries.Any(entry => entry.FullName.EndsWith(".pex", StringComparison.OrdinalIgnoreCase)), "Native adapter must be a separate DLL-only add-on");
+            CheckInstallNotices(archive, dependencyNotices);
+            var addonSource = Path.Combine(temporary, declaredAddon.SourceArchiveName);
+            SourceSnapshot.Validate(addonSource, dll, root);
+            SourceSnapshot.ValidateAddon(addonSource, Path.Combine(temporary, declaredAddon.DllFile), declaredAddon);
+        }
+
         using (var archive = ZipFile.OpenRead(Path.Combine(temporary, $"{ModInfo.BinaryName}-{version}-3DNPC.zip")))
         {
             Check(archive.GetEntry("Scripts/follower3dnpc.pex") != null && archive.GetEntry(Artifacts.Plugin) == null, "Patch was not separate");

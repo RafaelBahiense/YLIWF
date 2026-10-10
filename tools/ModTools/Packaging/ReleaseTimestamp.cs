@@ -17,8 +17,10 @@ public static class ReleaseTimestamp
         {
             var info = new ProcessStartInfo("git")
             {
-                WorkingDirectory = root, UseShellExecute = false,
-                RedirectStandardOutput = true, RedirectStandardError = true
+                WorkingDirectory = root,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
             };
             foreach (var argument in new[] { "show", "-s", "--format=%ct", "HEAD" })
             {

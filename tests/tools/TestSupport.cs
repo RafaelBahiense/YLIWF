@@ -1,7 +1,6 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Text;
-using ModTools.Packaging;
 
 internal static class TestSupport
 {
@@ -23,10 +22,13 @@ internal static class TestSupport
         catch (OverflowException) { return; }
         throw new InvalidOperationException("Expected invalid input to fail");
     }
+
+    private static readonly string[] ProjectNotices = ["LICENSE", "NOTICE", "CREDITS.md"];
+
     public static void CheckInstallNotices(ZipArchive archive, IReadOnlyDictionary<string, string> dependencyNotices)
     {
         var prefix = ModInfo.Identity.DocumentationDirectory + "/";
-        var expected = new[] { "LICENSE", "NOTICE", "CREDITS.md" }.Concat(dependencyNotices.Keys)
+        var expected = ProjectNotices.Concat(dependencyNotices.Keys)
             .Select(name => prefix + name).ToHashSet(StringComparer.Ordinal);
         var actual = archive.Entries.Where(entry => entry.FullName.StartsWith("docs/", StringComparison.Ordinal))
             .Select(entry => entry.FullName).ToHashSet(StringComparer.Ordinal);
@@ -77,7 +79,7 @@ internal static class TestSupport
     public static byte[] PexFixture(string filename)
     {
         using var stream = new MemoryStream();
-        stream.Write(new byte[] { 0xfa, 0x57, 0xc0, 0xde, 3, 2, 0, 1 });
+        stream.Write([0xfa, 0x57, 0xc0, 0xde, 3, 2, 0, 1]);
         stream.Write(Enumerable.Repeat((byte)123, 8).ToArray());
         Span<byte> length = stackalloc byte[2];
         foreach (var text in new[] { "C:\\Users\\PrivateUser\\repo\\" + filename, "PrivateUser", "PrivateComputer" })
@@ -87,9 +89,9 @@ internal static class TestSupport
             stream.Write(length);
             stream.Write(bytes);
         }
-        stream.Write(new byte[] { 0, 0, 1 }); // Empty string table; debug section present.
+        stream.Write([0, 0, 1]); // Empty string table; debug section present.
         stream.Write(Enumerable.Repeat((byte)124, 8).ToArray());
-        stream.Write(new byte[] { 0, 0, 0, 0, 0, 0 }); // Empty debug, flag and object tables.
+        stream.Write([0, 0, 0, 0, 0, 0]); // Empty debug, flag and object tables.
         return stream.ToArray();
     }
 }

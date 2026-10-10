@@ -33,6 +33,7 @@ Build also accepts `-Flags` and `-ImportDirectories`.
 .\build.ps1 -Target Scripts
 .\build.ps1 -Target Test
 .\build.ps1 -Target Verify
+.\lint.ps1
 .\build.ps1 -Target Package
 .\build.ps1 -Clean
 ```
@@ -66,7 +67,7 @@ select Release or Debug x64, install the Debug DLL, then use
 
 ## CI and caching
 
-CI runs `Verify`. It caches pinned downloads, NuGet, vcpkg binaries and CommonLib
+CI runs `Verify` and lint, including MSVC analysis of project code. It caches pinned downloads, NuGet, vcpkg binaries and CommonLib
 build outputs. Dependency keys track pins and ports; CommonLib keys also track
 build settings, runner, compiler, SDK and workspace path. Mod objects always
 rebuild. A new key requires one full build.

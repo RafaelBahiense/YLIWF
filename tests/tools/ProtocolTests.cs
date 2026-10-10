@@ -118,7 +118,7 @@ internal static partial class ProtocolTests
             "SetFollower", "SetAnimal", "FollowerWait", "AnimalWait",
             "FollowerFollow", "AnimalFollow", "DismissFollower", "DismissAnimal"
         ];
-        Require(FacadeMethodsRegex().Matches(script).Count == methods.Length,
+        Require(FacadeMethodsRegex().Count(script) == methods.Length,
             "vanilla facade must contain exactly eight methods");
         Require(script.Contains("extends Quest Conditional", StringComparison.Ordinal),
             "vanilla facade still inherits internal storage");

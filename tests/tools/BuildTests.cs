@@ -62,7 +62,14 @@ internal static class BuildTests
         {
             arguments["--configuration"] = configuration.CMakeName();
             var options = BuildOptions.Read(arguments, new HashSet<string>());
-            Check(options.Configuration == configuration && options.Configuration.Preset() == configuration.CMakeName().ToLowerInvariant(),
+            var expectedPreset = configuration switch
+            {
+                BuildConfiguration.Debug => "debug",
+                BuildConfiguration.Release => "release",
+                BuildConfiguration.RelWithDebInfo => "relwithdebinfo",
+                _ => throw new InvalidOperationException("Unknown configuration")
+            };
+            Check(options.Configuration == configuration && options.Configuration.Preset() == expectedPreset,
                 "Build configuration does not select its CMake preset");
         }
         foreach (var invalid in new[] { "release", "0", "Unknown" })

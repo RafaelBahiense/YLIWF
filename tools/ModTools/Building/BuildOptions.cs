@@ -9,20 +9,59 @@ public enum BuildTarget
 
 public sealed record BuildOptions
 {
-    public required string Root { get; init; }
-    public BuildTarget Target { get; init; }
+    public required string Root
+    {
+        get; init;
+    }
+    public BuildTarget Target
+    {
+        get; init;
+    }
     public BuildConfiguration Configuration { get; init; } = BuildConfiguration.Release;
-    public bool Clean { get; init; }
-    public bool Include3Dnpc { get; init; }
-    public required string CommonLib { get; init; }
-    public required string Vcpkg { get; init; }
-    public required string Compiler { get; init; }
-    public required string Flags { get; init; }
-    public required string[] Imports { get; init; }
-    public required string Output { get; init; }
-    public string? Dll { get; init; }
-    public string? SourceArchive { get; init; }
-    public string? DeployTo { get; init; }
+    public bool Clean
+    {
+        get; init;
+    }
+    public bool Include3Dnpc
+    {
+        get; init;
+    }
+    public required string CommonLib
+    {
+        get; init;
+    }
+    public required string Vcpkg
+    {
+        get; init;
+    }
+    public required string Compiler
+    {
+        get; init;
+    }
+    public required string Flags
+    {
+        get; init;
+    }
+    public required string[] Imports
+    {
+        get; init;
+    }
+    public required string Output
+    {
+        get; init;
+    }
+    public string? Dll
+    {
+        get; init;
+    }
+    public string? SourceArchive
+    {
+        get; init;
+    }
+    public string? DeployTo
+    {
+        get; init;
+    }
 
     public static BuildOptions Read(IReadOnlyDictionary<string, string> options, IReadOnlySet<string> switches)
     {
@@ -68,14 +107,14 @@ public sealed record BuildOptions
         var configuration = BuildConfigurations.Parse(options.GetValueOrDefault("--configuration") ??
             BuildConfiguration.Release.CMakeName());
 
-        var imports = defaults.RootElement.GetProperty("Imports").EnumerateArray().Select(item => item.GetString()!).ToArray();
+        var imports = defaults.RootElement.GetProperty(nameof(Imports)).EnumerateArray().Select(item => item.GetString()!).ToArray();
         if (options.TryGetValue("--imports", out var list))
         {
             imports = list.Split(';', StringSplitOptions.RemoveEmptyEntries);
         }
-        else if (document != null && document.RootElement.TryGetProperty("Imports", out var configuredImports))
+        else if (document != null && document.RootElement.TryGetProperty(nameof(Imports), out var configuredImports))
         {
-            imports = configuredImports.EnumerateArray().Select(item => item.GetString()!).ToArray();
+            imports = [.. configuredImports.EnumerateArray().Select(item => item.GetString()!)];
         }
 
         string? OptionalPath(string name) => options.TryGetValue("--" + name, out var path) ? Path.GetFullPath(path, root) : null;
@@ -90,7 +129,7 @@ public sealed record BuildOptions
             Vcpkg = Resolve("vcpkg", "Vcpkg"),
             Compiler = Resolve("compiler", "Compiler"),
             Flags = Resolve("flags", "Flags"),
-            Imports = imports.Select(path => Path.GetFullPath(path, root)).ToArray(),
+            Imports = [.. imports.Select(path => Path.GetFullPath(path, root))],
             Output = Resolve("output", "Output"),
             Dll = OptionalPath("dll"),
             SourceArchive = OptionalPath("source-archive"),

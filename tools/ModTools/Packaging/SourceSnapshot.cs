@@ -11,7 +11,7 @@ public static class SourceSnapshot
     public static Dictionary<string, string> ProjectFiles(string root)
     {
         var files = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var name in new[] { "README.md", ProjectPaths.License, ProjectPaths.Notice, ProjectPaths.Credits, ProjectPaths.Identity, "global.json", "CMakeLists.txt", "CMakePresets.json", "vcpkg.json", "vcpkg-configuration.json", ".editorconfig", ".gitignore", "setup.ps1", "build.ps1" })
+        foreach (var name in new[] { "README.md", ProjectPaths.License, ProjectPaths.Notice, ProjectPaths.Credits, ProjectPaths.Identity, "global.json", "CMakeLists.txt", "CMakePresets.json", "vcpkg.json", "vcpkg-configuration.json", ".editorconfig", ".clang-format", ".gitignore", "setup.ps1", "build.ps1", "lint.ps1" })
         {
             var path = Path.Combine(root, name);
             if (File.Exists(path))

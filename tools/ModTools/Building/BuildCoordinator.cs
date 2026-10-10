@@ -78,8 +78,7 @@ public static class BuildCoordinator
     }
 
     private static string[] NativeOutputs(string root, string native) =>
-        new[] { Path.Combine(native, ModInfo.Identity.DllFile) }
-            .Concat(Addon.Read(root).Select(addon => Path.Combine(native, addon.DllFile))).ToArray();
+        [Path.Combine(native, ModInfo.Identity.DllFile), .. Addon.Read(root).Select(addon => Path.Combine(native, addon.DllFile))];
 
     private static void Package(BuildOptions options, string native, string plugin, string papyrus)
     {
