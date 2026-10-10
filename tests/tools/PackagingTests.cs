@@ -23,6 +23,7 @@ internal sealed class PackagingTests(string root, string temporary, DateTimeOffs
         var zip = CheckCoreArchive(files, dependencyNotices);
         CheckZipFailures(zip);
         CheckReleasePublication(dependencyNotices);
+        CheckIndependentAddonRelease();
         CheckPublicationRollback(files);
     }
 
@@ -70,14 +71,16 @@ internal sealed class PackagingTests(string root, string temporary, DateTimeOffs
         }
         Artifacts.Publish(new[] { (SourceSnapshot.Prepare(root, dll, sourceArchive, commonLib, vcpkg, nativeBuild), sourceArchive) });
         SourceSnapshot.Validate(sourceArchive, dll, root);
-        SourceSnapshot.ValidateAddon(sourceArchive, addonDll, addon.DllFile);
+        SourceSnapshot.ValidateAddon(sourceArchive, addonDll, addon);
+        Fails(() => SourceSnapshot.ValidateAddon(sourceArchive, addonDll, addon with { Version = "2.3.4" }));
+        Fails(() => SourceSnapshot.ValidateAddon(sourceArchive, addonDll, addon with { AdapterApiVersion = 2 }));
         var originalAddonDll = File.ReadAllBytes(addonDll);
         var mismatchedAddonDll = originalAddonDll.ToArray();
         mismatchedAddonDll[16] = 1; // Keep a structurally valid PE, change its identity hash.
         File.WriteAllBytes(addonDll, mismatchedAddonDll);
-        Fails(() => SourceSnapshot.ValidateAddon(sourceArchive, addonDll, addon.DllFile));
+        Fails(() => SourceSnapshot.ValidateAddon(sourceArchive, addonDll, addon));
         File.WriteAllBytes(addonDll, originalAddonDll);
-        Fails(() => SourceSnapshot.ValidateAddon(sourceArchive, Path.Combine(temporary, "missing-adapter.dll"), addon.DllFile));
+        Fails(() => SourceSnapshot.ValidateAddon(sourceArchive, Path.Combine(temporary, "missing-adapter.dll"), addon));
         using (var snapshot = ZipFile.OpenRead(sourceArchive))
         {
             Check(!snapshot.Entries.Any(entry => entry.FullName is "provenance/CMakeCache.txt" or "provenance/compile_commands.json"),
@@ -164,7 +167,7 @@ internal sealed class PackagingTests(string root, string temporary, DateTimeOffs
         File.Delete(Path.Combine(papyrus, "Scripts/YLIWF_SKSE.pex"));
         Fails(() => Artifacts.Package(root, esp, dll, papyrus, temporary, false, BuildMode.SuppliedDll, sourceArchive));
         Scripts(Path.Combine(root, "src/papyrus/core"), Path.Combine(papyrus, "Scripts"));
-        var version = File.ReadAllText(Path.Combine(root, "VERSION")).Trim();
+        var version = ModInfo.Read(root).Version;
         var release = Path.Combine(temporary, $"{ModInfo.BinaryName}-{version}.zip");
         File.WriteAllText(release, "previous release");
         BuildReceiptTests.Run(root, temporary, esp);
@@ -190,11 +193,14 @@ internal sealed class PackagingTests(string root, string temporary, DateTimeOffs
     private void CheckPublishedArchives(string version, string release, IReadOnlyDictionary<string, string> dependencyNotices)
     {
         foreach (var declaredAddon in Addon.Read(root))
-            using (var archive = ZipFile.OpenRead(Path.Combine(temporary, $"{ModInfo.BinaryName}-{version}-{declaredAddon.Name}.zip")))
+            using (var archive = ZipFile.OpenRead(Path.Combine(temporary, declaredAddon.ArchiveName)))
             {
                 Check(archive.GetEntry("SKSE/Plugins/" + declaredAddon.DllFile) != null && archive.GetEntry(Artifacts.Plugin) == null &&
                     !archive.Entries.Any(entry => entry.FullName.EndsWith(".pex", StringComparison.OrdinalIgnoreCase)), "Native adapter must be a separate DLL-only add-on");
                 CheckInstallNotices(archive, dependencyNotices);
+                var addonSource = Path.Combine(temporary, declaredAddon.SourceArchiveName);
+                SourceSnapshot.Validate(addonSource, dll, root);
+                SourceSnapshot.ValidateAddon(addonSource, Path.Combine(temporary, declaredAddon.DllFile), declaredAddon);
             }
         using (var archive = ZipFile.OpenRead(Path.Combine(temporary, $"{ModInfo.BinaryName}-{version}-3DNPC.zip")))
         {
@@ -213,6 +219,40 @@ internal sealed class PackagingTests(string root, string temporary, DateTimeOffs
             }
             Check(archive.GetEntry(ModInfo.Identity.DocumentationDirectory + "/licenses/fmt.txt") == null, "Supplied-DLL packaging included fmt's optional notice");
         }
+    }
+
+    private void CheckIndependentAddonRelease()
+    {
+        var checkout = Path.Combine(temporary, "independent-addon-checkout");
+        foreach (var (name, file) in SourceSnapshot.ProjectFiles(root))
+        {
+            var destination = Path.Combine(checkout, name);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(file, destination);
+        }
+        var declarationPath = Directory.GetFiles(Path.Combine(checkout, "src/addons"), "addon.json", SearchOption.AllDirectories).First();
+        var declaration = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(declarationPath))!.AsObject();
+        declaration["version"] = "2.3.4";
+        File.WriteAllText(declarationPath, declaration.ToJsonString());
+        var addon = Addon.Read(checkout).First(addon => addon.Version == "2.3.4");
+        Check(ModInfo.Read(checkout).Version == ModInfo.Read(root).Version, "Add-on update changed the core version");
+        var source = Path.Combine(temporary, "independent-source.zip");
+        var previousEpoch = Environment.GetEnvironmentVariable("SOURCE_DATE_EPOCH");
+        try
+        {
+            Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", archiveTimestamp.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Artifacts.Publish(new[] { (SourceSnapshot.Prepare(checkout, dll, source, commonLib, vcpkg, nativeBuild), source) });
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", previousEpoch);
+        }
+        var output = Path.Combine(temporary, "independent-release");
+        Artifacts.Package(checkout, esp, dll, papyrus, output, false, BuildMode.SuppliedDll, source);
+        Check(File.Exists(Path.Combine(output, addon.ArchiveName)) && File.Exists(Path.Combine(output, addon.SourceArchiveName)),
+            "Add-on update did not publish independently versioned binary and source archives");
+        Check(File.Exists(Path.Combine(output, $"{ModInfo.BinaryName}-{ModInfo.Read(root).Version}.zip")), "Core release inherited the add-on version");
+        SourceSnapshot.ValidateAddon(Path.Combine(output, addon.SourceArchiveName), Path.Combine(temporary, addon.DllFile), addon);
     }
 
     private void CheckPublicationRollback(Dictionary<string, string> files)

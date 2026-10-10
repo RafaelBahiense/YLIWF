@@ -78,15 +78,31 @@ internal static class BuildTests
         foreach (var name in new[] { "First", "Second" })
         {
             Directory.CreateDirectory(Path.Combine(addonDirectory, name));
-            File.WriteAllText(Path.Combine(addonDirectory, name, "addon.json"), $$"""{"name":"{{name}}"}""");
+            File.WriteAllText(Path.Combine(addonDirectory, name, "addon.json"), $$"""{"name":"{{name}}","version":"2.3.4","adapterApiVersion":1}""");
         }
         Check(Addon.Read(directory).Select(addon => addon.DllFile).SequenceEqual([
             ModInfo.BinaryName + ".First.dll", ModInfo.BinaryName + ".Second.dll"]), "New add-ons need special-case tooling");
+        var first = Addon.Read(directory)[0];
+        Check(first.Version == "2.3.4" && first.AdapterApiVersion == 1 &&
+            first.ArchiveName == ModInfo.BinaryName + "-First-2.3.4.zip" &&
+            first.SourceArchiveName == ModInfo.BinaryName + "-First-2.3.4-source.zip", "Add-on versions are coupled to the core release");
         var second = Path.Combine(addonDirectory, "Second/addon.json");
-        File.WriteAllText(second, """{"name":"first"}""");
+        File.WriteAllText(second, """{"name":"first","version":"1.0.0","adapterApiVersion":1}""");
         Reject(() => Addon.Read(directory));
         File.WriteAllText(second, """{"name":"../escape"}""");
         Reject(() => Addon.Read(directory));
+        foreach (var invalid in new[]
+        {
+            """{"name":"Second","adapterApiVersion":1}""",
+            """{"name":"Second","version":"1.2","adapterApiVersion":1}""",
+            """{"name":"Second","version":"1.0.0"}""",
+            """{"name":"Second","version":"1.0.0","adapterApiVersion":0}""",
+            """{"name":"Second","version":"1.0.0","adapterApiVersion":"1"}"""
+        })
+        {
+            File.WriteAllText(second, invalid);
+            Reject(() => Addon.Read(directory));
+        }
     }
 
     private static void Check(bool value, string message)

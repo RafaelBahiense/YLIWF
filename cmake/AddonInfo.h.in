@@ -1,0 +1,8 @@
+#pragma once
+
+#include <cstdint>
+
+// Generated from this add-on's addon.json, independently of the core release.
+namespace mod::addon {
+    inline constexpr std::uint32_t RequiredAdapterAPIVersion = @ADDON_ADAPTER_API_VERSION@;
+}

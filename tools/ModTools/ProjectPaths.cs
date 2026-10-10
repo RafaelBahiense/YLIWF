@@ -2,7 +2,6 @@ namespace ModTools;
 
 internal static class ProjectPaths
 {
-    internal const string Version = "VERSION";
     internal const string Identity = "mod.json";
     internal const string CoreScripts = "src/papyrus/core";
     internal const string Patch3DnpcScripts = "src/papyrus/patches/3dnpc";

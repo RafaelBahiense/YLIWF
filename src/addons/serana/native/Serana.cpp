@@ -2,6 +2,7 @@
 #include "SKSE/SKSE.h"
 #include <Windows.h>
 #include "ModInfo.h"
+#include "AddonInfo.h"
 #include "Rules.h"
 #include "sdk/PapyrusController.h"
 #include <array>
@@ -9,6 +10,8 @@
 
 namespace {
     using namespace yliwf::sdk;
+    static_assert(mod::addon::RequiredAdapterAPIVersion == InterfaceVersion,
+                  "addon.json must declare the adapter API implemented by this add-on");
     const API* host = nullptr;
     AdapterID registration = 0;
     RE::TESQuest* mentalModel = nullptr;
@@ -250,7 +253,7 @@ namespace {
         if (message->type == SKSE::MessagingInterface::kPostLoad) {
             const auto module = GetModuleHandleA(mod::info::DllFile);
             const auto query = module ? reinterpret_cast<QueryAPI>(GetProcAddress(module, QueryExport)) : nullptr;
-            host = query ? query(InterfaceVersion) : nullptr;
+            host = query ? query(mod::addon::RequiredAdapterAPIVersion) : nullptr;
             if (!host || host->size < BaseAPISize || host->version != InterfaceVersion || !host->registerAdapter ||
                 !host->complete) {
                 SKSE::log::warn("Serana adapter: compatible YLIWF host API is unavailable");

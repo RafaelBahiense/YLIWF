@@ -51,7 +51,7 @@ public static class BuildReceipt
     private static bool IsSharedInput(string name) =>
         name.StartsWith("src/shared/", StringComparison.Ordinal) ||
         (name.StartsWith("tools/ModTools/", StringComparison.Ordinal) && name.EndsWith(".cs", StringComparison.Ordinal)) ||
-        name is ProjectPaths.Identity or ProjectPaths.Version or "global.json" or "tools/dependencies.json" or ProjectPaths.PathDefaults or
+        name is ProjectPaths.Identity or "global.json" or "tools/dependencies.json" or ProjectPaths.PathDefaults or
             ProjectPaths.ToolProject or ProjectPaths.ToolLock;
 
     private static bool IsGeneratorInput(string name) =>

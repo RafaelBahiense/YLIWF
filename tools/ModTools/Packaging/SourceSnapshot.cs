@@ -11,7 +11,7 @@ public static class SourceSnapshot
     public static Dictionary<string, string> ProjectFiles(string root)
     {
         var files = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var name in new[] { "README.md", ProjectPaths.License, ProjectPaths.Notice, ProjectPaths.Credits, ProjectPaths.Version, ProjectPaths.Identity, "global.json", "CMakeLists.txt", "CMakePresets.json", "vcpkg.json", "vcpkg-configuration.json", ".editorconfig", ".gitignore", "setup.ps1", "build.ps1" })
+        foreach (var name in new[] { "README.md", ProjectPaths.License, ProjectPaths.Notice, ProjectPaths.Credits, ProjectPaths.Identity, "global.json", "CMakeLists.txt", "CMakePresets.json", "vcpkg.json", "vcpkg-configuration.json", ".editorconfig", ".gitignore", "setup.ps1", "build.ps1" })
         {
             var path = Path.Combine(root, name);
             if (File.Exists(path))
@@ -103,31 +103,44 @@ public static class SourceSnapshot
             [ManifestFields.ArchiveTimestamp] = timestamp.ToUnixTimeSeconds(),
             [ManifestFields.Kind] = ArchiveKind,
             [ManifestFields.DllHash] = Artifacts.HashFile(dll),
-            [ManifestFields.Version] = File.ReadAllText(Path.Combine(root, ProjectPaths.Version)).Trim(),
+            [ManifestFields.Version] = ModInfo.Read(root).Version,
             [ManifestFields.Plugin] = ModInfo.PluginFile,
             [ManifestFields.NativeDependencies] = Ports.Prepend("CommonLibSSE-NG").ToArray(),
             [ManifestFields.BuildInputs] = "See docs/build-release.md and tools/dependencies.json. General-purpose compiler tools and Bethesda Creation Kit imports are obtained separately."
         };
         var addonHashes = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        var addonVersions = new SortedDictionary<string, object>(StringComparer.Ordinal);
         foreach (var addon in Addon.Read(root))
         {
             var addonDll = Path.Combine(nativeBuild, addon.DllFile);
             Artifacts.ValidateDll(addonDll);
             addonHashes.Add(addon.DllFile, Artifacts.HashFile(addonDll));
+            addonVersions.Add(addon.DllFile, new Dictionary<string, object>
+            {
+                [ManifestFields.Version] = addon.Version,
+                [ManifestFields.AdapterApiVersion] = addon.AdapterApiVersion
+            });
         }
         metadata[ManifestFields.AddonHashes] = addonHashes;
+        metadata[ManifestFields.Addons] = addonVersions;
         return Artifacts.PrepareZip(destination, files, metadata, timestamp);
     }
-    public static void ValidateAddon(string archivePath, string dll, string filename)
+    public static void ValidateAddon(string archivePath, string dll, Addon addon)
     {
         Artifacts.ValidateDll(dll);
         using var archive = ZipFile.OpenRead(archivePath);
         using var stream = archive.GetEntry(Artifacts.Manifest)!.Open();
         using var manifest = JsonDocument.Parse(stream);
         if (!manifest.RootElement.TryGetProperty(ManifestFields.AddonHashes, out var hashes) ||
-            !hashes.TryGetProperty(filename, out var hash) || hash.GetString() != Artifacts.HashFile(dll))
+            !hashes.TryGetProperty(addon.DllFile, out var hash) || hash.GetString() != Artifacts.HashFile(dll) ||
+            !manifest.RootElement.TryGetProperty(ManifestFields.Addons, out var addons) ||
+            !addons.TryGetProperty(addon.DllFile, out var declaration) ||
+            !declaration.TryGetProperty(ManifestFields.Version, out var version) || version.ValueKind != JsonValueKind.String ||
+            version.GetString() != addon.Version ||
+            !declaration.TryGetProperty(ManifestFields.AdapterApiVersion, out var api) || api.ValueKind != JsonValueKind.Number ||
+            !api.TryGetUInt32(out var apiVersion) || apiVersion != addon.AdapterApiVersion)
         {
-            throw new InvalidDataException($"Source archive does not match the add-on DLL: {filename}");
+            throw new InvalidDataException($"Source archive does not match the add-on DLL, version or API requirement: {addon.DllFile}");
         }
     }
     public static void Validate(string archivePath, string dll, string? root = null)
@@ -155,6 +168,13 @@ public static class SourceSnapshot
         using var stream = (archive.GetEntry(Artifacts.Manifest) ?? throw new InvalidDataException("Missing source manifest")).Open();
         using var manifest = JsonDocument.Parse(stream);
         var metadata = manifest.RootElement;
+        using var identityReader = new StreamReader(archive.GetEntry(ProjectPaths.Identity)!.Open());
+        var identity = ModIdentity.Parse(identityReader.ReadToEnd());
+        if (!metadata.TryGetProperty(ManifestFields.Version, out var coreVersion) || coreVersion.ValueKind != JsonValueKind.String ||
+            coreVersion.GetString() != identity.Version)
+        {
+            throw new InvalidDataException("Source archive version does not match its mod.json");
+        }
         if (metadata.GetProperty(ManifestFields.Kind).GetString() != ArchiveKind || metadata.GetProperty(ManifestFields.DllHash).GetString() != Artifacts.HashFile(dll) || metadata.GetProperty(ManifestFields.Plugin).GetString() != ModInfo.PluginFile)
         {
             throw new InvalidDataException("Source archive does not match the supplied DLL and plugin identity");
@@ -181,7 +201,7 @@ public static class SourceSnapshot
                 file.Key.StartsWith("include/", StringComparison.Ordinal) || file.Key.StartsWith("cmake/", StringComparison.Ordinal) ||
                 (file.Key.StartsWith("tools/ModTools/", StringComparison.Ordinal) && file.Key.EndsWith(".cs", StringComparison.Ordinal)) ||
                 file.Key is "setup.ps1" or "build.ps1" or "tools/Environment.ps1" or "tools/dependencies.json" or ProjectPaths.PathDefaults ||
-                file.Key is "CMakeLists.txt" or "CMakePresets.json" or "assets/settings.ini" or ProjectPaths.Identity or ProjectPaths.Version or "vcpkg.json" or "vcpkg-configuration.json" or "global.json" or ProjectPaths.ToolProject or ProjectPaths.ToolLock))
+                file.Key is "CMakeLists.txt" or "CMakePresets.json" or "assets/settings.ini" or ProjectPaths.Identity or "vcpkg.json" or "vcpkg-configuration.json" or "global.json" or ProjectPaths.ToolProject or ProjectPaths.ToolLock))
             {
                 if (!hashes.TryGetProperty(name, out var checksum) || checksum.GetString() != Artifacts.HashFile(path))
                 {

@@ -11,6 +11,19 @@ internal static class MetadataTests
         CheckReleaseTimestamp(root, temporary);
         CheckPexSanitation();
         CheckIdentity(root);
+        CheckVersions();
+    }
+
+    private static void CheckVersions()
+    {
+        foreach (var valid in new[] { "0.0.0", "1.2.3", "1.2.3.4", "255.255.4095.15" })
+        {
+            Check(ReleaseVersion.Parse(valid, "test") == valid, "Valid SKSE version was rejected");
+        }
+        foreach (var invalid in new[] { "", "1.2", "01.2.3", "1.2.3.4.5", "1.2.3-beta", " 1.2.3", "256.0.0", "1.256.0", "1.2.4096", "1.2.3.16", "99999999999999999999.0.0" })
+        {
+            Fails(() => ReleaseVersion.Parse(invalid, "test"));
+        }
     }
 
     private static void CheckReleaseTimestamp(string root, string temporary)

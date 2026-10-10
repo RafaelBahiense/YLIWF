@@ -3,7 +3,7 @@
 using namespace std::literals;
 
 SKSEPluginInfo(
-    .Version = REL::Version{ @PROJECT_VERSION_MAJOR@, @PROJECT_VERSION_MINOR@, @PROJECT_VERSION_PATCH@, @PROJECT_VERSION_TWEAK@ },
+    .Version = REL::Version{ @PLUGIN_VERSION_MAJOR@, @PLUGIN_VERSION_MINOR@, @PLUGIN_VERSION_PATCH@, @PLUGIN_VERSION_TWEAK@ },
     .Name = "@PLUGIN_BINARY_NAME@"sv,
     .Author = "@AUTHOR_NAME_CPP@"sv,
     .SupportEmail = ""sv,

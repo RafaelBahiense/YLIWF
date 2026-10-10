@@ -283,11 +283,7 @@ public static class Artifacts
             var patchScripts = Path.Combine(papyrus, ProjectPaths.Patch3DnpcOutput);
             BuildReceipt.Validate(root, BuildComponent.Papyrus3Dnpc, ScriptOutputs(Path.Combine(root, ProjectPaths.Patch3DnpcScripts), patchScripts), Path.Combine(patchScripts, BuildReceipt.ScriptsFile));
         }
-        var version = File.ReadAllText(Path.Combine(root, ProjectPaths.Version)).Trim();
-        if (!Version.TryParse(version, out var parsedVersion) || parsedVersion.Build < 0)
-        {
-            throw new InvalidDataException("VERSION must contain three or four numeric components");
-        }
+        var version = ModInfo.Read(root).Version;
 
         var metadata = new Dictionary<string, object>();
         var pending = new List<(string, string)>();
@@ -333,11 +329,17 @@ public static class Artifacts
                     continue;
                 }
 
-                SourceSnapshot.ValidateAddon(sourceTemporary, addonDll, addon.DllFile);
+                SourceSnapshot.ValidateAddon(sourceTemporary, addonDll, addon);
                 var files = new Dictionary<string, string> { ["SKSE/Plugins/" + addon.DllFile] = addonDll };
                 AddNotices(root, files, dependencyNotices);
-                destination = Path.Combine(output, $"{ModInfo.BinaryName}-{version}-{addon.Name}.zip");
+                destination = Path.Combine(output, addon.ArchiveName);
                 pending.Add((PrepareZip(destination, files, metadata, timestamp, includeManifest: false), destination));
+                // A stable, per-add-on source filename keeps its releases independent
+                // when the core's version stays unchanged.
+                var addonSource = Path.Combine(output, addon.SourceArchiveName);
+                var addonSourceTemporary = addonSource + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                pending.Add((addonSourceTemporary, addonSource));
+                File.Copy(sourceTemporary, addonSourceTemporary);
             }
             if (patch)
             {

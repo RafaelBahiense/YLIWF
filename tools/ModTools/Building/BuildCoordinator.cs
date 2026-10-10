@@ -103,7 +103,7 @@ public static class BuildCoordinator
 
     private static void Deploy(string root, string output, string destination)
     {
-        var version = File.ReadAllText(Path.Combine(root, ProjectPaths.Version)).Trim();
+        var version = ModInfo.Read(root).Version;
         using var archive = ZipFile.OpenRead(Path.Combine(output, $"{ModInfo.BinaryName}-{version}.zip"));
         foreach (var entry in archive.Entries)
         {

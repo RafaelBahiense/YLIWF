@@ -140,15 +140,22 @@ Create folders only when needed. Automatic build discovery supports native
 components; ESP/script components require explicit build integration.
 
 ```json
-{"name": "Example"}
+{"name": "Example", "version": "1.0.0", "adapterApiVersion": 1}
 ```
 
-CMake discovers manifests, applies shared configuration and adds DLLs to
+CMake discovers manifests, uses each add-on's version for SKSE/Windows DLL
+metadata, applies shared configuration and adds DLLs to
 `native_plugins`. ModTools records hashes and packages separate ZIPs with notices.
 Add-on `*_test.cpp` files become separate CTest executables in `native_tests`.
 Generic host/API tests live under the root `tests/` folder.
 No per-add-on build-script edits are needed.
 Full builds require all declared DLLs; repackaging includes only supplied DLLs
 with matching source-manifest hashes.
+
+Core and add-on release versions are independent. `adapterApiVersion` declares
+the API used by the implementation; it must match the version requested during
+registration. Serana checks this against the SDK at compile time. Unsupported
+host APIs are rejected at runtime. Binary and source ZIPs use the add-on's name
+and version, independent of the core ZIP filename.
 
 External authors may use their own SKSE project with the SDK header.

@@ -1,3 +1,5 @@
 {
-  "name": "Serana"
+  "name": "Serana",
+  "version": "1.0.0",
+  "adapterApiVersion": 1
 }

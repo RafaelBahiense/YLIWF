@@ -56,8 +56,8 @@ add-on `tests/native/*_test.cpp` files are discovered automatically.
 Failed Papyrus stages remain in `build/papyrus/.staging-*`.
 
 Add-ons are discovered from `src/addons/**/addon.json` and packaged separately
-as `YouLeadIWillFollow-<version>-<addon>.zip`. They share the source archive
-and notices. Supplied-DLL repackaging includes declared add-ons beside the core
+as `YouLeadIWillFollow-<addon>-<addon-version>.zip`, with matching `-source.zip`
+archives and dependency notices. Supplied-DLL repackaging includes declared add-ons beside the core
 DLL only when their hashes match the source manifest.
 
 VS Code provides build/test tasks. Generate the matching compile database,
@@ -73,8 +73,14 @@ rebuild. A new key requires one full build.
 
 ## Packaging
 
-`VERSION` supplies three or four numeric components. Outputs are:
-`YouLeadIWillFollow-<version>.zip`, its `-source.zip`, and optional add-on ZIPs.
+`mod.json` supplies the core version; each `addon.json` supplies its own version
+and required adapter API version. Release versions have three or four numeric
+components within SKSE's packed limits (`255.255.4095.15`).
+
+Core outputs are `YouLeadIWillFollow-<version>.zip` and its `-source.zip`.
+Each add-on gets independently named binary and source ZIPs. Source archives
+contain the full build snapshot; add-on source copies preserve a stable download
+for each add-on release even when the core version stays unchanged.
 
 To repackage an external DLL:
 

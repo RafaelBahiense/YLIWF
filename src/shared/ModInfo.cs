@@ -1,7 +1,7 @@
 using System.Text.Json;
 
 // Shared by plugin authoring and build tools; embedded so commands also work outside the repo.
-public sealed record ModIdentity(string DisplayName, string ShortName, string PluginFile, string BinaryName, string ScriptPrefix, string Author)
+public sealed record ModIdentity(string DisplayName, string ShortName, string PluginFile, string BinaryName, string ScriptPrefix, string Author, string Version)
 {
     private static readonly System.Buffers.SearchValues<char> s_myChars = System.Buffers.SearchValues.Create("<>:\"/\\|?*;");
 
@@ -26,7 +26,8 @@ public sealed record ModIdentity(string DisplayName, string ShortName, string Pl
             }
             return value;
         }
-        var identity = new ModIdentity(Required("displayName"), Required("shortName"), Required("pluginFile"), Required("binaryName"), Required("scriptPrefix"), Required("author"));
+        var version = ReleaseVersion.Parse(Required("version"), "mod.json version");
+        var identity = new ModIdentity(Required("displayName"), Required("shortName"), Required("pluginFile"), Required("binaryName"), Required("scriptPrefix"), Required("author"), version);
         foreach (var value in new[] { identity.ShortName, identity.BinaryName, identity.ScriptPrefix })
         {
             if (!(char.IsAsciiLetter(value[0]) || value[0] == '_') || value.Any(c => !(char.IsAsciiLetterOrDigit(c) || c == '_' || c == '-')))
@@ -52,11 +53,30 @@ public static class ModInfo
     public static string BinaryName => Identity.BinaryName;
     public static string NativeScript => Identity.NativeScript;
 
+    public static ModIdentity Read(string root) => ModIdentity.Parse(File.ReadAllText(Path.Combine(root, "mod.json")));
+
     private static ModIdentity Load()
     {
         using var stream = typeof(ModInfo).Assembly.GetManifestResourceStream("ModIdentity")
             ?? throw new InvalidDataException("Missing embedded mod.json");
         using var reader = new StreamReader(stream);
         return ModIdentity.Parse(reader.ReadToEnd());
+    }
+}
+
+public static class ReleaseVersion
+{
+    public static string Parse(string value, string field)
+    {
+        var parts = value.Split('.');
+        // SKSE stores versions as 8/8/12/4-bit components; reject silent truncation.
+        int[] limits = [255, 255, 4095, 15];
+        if (parts.Length is not (3 or 4) || parts.Where((part, index) =>
+            part.Length == 0 || part.Any(c => !char.IsAsciiDigit(c)) ||
+            (part.Length > 1 && part[0] == '0') || !int.TryParse(part, out var number) || number > limits[index]).Any())
+        {
+            throw new InvalidDataException($"{field}: expected three or four numeric components within SKSE version limits (255.255.4095.15)");
+        }
+        return value;
     }
 }
