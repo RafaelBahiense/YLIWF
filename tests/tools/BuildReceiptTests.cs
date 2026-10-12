@@ -1,81 +1,79 @@
 using ModTools.Packaging;
 
-internal static class BuildReceiptTests
+namespace ModTools.Tests;
+
+public sealed class BuildReceiptTests : TestWorkspace
 {
-    public static void Run(string root, string temporary, string esp)
-    {
-        var checkout = CopyCheckout(root, Path.Combine(temporary, "receipt-checkout"));
-        var output = Path.Combine(temporary, "receipt-plugin.esp");
-        File.Copy(esp, output);
-        var receipt = BuildReceipt.PluginPath(output);
-        var inputs = BuildReceipt.CaptureInputs(checkout, BuildComponent.Plugin);
-        BuildReceipt.Write(checkout, BuildComponent.Plugin, inputs, [output], receipt);
+    private readonly string checkout;
+    private readonly string output;
+    private readonly string receipt;
+    private readonly Dictionary<string, string> inputs;
 
-        CheckReceiptIdentity(checkout, output, receipt);
-        CheckChangedOutput(checkout, esp, output, receipt);
-        CheckChangedPluginInputs(root, checkout, output, receipt, inputs);
-        CheckChangedInputSet(root, checkout, output, receipt);
-        CheckNativeInputs(root, checkout, temporary, output);
-        CheckMalformedReceipt(checkout, output, receipt);
-    }
-
-    private static string CopyCheckout(string root, string checkout)
+    public BuildReceiptTests()
     {
-        // Mutate a separate checkout, never maintained sources.
-        foreach (var (name, file) in SourceSnapshot.ProjectFiles(root))
+        try
         {
-            var destination = Path.Combine(checkout, name);
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            File.Copy(file, destination);
+            checkout = CopyCheckout("receipt-checkout");
+            output = CreatePlugin();
+            receipt = BuildReceipt.PluginPath(output);
+            inputs = BuildReceipt.CaptureInputs(checkout, BuildComponent.Plugin);
+            BuildReceipt.Write(checkout, BuildComponent.Plugin, inputs, [output], receipt);
         }
-        return checkout;
+        catch
+        {
+            Dispose();
+            throw;
+        }
     }
 
-    private static void CheckReceiptIdentity(string checkout, string output, string receipt)
+    [Fact]
+    public void ReceiptIdentity()
     {
         BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt);
-        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.PapyrusCore, [output], receipt));
-        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt + ".absent"));
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.PapyrusCore, [output], receipt));
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt + ".absent"));
     }
 
-    private static void CheckChangedOutput(string checkout, string esp, string output, string receipt)
+    [Fact]
+    public void ChangedOutput()
     {
         File.AppendAllText(output, "changed output");
         Artifacts.ValidateEsp(output);
-        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
-        File.Copy(esp, output, true);
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
     }
 
-    private static void CheckChangedPluginInputs(string root, string checkout, string output, string receipt,
-        Dictionary<string, string> inputs)
+    [Fact]
+    public void ChangedPluginInputs()
     {
         var source = Path.Combine(checkout, "src/plugin/Records/Quests.cs");
         File.AppendAllText(source, "\n// another revision\n");
-        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
-        Reject(() => BuildReceipt.Write(checkout, BuildComponent.Plugin, inputs, [output], receipt));
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Write(checkout, BuildComponent.Plugin, inputs, [output], receipt));
         File.Copy(Path.Combine(root, "src/plugin/Records/Quests.cs"), source, true);
 
         var tool = Path.Combine(checkout, "tools/ModTools/Commands.cs");
         File.AppendAllText(tool, "\n// changed generator\n");
-        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
         File.Copy(Path.Combine(root, "tools/ModTools/Commands.cs"), tool, true);
     }
 
-    private static void CheckChangedInputSet(string root, string checkout, string output, string receipt)
+    [Fact]
+    public void ChangedInputSet()
     {
         var added = Path.Combine(checkout, "src/plugin/NewRecord.cs");
         File.WriteAllText(added, "// new input\n");
-        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
         File.Delete(added);
 
         var source = Path.Combine(checkout, "src/plugin/Records/Quests.cs");
         File.Delete(source);
-        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
         File.Copy(Path.Combine(root, "src/plugin/Records/Quests.cs"), source);
         BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt);
     }
 
-    private static void CheckNativeInputs(string root, string checkout, string temporary, string output)
+    [Fact]
+    public void NativeInputs()
     {
         var receipt = Path.Combine(temporary, "native.build.json");
         var inputs = BuildReceipt.CaptureInputs(checkout, BuildComponent.Native);
@@ -84,33 +82,21 @@ internal static class BuildReceiptTests
 
         var source = Path.Combine(checkout, "src/native/Controller.cpp");
         File.AppendAllText(source, "\n// changed native input\n");
-        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Native, [output], receipt));
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.Native, [output], receipt));
         File.Copy(Path.Combine(root, "src/native/Controller.cpp"), source, true);
 
         var addon = Path.Combine(checkout, "src/addons/new/addon.json");
         Directory.CreateDirectory(Path.GetDirectoryName(addon)!);
         File.WriteAllText(addon, """{"name":"New"}""");
-        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Native, [output], receipt));
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.Native, [output], receipt));
         File.Delete(addon);
         BuildReceipt.Validate(checkout, BuildComponent.Native, [output], receipt);
     }
 
-    private static void CheckMalformedReceipt(string checkout, string output, string receipt)
+    [Fact]
+    public void MalformedReceipt()
     {
         File.WriteAllText(receipt, "{}");
-        Reject(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
-    }
-
-    private static void Reject(Action action)
-    {
-        try
-        {
-            action();
-        }
-        catch (InvalidDataException)
-        {
-            return;
-        }
-        throw new InvalidOperationException("Mismatched build receipt was accepted");
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.Plugin, [output], receipt));
     }
 }

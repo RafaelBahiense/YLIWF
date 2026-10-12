@@ -73,7 +73,8 @@ public static class BuildCoordinator
         // The launcher already built ModTools; do not rebuild the running executable.
         RunTool(root, "dotnet", "build", "tests/tools/ModTools.Tests.csproj", "-c", BuildConfiguration.Release.CMakeName(),
             "--no-restore", "-p:BuildProjectReferences=false");
-        RunTool(root, "dotnet", Path.Combine(root, "tests/tools/bin/Release/net10.0/ModTools.Tests.dll"), root);
+        RunTool(root, "dotnet", "test", "--project", "tests/tools/ModTools.Tests.csproj",
+            "-c", BuildConfiguration.Release.CMakeName(), "--no-build", "--no-restore");
         Console.WriteLine("All tests passed.");
     }
 

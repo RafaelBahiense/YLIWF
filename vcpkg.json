@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "you-lead-i-follow",
   "dependencies": [
+    "doctest",
     "spdlog",
     "rapidcsv",
     "skse-mcp"

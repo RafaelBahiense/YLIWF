@@ -1,7 +1,6 @@
-#include "AdapterRules.h"
+#include <doctest/doctest.h>
 
-#include <cstdlib>
-#include <iostream>
+#include "AdapterRules.h"
 
 namespace {
     using namespace yliwf::sdk;
@@ -13,13 +12,6 @@ namespace {
                   offsetof(Adapter, canReceiveCombatProtection) == 72 &&
                   offsetof(Adapter, canTravelInFormation) == 80 && sizeof(Adapter) == 96 && BaseAPISize == 24 &&
                   sizeof(API) == 32);
-
-    void Check(bool condition, const char* message) {
-        if (!condition) {
-            std::cerr << message << '\n';
-            std::exit(1);
-        }
-    }
 
     Adapter ValidAdapter() {
         Adapter adapter;
@@ -36,114 +28,112 @@ namespace {
         return adapter;
     }
 
-    void CheckHostNotificationCompatibility() {
+    TEST_CASE("Host Notification Compatibility") {
         API host;
         host.stateChanged = [](AdapterID) {};
-        Check(CanNotifyState(&host), "Host notification extension unavailable");
+        REQUIRE_MESSAGE((CanNotifyState(&host)), "Host notification extension unavailable");
 
         host.size = BaseAPISize;
-        Check(!CanNotifyState(&host) && !CanNotifyState(nullptr), "Old or absent host exposes optional callback");
+        REQUIRE_MESSAGE((!CanNotifyState(&host) && !CanNotifyState(nullptr)),
+                        "Old or absent host exposes optional callback");
     }
 
-    void CheckAdapterTableCompatibility() {
-        Check(!Valid(Adapter{}), "Incomplete adapter accepted");
+    TEST_CASE("Adapter Table Compatibility") {
+        REQUIRE_MESSAGE((!Valid(Adapter{})), "Incomplete adapter accepted");
 
         auto adapter = ValidAdapter();
-        Check(HasTravelFormation(adapter), "Complete travel capability unavailable");
+        REQUIRE_MESSAGE((HasTravelFormation(adapter)), "Complete travel capability unavailable");
         adapter.size = offsetof(Adapter, setFormationPackage);
-        Check(!HasTravelFormation(adapter), "Partial travel extension accepted");
+        REQUIRE_MESSAGE((!HasTravelFormation(adapter)), "Partial travel extension accepted");
         adapter.size = offsetof(Adapter, canTravelInFormation);
-        Check(!HasTravelFormation(adapter) && HasCombatProtection(adapter),
-              "Protection-only table exposes travel callbacks");
-        Check(Valid(adapter), "Protection-only v1 table rejected after travel extension");
+        REQUIRE_MESSAGE((!HasTravelFormation(adapter) && HasCombatProtection(adapter)),
+                        "Protection-only table exposes travel callbacks");
+        REQUIRE_MESSAGE((Valid(adapter)), "Protection-only v1 table rejected after travel extension");
         adapter.size = sizeof(Adapter);
         adapter.setFormationPackage = nullptr;
-        Check(!HasTravelFormation(adapter), "Permission without movement callback accepted");
+        REQUIRE_MESSAGE((!HasTravelFormation(adapter)), "Permission without movement callback accepted");
         adapter = ValidAdapter();
-        Check(HasFollowDistance(adapter) && HasRecruitmentEligibility(adapter) && HasCombatProtection(adapter),
-              "Optional callbacks unavailable");
+        REQUIRE_MESSAGE(
+            (HasFollowDistance(adapter) && HasRecruitmentEligibility(adapter) && HasCombatProtection(adapter)),
+            "Optional callbacks unavailable");
 
         adapter.size = offsetof(Adapter, canReceiveCombatProtection);
-        Check(HasFollowDistance(adapter) && HasRecruitmentEligibility(adapter) && !HasCombatProtection(adapter),
-              "Recruitment v1 table exposes a missing protection tail");
-        Check(Valid(adapter), "Recruitment v1 table rejected after extension");
+        REQUIRE_MESSAGE(
+            (HasFollowDistance(adapter) && HasRecruitmentEligibility(adapter) && !HasCombatProtection(adapter)),
+            "Recruitment v1 table exposes a missing protection tail");
+        REQUIRE_MESSAGE((Valid(adapter)), "Recruitment v1 table rejected after extension");
 
         adapter.size = offsetof(Adapter, canRecruitThroughDialogue);
-        Check(HasFollowDistance(adapter) && !HasRecruitmentEligibility(adapter) && !HasCombatProtection(adapter),
-              "Distance-only v1 table lost its callback or exposes a missing recruitment tail");
-        Check(Valid(adapter), "Valid version-one adapter rejected");
+        REQUIRE_MESSAGE(
+            (HasFollowDistance(adapter) && !HasRecruitmentEligibility(adapter) && !HasCombatProtection(adapter)),
+            "Distance-only v1 table lost its callback or exposes a missing recruitment tail");
+        REQUIRE_MESSAGE((Valid(adapter)), "Valid version-one adapter rejected");
 
         adapter.size = BaseAdapterSize;
-        Check(!HasFollowDistance(adapter) && !HasRecruitmentEligibility(adapter) && !HasCombatProtection(adapter),
-              "Original v1 table exposes optional callbacks");
-        Check(Valid(adapter), "Original v1 adapter rejected after extension");
+        REQUIRE_MESSAGE(
+            (!HasFollowDistance(adapter) && !HasRecruitmentEligibility(adapter) && !HasCombatProtection(adapter)),
+            "Original v1 table exposes optional callbacks");
+        REQUIRE_MESSAGE((Valid(adapter)), "Original v1 adapter rejected after extension");
 
         adapter.size = sizeof(Adapter);
         adapter.version = 2;
-        Check(!Valid(adapter), "Unsupported ABI accepted");
+        REQUIRE_MESSAGE((!Valid(adapter)), "Unsupported ABI accepted");
 
         adapter.version = 1;
         adapter.size = 8;
-        Check(!Valid(adapter), "Truncated adapter table accepted");
+        REQUIRE_MESSAGE((!Valid(adapter)), "Truncated adapter table accepted");
     }
 
-    void CheckInvalidCapabilityBits() {
+    TEST_CASE("Invalid Capability Bits") {
         FollowerState following;
         following.state = State::Following;
         following.commands = AllCommands;
         following.commands |= 128;
-        Check(!Supports(following, Command::Follow), "Invalid capability bits accepted");
+        REQUIRE_MESSAGE((!Supports(following, Command::Follow)), "Invalid capability bits accepted");
     }
 
-    void CheckCombatProtectionOwnership() {
+    TEST_CASE("Combat Protection Ownership") {
         using mod::adapter_rules::CombatProtection;
-        Check(CombatProtection(true, State::Following, true, false, false) &&
-                  CombatProtection(true, State::Waiting, true, false, false),
-              "Active eligible followers do not receive protection");
-        Check(!CombatProtection(false, State::Following, true, false, false), "Disabled protection remains active");
-        Check(!CombatProtection(true, State::Inactive, true, false, false) &&
-                  !CombatProtection(true, State::Unavailable, true, false, false),
-              "Dismissed or conflicting followers retain protection");
-        Check(!CombatProtection(true, State::Following, false, false, false), "Provider opt-out ignored");
-        Check(!CombatProtection(true, State::Following, true, true, false), "Dead actor receives protection");
-        Check(!CombatProtection(true, State::Following, true, false, true), "Adapter changes native-owned protection");
+        REQUIRE_MESSAGE((CombatProtection(true, State::Following, true, false, false) &&
+                         CombatProtection(true, State::Waiting, true, false, false)),
+                        "Active eligible followers do not receive protection");
+        REQUIRE_MESSAGE((!CombatProtection(false, State::Following, true, false, false)),
+                        "Disabled protection remains active");
+        REQUIRE_MESSAGE((!CombatProtection(true, State::Inactive, true, false, false) &&
+                         !CombatProtection(true, State::Unavailable, true, false, false)),
+                        "Dismissed or conflicting followers retain protection");
+        REQUIRE_MESSAGE((!CombatProtection(true, State::Following, false, false, false)), "Provider opt-out ignored");
+        REQUIRE_MESSAGE((!CombatProtection(true, State::Following, true, true, false)),
+                        "Dead actor receives protection");
+        REQUIRE_MESSAGE((!CombatProtection(true, State::Following, true, false, true)),
+                        "Adapter changes native-owned protection");
     }
 
-    void CheckRequestOwnershipAndQuarantine() {
+    TEST_CASE("Request Ownership And Quarantine") {
         Requests requests;
         constexpr AdapterID owner = 1;
         constexpr AdapterID otherAdapter = 2;
         constexpr ActorID actor = 100;
 
         const auto request = requests.Add(owner, actor, Command::Wait);
-        Check(request.has_value() && !requests.Add(otherAdapter, actor, Command::Dismiss),
-              "Duplicate controller command accepted");
-        Check(!requests.Find(otherAdapter, *request), "Another adapter can acknowledge a request");
+        REQUIRE_MESSAGE((request.has_value() && !requests.Add(otherAdapter, actor, Command::Dismiss)),
+                        "Duplicate controller command accepted");
+        REQUIRE_MESSAGE((!requests.Find(otherAdapter, *request)), "Another adapter can acknowledge a request");
 
         auto* pending = requests.Find(owner, *request);
         pending->started = true;
         pending->quarantined = true;
-        Check(!requests.Add(owner, actor, Command::Wait), "Timed-out call can be replayed");
-        Check(requests.Remove(owner, *request) && requests.Add(owner, actor, Command::Follow).has_value(),
-              "Late acknowledgement cannot release quarantine");
+        REQUIRE_MESSAGE((!requests.Add(owner, actor, Command::Wait)), "Timed-out call can be replayed");
+        REQUIRE_MESSAGE((requests.Remove(owner, *request) && requests.Add(owner, actor, Command::Follow).has_value()),
+                        "Late acknowledgement cannot release quarantine");
 
         requests.Reset();
         const auto afterLoad = requests.Add(owner, actor, Command::Dismiss);
-        Check(afterLoad && *afterLoad > *request && !requests.Find(owner, *request),
-              "Old-save acknowledgement can finish a new request");
+        REQUIRE_MESSAGE((afterLoad && *afterLoad > *request && !requests.Find(owner, *request)),
+                        "Old-save acknowledgement can finish a new request");
 
         for (ActorID nextActor = actor + 1; nextActor < actor + 16; ++nextActor)
-            Check(requests.Add(owner, nextActor, Command::Wait).has_value(), "Queue filled prematurely");
-        Check(!requests.Add(owner, actor + 16, Command::Wait), "Adapter queue limit ignored");
+            REQUIRE_MESSAGE((requests.Add(owner, nextActor, Command::Wait).has_value()), "Queue filled prematurely");
+        REQUIRE_MESSAGE((!requests.Add(owner, actor + 16, Command::Wait)), "Adapter queue limit ignored");
     }
-}
-
-int main() {
-    CheckHostNotificationCompatibility();
-    CheckAdapterTableCompatibility();
-    CheckInvalidCapabilityBits();
-    CheckCombatProtectionOwnership();
-    CheckRequestOwnershipAndQuarantine();
-
-    std::cout << "Adapter ABI, capabilities, ownership, quarantine, and load-generation tests passed.\n";
 }

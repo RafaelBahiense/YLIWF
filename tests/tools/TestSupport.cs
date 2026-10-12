@@ -2,25 +2,23 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Text;
 
+namespace ModTools.Tests;
+
 internal static class TestSupport
 {
-    public static void Check(bool condition, string description)
+    public static void RejectBuild(Action action)
     {
-        if (!condition)
-        {
-            throw new InvalidOperationException(description);
-        }
+        var exception = Record.Exception(action);
+        Assert.True(exception is ArgumentException or InvalidDataException,
+            $"Expected invalid build declaration; got {exception?.GetType().Name ?? "no exception"}.");
     }
+
+    // Corrupt binary inputs may fail at validation, stream reading or checked arithmetic.
     public static void Fails(Action action)
     {
-        try
-        {
-            action();
-        }
-        catch (InvalidDataException) { return; }
-        catch (IOException) { return; }
-        catch (OverflowException) { return; }
-        throw new InvalidOperationException("Expected invalid input to fail");
+        var exception = Record.Exception(action);
+        Assert.True(exception is InvalidDataException or IOException or OverflowException,
+            $"Expected invalid data, IO or overflow failure; got {exception?.GetType().Name ?? "no exception"}.");
     }
 
     private static readonly string[] ProjectNotices = ["LICENSE", "NOTICE", "CREDITS.md"];
@@ -32,11 +30,10 @@ internal static class TestSupport
             .Select(name => prefix + name).ToHashSet(StringComparer.Ordinal);
         var actual = archive.Entries.Where(entry => entry.FullName.StartsWith("docs/", StringComparison.Ordinal))
             .Select(entry => entry.FullName).ToHashSet(StringComparer.Ordinal);
-        Check(actual.SetEquals(expected), "Install ZIP must contain only project and dependency notices under docs");
-        Check(!archive.Entries.Any(entry => entry.FullName.EndsWith(".ini", StringComparison.OrdinalIgnoreCase)),
-            "Install ZIP must not overwrite user configuration");
+        Assert.True(actual.SetEquals(expected), "Install ZIP must contain only project and dependency notices under docs");
+        Assert.False(archive.Entries.Any(entry => entry.FullName.EndsWith(".ini", StringComparison.OrdinalIgnoreCase)), "Install ZIP must not overwrite user configuration");
         using var reader = new StreamReader(archive.GetEntry(prefix + "NOTICE")!.Open());
-        Check(reader.ReadToEnd().Contains("THIS MOD IS NOT MADE, GUARANTEED OR SUPPORTED BY ZENIMAX OR ITS AFFILIATES.", StringComparison.Ordinal),
+        Assert.True(reader.ReadToEnd().Contains("THIS MOD IS NOT MADE, GUARANTEED OR SUPPORTED BY ZENIMAX OR ITS AFFILIATES.", StringComparison.Ordinal),
             "Install ZIP omitted Bethesda disclaimer");
     }
     public static byte[] DllFixture()
