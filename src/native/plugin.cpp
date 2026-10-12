@@ -13,7 +13,9 @@
 #include "ControllerStorage.h"
 #include "Adapters.h"
 #include "FollowDistance.h"
+#include "CombatRoles.h"
 #include "Formation.h"
+#include "Healer.h"
 #include "PartyRules.h"
 
 namespace {
@@ -74,6 +76,9 @@ namespace {
             ResolveForm<RE::TESFaction>(0x994, kRequiredPluginName, mod::record_names::FollowDistanceChoice));
         mod::formation::Configure(
             ResolveForm<RE::TESFaction>(0x995, kRequiredPluginName, mod::record_names::FormationSlot));
+        mod::combat_roles::Configure(
+            ResolveForm<RE::TESFaction>(0x996, kRequiredPluginName, mod::record_names::CombatRole));
+        mod::healer::Configure();
         g_friendlyFireSpell =
             ResolveForm<RE::SpellItem>(0x800, kRequiredPluginName, mod::record_names::ProtectionSpell);
         mod::adapters::ConfigureCombatProtection(g_friendlyFireSpell);
@@ -473,11 +478,23 @@ namespace {
 
     class FollowerEvents final : public RE::BSTEventSink<RE::TESDeathEvent>,
                                  public RE::BSTEventSink<RE::TESCombatEvent>,
-                                 public RE::BSTEventSink<RE::TESObjectLoadedEvent> {
+                                 public RE::BSTEventSink<RE::TESObjectLoadedEvent>,
+                                 public RE::BSTEventSink<RE::TESSpellCastEvent> {
     public:
         static FollowerEvents* GetSingleton() {
             static FollowerEvents sink;
             return &sink;
+        }
+
+        RE::BSEventNotifyControl ProcessEvent(const RE::TESSpellCastEvent* event,
+                                              RE::BSTEventSource<RE::TESSpellCastEvent>*) override {
+            if (event && event->object && event->object->As<RE::Actor>()) {
+                const auto actor = event->object->GetFormID();
+                const auto spell = event->spell;
+                if (mod::combat_roles::Read(event->object->As<RE::Actor>()) == mod::combat_roles::Role::Healer)
+                    QueueGameTask([actor, spell] { mod::healer::SpellReleased(actor, spell); });
+            }
+            return RE::BSEventNotifyControl::kContinue;
         }
 
         RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* event,
@@ -499,6 +516,10 @@ namespace {
             if (event) {
                 auto* actor = RE::TESForm::LookupByID<RE::Actor>(event->formID);
                 mod::formation::Observe(actor);
+                if (event->loaded && actor) {
+                    const auto actorID = actor->GetFormID();
+                    QueueGameTask([actorID] { mod::healer::Observe(actorID); });
+                }
                 if (!event->loaded)
                     mod::controller::Unloaded(actor);
             }
@@ -517,6 +538,7 @@ namespace {
         events->AddEventSink<RE::TESDeathEvent>(FollowerEvents::GetSingleton());
         events->AddEventSink<RE::TESCombatEvent>(FollowerEvents::GetSingleton());
         events->AddEventSink<RE::TESObjectLoadedEvent>(FollowerEvents::GetSingleton());
+        events->AddEventSink<RE::TESSpellCastEvent>(FollowerEvents::GetSingleton());
         if (events->GetEventSource<RE::TESFastTravelEndEvent>())
             events->AddEventSink<RE::TESFastTravelEndEvent>(TravelSink::GetSingleton());
     }

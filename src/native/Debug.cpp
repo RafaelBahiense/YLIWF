@@ -3,6 +3,7 @@
 #include "Debug.h"
 #include "Adapters.h"
 #include "FollowDistance.h"
+#include "Healer.h"
 #include "Formation.h"
 
 #include "DebugRules.h"
@@ -142,6 +143,9 @@ namespace mod::debug {
                 << " worldspace=" << Form(actor->GetWorldspace()) << '\n';
             out << "    health=" << actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth)
                 << " speech=" << actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSpeech) << '\n';
+            out << "    combatRolePreference=" << combat_roles::Name(combat_roles::Read(actor)) << '\n';
+            if (combat_roles::Read(actor) == combat_roles::Role::Healer)
+                out << "    healer=" << healer::Status(actor->GetFormID()) << '\n';
             // Include every faction on the NPC base and changes in the reference extra data.
             if (auto* base = actor->GetActorBase()) {
                 out << "    baseFlags=" << base->actorData.actorBaseFlags.underlying() << '\n';
@@ -477,6 +481,9 @@ namespace mod::debug {
             result.modCount = context.modCount ? context.modCount->value : -1;
             result.recruitGate = context.recruitGate ? context.recruitGate->value : -1;
             CaptureFollowerRows(result);
+            for (auto& row : result.followers)
+                if (row.formID && row.aliasID != 1)
+                    row.combatRole = combat_roles::Inspect(RE::TESForm::LookupByID<RE::Actor>(row.formID));
             result.liveCount = mod::debug_rules::Diagnose(result.followers);
             DiagnoseProtectionSettings(result);
             result.issues =
@@ -488,6 +495,7 @@ namespace mod::debug {
                 auto row = ActorState(RE::TESForm::LookupByID<RE::Actor>(follower.actor));
                 row.aliasID = UINT32_MAX;
                 row.adapterName = follower.name;
+                row.combatRole = combat_roles::Inspect(RE::TESForm::LookupByID<RE::Actor>(row.formID));
                 row.adapterCommands = follower.state.commands;
                 row.distanceAvailable = follow_distance::Available() && follower.supportsDistance;
                 row.adapterReason = follower.state.reason;

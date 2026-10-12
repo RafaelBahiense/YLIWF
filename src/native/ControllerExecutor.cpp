@@ -14,6 +14,7 @@
 #include "Adapters.h"
 #include "FollowDistance.h"
 #include "Formation.h"
+#include "Healer.h"
 
 #include <atomic>
 #include <bit>
@@ -464,9 +465,12 @@ namespace mod::controller::executor {
                 }
             }
             formation::Tick();
+            if (!paused)
+                healer::Tick(elapsed);
             const bool delay = storage::Get().active && storage::Active().phase == Phase::Delay;
-            const bool work = formation::HasWork() || adapters::HasWork() || adapters::NeedsObservation() || delay ||
-                              countsDirty || !storage::Get().queue.empty() || !storage::Get().callers.empty() ||
+            const bool work = formation::HasWork() || adapters::HasWork() || adapters::NeedsObservation() ||
+                              healer::NeedsObservation() || delay || countsDirty || !storage::Get().queue.empty() ||
+                              !storage::Get().callers.empty() ||
                               std::ranges::any_of(storage::Get().deadlines, [](float time) { return time > 0; });
             DeadlineScheduler().Set(work, delay && !paused, formation::HasWork() && !paused);
         }
@@ -707,6 +711,7 @@ namespace mod::controller::executor {
 
     void Invalidate() {
         formation::Invalidate();
+        healer::Invalidate();
         loaded = false;
         countsDirty = false;
         ++generation;
@@ -717,6 +722,7 @@ namespace mod::controller::executor {
 
     void Loaded() {
         loaded = true;
+        healer::Loaded();
         countsDirty = true;
         RefreshClock();
         Wake();

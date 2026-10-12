@@ -15,10 +15,67 @@ public sealed partial class PluginTests : TestWorkspace
         var esp = CreatePlugin();
         Artifacts.ValidateEsp(esp);
         using var loaded = SkyrimMod.CreateFromBinaryOverlay(esp, SkyrimRelease.SkyrimSE);
-        Assert.Equal(92, loaded.EnumerateMajorRecords().Count());
+        Assert.Equal(127, loaded.EnumerateMajorRecords().Count());
         Assert.True(loaded.Factions.Single(faction => faction.FormKey == new FormKey(loaded.ModKey, 0x995)).Flags.HasFlag(Faction.FactionFlag.HiddenFromPC));
         Assert.Equal(ModInfo.Identity.Author, loaded.ModHeader.Author);
         Assert.Equal("DialogueFollower", loaded.Quests.Single(q => q.FormKey == FormKey.Factory("0750BA:Skyrim.esm")).EditorID);
+    }
+
+    [Fact]
+    public void CombatRoleMetadata()
+    {
+        using var loaded = SkyrimMod.CreateFromBinaryOverlay(CreatePlugin(), SkyrimRelease.SkyrimSE);
+        var faction = loaded.Factions.Single(record => record.FormKey == new FormKey(loaded.ModKey, 0x996));
+        Assert.Equal("YLIWF_CombatRole", faction.EditorID);
+        Assert.Equal(Faction.FactionFlag.HiddenFromPC, faction.Flags);
+        Assert.Empty(faction.Relations);
+    }
+
+    [Fact]
+    public void HealerPackages()
+    {
+        using var loaded = SkyrimMod.CreateFromBinaryOverlay(CreatePlugin(), SkyrimRelease.SkyrimSE);
+        var quest = loaded.Quests.Single(record => record.FormKey == FormKey.Factory("0750BA:Skyrim.esm"));
+        var overridesKey = new FormKey(loaded.ModKey, 0xA09);
+        var activityKey = new FormKey(loaded.ModKey, 0xA08);
+        var overrides = loaded.FormLists.Single(record => record.FormKey == overridesKey);
+        Assert.Equal(26, overrides.Items.Count);
+        Assert.Equal(FormKey.Factory("109124:Skyrim.esm"), overrides.Items[24].FormKey);
+        Assert.Equal(FormKey.Factory("05C851:Skyrim.esm"), overrides.Items[25].FormKey);
+        Assert.Equal(Faction.FactionFlag.HiddenFromPC, loaded.Factions.Single(record => record.FormKey == activityKey).Flags);
+        Assert.All(quest.Aliases.Where(alias => alias.ID != 1), alias => Assert.Equal(overridesKey, alias.CombatOverridePackageList.FormKey));
+        Assert.Equal(FormKey.Null, quest.Aliases.Single(alias => alias.ID == 1).CombatOverridePackageList.FormKey);
+        var markers = loaded.EnumerateMajorRecords().OfType<IPlacedObjectGetter>().ToArray();
+        for (var slot = 0; slot < 8; ++slot)
+        {
+            var marker = new FormKey(loaded.ModKey, (uint)(0xA00 + slot));
+            Assert.NotEqual(0, (markers.Single(record => record.FormKey == marker).MajorRecordFlagsRaw & 0x400));
+            foreach (var start in new uint[] { 0x9D0, 0x9E0 })
+            {
+                var travel = loaded.Packages.Single(record => record.FormKey == new FormKey(loaded.ModKey, start + (uint)slot));
+                CheckFormationHold(travel);
+                Assert.True(travel.Flags.HasFlag(Package.Flag.IgnoreCombat));
+                Assert.True(travel.Flags.HasFlag(Package.Flag.PreferredSpeed));
+                Assert.Equal(3, travel.Unknown);
+                Assert.All(quest.Aliases.Where(alias => alias.ID != 1), alias => Assert.Contains(alias.PackageData, link => link.FormKey == travel.FormKey));
+                var activeCondition = travel.Conditions.Cast<IConditionFloatGetter>().Last();
+                Assert.Equal(activityKey, ((IGetFactionRankConditionDataGetter)activeCondition.Data).Faction.Link.FormKey);
+                Assert.Equal(slot + (start == 0x9E0 ? 8 : 0), activeCondition.ComparisonValue);
+                var location = (ILocationTargetRadiusGetter)((IPackageDataLocationGetter)travel.Data[0]).Location;
+                Assert.Equal(marker, ((ILocationTargetGetter)location.Target).Link.FormKey);
+            }
+            var cast = loaded.Packages.Single(record => record.FormKey == new FormKey(loaded.ModKey, (uint)(0x9F0 + slot)));
+            Assert.Equal(FormKey.Factory("0504F5:Skyrim.esm"), cast.PackageTemplate.FormKey);
+            Assert.True(cast.Flags.HasFlag(Package.Flag.IgnoreCombat));
+            Assert.False(cast.Flags.HasFlag(Package.Flag.MustComplete));
+            Assert.Equal(PackageDataTarget.Types.Target, ((IPackageDataTargetGetter)cast.Data[3]).Type);
+            Assert.IsType<IPackageTargetObjectIDGetter>(((IPackageDataTargetGetter)cast.Data[3]).Target, exactMatch: false);
+            Assert.Equal(PackageDataTarget.Types.SingleRef, ((IPackageDataTargetGetter)cast.Data[4]).Type);
+            Assert.IsType<IPackageTargetSpecificReferenceGetter>(((IPackageDataTargetGetter)cast.Data[4]).Target, exactMatch: false);
+            Assert.Equal(1u, ((IPackageDataIntGetter)cast.Data[10]).Data);
+            Assert.Equal(1u, ((IPackageDataIntGetter)cast.Data[11]).Data);
+            Assert.False(((IPackageDataBoolGetter)cast.Data[12]).Data);
+        }
     }
 
     [Fact]

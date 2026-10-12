@@ -5,6 +5,11 @@ internal static partial class FollowerPlugin
 {
     private static void AddFactions(SkyrimMod mod)
     {
+        mod.Factions.Add(new Faction(OwnForm(0x000996), SkyrimRelease.SkyrimSE)
+        {
+            EditorID = RecordNames.CombatRole,
+            Flags = Faction.FactionFlag.HiddenFromPC
+        });
         mod.Factions.Add(CreateHomeFaction());
         mod.Factions.Add(new Faction(FollowDistanceFactionForm, SkyrimRelease.SkyrimSE)
         {

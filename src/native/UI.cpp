@@ -283,6 +283,41 @@ namespace {
         EndDisabled(disabled);
     }
 
+    void RenderCombatRole(const mod::debug::Follower& row, const mod::debug::Snapshot& state) {
+        if (row.aliasID == 1 || !ImGuiMCP::CollapsingHeader("Combat role preference (preview)"))
+            return;
+        ImGuiMCP::TextWrapped("Healer assists injured allies in combat. Other roles are saved preferences only.");
+        const auto& roles = row.combatRole;
+        if (!roles.available) {
+            ImGuiMCP::TextWrapped("%s", roles.unavailable.c_str());
+            return;
+        }
+        using mod::combat_roles::Role;
+        if (!roles.behavior.empty())
+            ImGuiMCP::TextWrapped("Healer: %s", roles.behavior.c_str());
+        const auto& selected = roles.options[static_cast<std::size_t>(roles.assigned)];
+        if (!selected.eligible || !selected.ready)
+            ImGuiMCP::TextWrapped("Preference retained: %s. Ordinary combat behavior continues.",
+                                  selected.reason.c_str());
+        const bool blocked = !CanRequest(state, mod::debug::Action::Follow) || row.dead;
+        for (std::size_t index = 0; index < mod::combat_roles::RoleCount; ++index) {
+            const auto role = static_cast<Role>(index);
+            const auto& option = roles.options[index];
+            const bool disabled = blocked || !option.eligible;
+            BeginDisabled(disabled);
+            if (ImGuiMCP::RadioButton(mod::combat_roles::Name(role).data(), roles.assigned == role))
+                mod::combat_roles::Request(row.formID, row.aliasID, role, state.generation);
+            EndDisabled(disabled);
+            if (!option.reason.empty()) {
+                ImGuiMCP::SameLine();
+                ImGuiMCP::TextWrapped("%s", option.reason.c_str());
+            }
+        }
+        HelpMarker(
+            "Healers seek injured allies, keep away from close combat and use animated fire-and-forget healing. "
+            "Concentration healing and other role behaviors are not implemented.");
+    }
+
     void RenderFollowerRepairs(const mod::debug::Follower& row, const mod::debug::Snapshot& state) {
         if (!ImGuiMCP::CollapsingHeader("Diagnostics and repairs"))
             return;
@@ -322,6 +357,7 @@ namespace {
         RenderFollowerPosition(row);
         RenderFollowerCommands(row, state);
         RenderFollowerDistance(row, state);
+        RenderCombatRole(row, state);
         if (!row.adapterName.empty()) {
             ImGuiMCP::Text("Controller: %s", row.adapterName.c_str());
             if (!row.adapterReason.empty())

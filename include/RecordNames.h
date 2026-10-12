@@ -14,6 +14,7 @@ namespace mod::record_names {
     inline constexpr char FollowDistance[] = "YLIWF_FollowDistance";
     inline constexpr char FollowDistanceChoice[] = "YLIWF_FollowDistanceChoice";
     inline constexpr char FormationSlot[] = "YLIWF_FormationSlot";
+    inline constexpr char CombatRole[] = "YLIWF_CombatRole";
     inline constexpr char ProtectionSpell[] = "YLIWF_CompanionsSafeSpell";
     inline constexpr char HomeQuest[] = "YLIWF_HomeQuest";
     inline constexpr char HomeFaction[] = "YLIWF_HomeFaction";

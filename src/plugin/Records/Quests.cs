@@ -605,6 +605,7 @@ internal static partial class FollowerPlugin
         animalAlias.PackageData.Add(new FormLink<IPackageGetter>(SkyrimForm(0x05C84B)));
         animalAlias.VoiceTypes = new FormLinkNullable<IAliasVoiceTypeGetter>(FormKey.Null);
         dialogueFollowerQuest.Aliases.Add(animalAlias);
+        AddHealerAliasPackages(dialogueFollowerQuest);
         return dialogueFollowerQuest;
     }
 

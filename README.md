@@ -34,6 +34,8 @@ See [architecture](docs/architecture.md) for the design.
   nearby navigable ground; ordinary following resumes in combat, interiors and settlements.
 - Essential status, friendly-fire protection and crossfire protection.
 - Native add-ons for quest-managed followers, respecting their controllers.
+- [Combat roles](docs/combat-roles.md) (preview): choose each follower's role in
+  the party, with spell and equipment requirements.
 
 The SKSE menu also provides state inspection, logs and targeted repairs.
 See [debugging](docs/debugging.md).

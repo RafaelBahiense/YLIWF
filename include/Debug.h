@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fmt/format.h>
+#include "CombatRoles.h"
 
 #include <atomic>
 #include <cstdint>
@@ -82,6 +83,7 @@ namespace mod::debug {
         std::uint32_t adapterCommands = 0;
         std::int32_t followDistance = 1;
         bool individualDistance = false, distanceAvailable = true;
+        combat_roles::Snapshot combatRole;
         std::optional<double> distanceMeters;
         bool dead = false, teammate = false, currentFaction = false, potentialFaction = false;
         bool loaded = false, essential = false, protectedActor = false, crossfire = false;
