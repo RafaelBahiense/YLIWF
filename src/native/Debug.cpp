@@ -484,10 +484,6 @@ namespace mod::debug {
             result.status = "Snapshot refreshed.";
             CheckSavedFollowerCount(result);
             CaptureInspectedActor(result, inspectID);
-            // Visible captures also reconcile preferences after controller-only
-            // changes that did not emit a native quest/location event.
-            adapters::ApplyFollowDistance();
-            adapters::ApplyCombatProtection();
             for (const auto& follower : adapters::Followers()) {
                 auto row = ActorState(RE::TESForm::LookupByID<RE::Actor>(follower.actor));
                 row.aliasID = UINT32_MAX;

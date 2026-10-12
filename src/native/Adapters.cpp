@@ -34,6 +34,7 @@ namespace mod::adapters {
         using Observations = std::map<ActorID, std::tuple<AdapterID, State, std::uint32_t, std::string>>;
         Observations observed;
         std::unordered_set<AdapterID> queuedChanges;
+        float observationSeconds = 0;
 
         bool MainThread() {
             auto* main = RE::Main::GetSingleton();
@@ -211,6 +212,17 @@ namespace mod::adapters {
             return result;
         }
 
+        void ReconcileState() {
+            auto current = Observe();
+            ApplyCombatProtection();
+            if (current == observed)
+                return;
+            observed = std::move(current);
+            ApplyFollowDistance();
+            controller::executor::RequestCounts();
+            debug::NotifyStateChanged();
+        }
+
         void StateChanged(AdapterID adapter) {
             std::scoped_lock lock(settings::Mutex);
             auto* tasks = SKSE::GetTaskInterface();
@@ -222,15 +234,8 @@ namespace mod::adapters {
                 if (!loaded || !debug::IsCurrentGame(generation))
                     return;
                 queuedChanges.erase(adapter);
-                auto current = Observe();
-                ApplyCombatProtection();
-                if (current == observed)
-                    return;
-                observed = std::move(current);
-                ApplyFollowDistance();
+                ReconcileState();
                 debug::Trace("adapter-state-changed", nullptr, "Controller: {}", providers[adapter - 1].name);
-                controller::executor::RequestCounts();
-                debug::NotifyStateChanged();  // Refresh stays driven by the visible page.
             });
         }
     }
@@ -428,6 +433,11 @@ namespace mod::adapters {
     }
 
     void Tick(float elapsed) {
+        // Vanilla dialogue methods can change properties without quest/location events.
+        // Observe on the main thread even while diagnostic pages are closed.
+        if (adapter_rules::ObservationDue(observationSeconds, elapsed)) {
+            ReconcileState();
+        }
         // Only one external controller call runs at a time. Quarantined calls
         // remain blocked but do not keep a worker alive or stall other actors.
         const auto active =
@@ -475,6 +485,10 @@ namespace mod::adapters {
         return std::ranges::any_of(requests.items, [](const auto& item) { return !item.quarantined; });
     }
 
+    bool NeedsObservation() {
+        return loaded && !providers.empty();
+    }
+
     void Invalidate() {
         loaded = false;
         requests.Reset();
@@ -485,6 +499,7 @@ namespace mod::adapters {
         observed.clear();
         queuedChanges.clear();
         protectedActors.clear();
+        observationSeconds = 0;
     }
 
     void GameLoaded() {

@@ -56,6 +56,45 @@ public static class SourceSnapshot
             }
         }
     }
+    internal static Dictionary<string, string> NativeDependencyFiles(string commonLib, string vcpkg, string nativeBuild)
+    {
+        var files = new Dictionary<string, string>(StringComparer.Ordinal);
+        AddDirectory(files, Path.GetFullPath(commonLib), ".", "dependencies/CommonLibSSE-NG");
+        var installed = Path.Combine(nativeBuild, "vcpkg_installed/x64-windows-static");
+        foreach (var directory in new[] { "include", "lib", "share", "debug/lib" })
+        {
+            if (Directory.Exists(Path.Combine(installed, directory)))
+            {
+                AddDirectory(files, installed, directory, "installed/" + directory);
+            }
+        }
+        foreach (var port in Ports)
+        {
+            var directory = Path.Combine(vcpkg, "buildtrees", port, "src");
+            var sources = Directory.Exists(directory) ? Directory.GetDirectories(directory, "*.clean") : [];
+            if (sources.Length > 1)
+            {
+                throw new InvalidDataException($"Ambiguous source trees for {port}");
+            }
+            // Binary caches can restore installed inputs without their source trees.
+            // Restoring sources later changes this fingerprint and requires a new receipt.
+            if (sources.Length == 1)
+            {
+                AddDirectory(files, sources[0], ".", "dependencies/" + port);
+            }
+        }
+        foreach (var name in new[] { "CMakeCache.txt", "vcpkg_installed/vcpkg/status" })
+        {
+            var path = Path.Combine(nativeBuild, name);
+            if (!File.Exists(path))
+            {
+                throw new FileNotFoundException("Native build provenance is missing; configure the build first", path);
+            }
+            files["native/" + name] = path;
+        }
+        return files;
+    }
+
     public static string Prepare(string root, string dll, string destination, string commonLib, string vcpkg, string nativeBuild)
     {
         var files = ProjectFiles(root);
@@ -197,11 +236,14 @@ public static class SourceSnapshot
         var hashes = metadata.GetProperty(ManifestFields.Hashes);
         if (root != null)
         {
-            foreach (var (name, path) in ProjectFiles(root).Where(file => file.Key.StartsWith("src/", StringComparison.Ordinal) ||
-                file.Key.StartsWith("include/", StringComparison.Ordinal) || file.Key.StartsWith("cmake/", StringComparison.Ordinal) ||
-                (file.Key.StartsWith("tools/ModTools/", StringComparison.Ordinal) && file.Key.EndsWith(".cs", StringComparison.Ordinal)) ||
-                file.Key is "setup.ps1" or "build.ps1" or "tools/Environment.ps1" or "tools/dependencies.json" or ProjectPaths.PathDefaults ||
-                file.Key is "CMakeLists.txt" or "CMakePresets.json" or "assets/settings.ini" or ProjectPaths.Identity or "vcpkg.json" or "vcpkg-configuration.json" or "global.json" or ProjectPaths.ToolProject or ProjectPaths.ToolLock))
+            var inputs = ProjectFiles(root).Where(file => IsCompiledInput(file.Key)).ToDictionary();
+            var archivedInputs = hashes.EnumerateObject().Select(property => property.Name).Where(IsCompiledInput)
+                .ToHashSet(StringComparer.Ordinal);
+            if (!archivedInputs.SetEquals(inputs.Keys))
+            {
+                throw new InvalidDataException("Source archive compiled input files differ from this checkout");
+            }
+            foreach (var (name, path) in inputs)
             {
                 if (!hashes.TryGetProperty(name, out var checksum) || checksum.GetString() != Artifacts.HashFile(path))
                 {
@@ -223,6 +265,14 @@ public static class SourceSnapshot
             }
         }
     }
+    private static bool IsCompiledInput(string name) =>
+        name.StartsWith("src/", StringComparison.Ordinal) || name.StartsWith("include/", StringComparison.Ordinal) ||
+        name.StartsWith("cmake/", StringComparison.Ordinal) ||
+        (name.StartsWith("tools/ModTools/", StringComparison.Ordinal) && name.EndsWith(".cs", StringComparison.Ordinal)) ||
+        name is "setup.ps1" or "build.ps1" or "tools/Environment.ps1" or "tools/dependencies.json" or ProjectPaths.PathDefaults ||
+        name is "CMakeLists.txt" or "CMakePresets.json" or "assets/settings.ini" or ProjectPaths.Identity or "vcpkg.json" or
+            "vcpkg-configuration.json" or "global.json" or ProjectPaths.ToolProject or ProjectPaths.ToolLock;
+
     public static Dictionary<string, string> ExtractBinaryNotices(string archivePath, string destination)
     {
         using var archive = ZipFile.OpenRead(archivePath);

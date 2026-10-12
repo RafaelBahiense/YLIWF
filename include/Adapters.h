@@ -40,6 +40,7 @@ namespace mod::adapters {
 
     PartySubmission RequestParty(yliwf::sdk::Command command, Completion completion);
     void Tick(float elapsed);
+    bool NeedsObservation();
     bool HasWork();
     void Invalidate();
     void GameLoaded();

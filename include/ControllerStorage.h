@@ -24,7 +24,7 @@ namespace mod::controller::storage {
     void SetActive(std::optional<ActiveOperation> active);
     bool SetActor(std::uint64_t& destination, RE::Actor* actor);
     Caller CaptureCaller(RE::VMStackID stack, std::int32_t request);
-    bool CurrentCaller(const Caller& caller);
+    executor_rules::CallerStatus InspectCaller(const Caller& caller);
     std::vector<RE::BGSRefAlias*> ExtraAliases();
     RE::TESGlobal* PartyCount();
     RE::TESGlobal* RecruitGate();

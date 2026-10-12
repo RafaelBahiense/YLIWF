@@ -7,6 +7,19 @@
 #include <span>
 
 namespace mod::executor_rules {
+    enum class CallerStatus { Unavailable, Gone, Pending, Waiting };
+
+    inline CallerStatus ClassifyCaller(bool vmAvailable, bool stackExists, std::optional<bool> sameIdentity,
+                                       bool waiting) {
+        if (!vmAvailable)
+            return CallerStatus::Unavailable;
+        if (!stackExists || (sameIdentity && !*sameIdentity))
+            return CallerStatus::Gone;
+        if (!sameIdentity)
+            return CallerStatus::Pending;
+        return waiting ? CallerStatus::Waiting : CallerStatus::Pending;
+    }
+
     // Game-time deadlines belong to native state. No Papyrus registration is involved.
     inline bool SetDeadline(std::span<float> deadlines, std::int32_t alias, std::optional<float> hoursPassed) {
         if (deadlines.size() != 9 || alias < 0 || static_cast<std::size_t>(alias) >= deadlines.size())

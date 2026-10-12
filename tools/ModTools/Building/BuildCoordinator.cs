@@ -50,6 +50,14 @@ public static class BuildCoordinator
 
         RunTool(options.Root, "cmake", "--preset", options.Configuration.Preset(),
             "-B", native, "-DCOMMONLIB_SSE_FOLDER=" + options.CommonLib);
+        var dependencies = new NativeBuildInputs(options.CommonLib, options.Vcpkg, native);
+        if (options.Target != BuildTarget.Test)
+        {
+            foreach (var (name, hash) in dependencies.Capture())
+            {
+                inputs.Add(name, hash);
+            }
+        }
         string[] targets = options.Target switch
         {
             BuildTarget.Test => ["native_tests"],
@@ -60,7 +68,7 @@ public static class BuildCoordinator
         if (options.Target != BuildTarget.Test)
         {
             BuildReceipt.Write(options.Root, BuildComponent.Native, inputs,
-                NativeOutputs(options.Root, native), Path.Combine(native, BuildReceipt.ScriptsFile));
+                NativeOutputs(options.Root, native), Path.Combine(native, BuildReceipt.ScriptsFile), dependencies);
         }
         return native;
     }
@@ -86,7 +94,8 @@ public static class BuildCoordinator
         if (options.Target != BuildTarget.Repackage)
         {
             BuildReceipt.Validate(options.Root, BuildComponent.Native,
-                NativeOutputs(options.Root, native), Path.Combine(native, BuildReceipt.ScriptsFile));
+                NativeOutputs(options.Root, native), Path.Combine(native, BuildReceipt.ScriptsFile),
+                new NativeBuildInputs(options.CommonLib, options.Vcpkg, native));
         }
         Artifacts.Package(options.Root, Path.Combine(plugin, ModInfo.PluginFile),
             options.Dll ?? Path.Combine(native, ModInfo.Identity.DllFile), papyrus, options.Output,

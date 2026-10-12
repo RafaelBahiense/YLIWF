@@ -117,6 +117,25 @@ public sealed class PackagingTests : TestWorkspace
             "Source ZIP date differs from the release or retains file attributes");
     }
 
+    [Theory]
+    [InlineData("src/native/DeadlineScheduler.cpp")]
+    [InlineData("include/FormationRules.h")]
+    [InlineData("src/papyrus/core/YLIWF_HomeTopicScript.psc")]
+    public void SourceArchiveRejectsRemovedInputs(string name)
+    {
+        var checkout = CopyCheckout("removed-input");
+        File.Delete(Path.Combine(checkout, name));
+        Assert.Throws<InvalidDataException>(() => SourceSnapshot.Validate(sourceArchive, dll, checkout));
+    }
+
+    [Fact]
+    public void SourceArchiveRejectsAddedInputs()
+    {
+        var checkout = CopyCheckout("added-input");
+        File.WriteAllText(Path.Combine(checkout, "src/native/NewSource.cpp"), "// new source");
+        Assert.Throws<InvalidDataException>(() => SourceSnapshot.Validate(sourceArchive, dll, checkout));
+    }
+
     [Fact]
     public void DependencyNotices()
     {

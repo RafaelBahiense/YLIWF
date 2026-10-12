@@ -3,6 +3,7 @@
 #include "sdk/FollowerAdapter.h"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <optional>
 #include <vector>
 
@@ -10,6 +11,15 @@ namespace mod::adapter_rules {
     using namespace yliwf::sdk;
     inline constexpr std::size_t Capacity = 16;
     inline constexpr float AcknowledgementSeconds = 30;
+
+    inline bool ObservationDue(float& seconds, float elapsed) {
+        if (std::isfinite(elapsed) && elapsed > 0)
+            seconds += elapsed;
+        if (seconds < 1)
+            return false;
+        seconds = 0;
+        return true;
+    }
 
     inline bool Valid(const Adapter& adapter) {
         return adapter.size >= BaseAdapterSize && adapter.version == InterfaceVersion && adapter.id && *adapter.id &&

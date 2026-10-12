@@ -85,7 +85,14 @@ namespace mod::controller::executor {
                     caller.result = success ? 1 : 0;
             for (std::size_t i = 0; i < callers.size();) {
                 const auto caller = callers[i];
-                if (caller.result < 0 || !vm || !storage::CurrentCaller(caller)) {
+                const auto status = storage::InspectCaller(caller);
+                if (status == executor_rules::CallerStatus::Gone) {
+                    logger::warn("Discarding abandoned Papyrus caller: stack={} request={}", caller.stack,
+                                 caller.request);
+                    callers.erase(callers.begin() + i);
+                    continue;
+                }
+                if (caller.result < 0 || !vm || status != executor_rules::CallerStatus::Waiting) {
                     ++i;
                     continue;
                 }
@@ -458,8 +465,8 @@ namespace mod::controller::executor {
             }
             formation::Tick();
             const bool delay = storage::Get().active && storage::Active().phase == Phase::Delay;
-            const bool work = formation::HasWork() || adapters::HasWork() || delay || countsDirty ||
-                              !storage::Get().queue.empty() || !storage::Get().callers.empty() ||
+            const bool work = formation::HasWork() || adapters::HasWork() || adapters::NeedsObservation() || delay ||
+                              countsDirty || !storage::Get().queue.empty() || !storage::Get().callers.empty() ||
                               std::ranges::any_of(storage::Get().deadlines, [](float time) { return time > 0; });
             DeadlineScheduler().Set(work, delay && !paused, formation::HasWork() && !paused);
         }

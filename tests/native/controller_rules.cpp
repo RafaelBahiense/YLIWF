@@ -11,6 +11,16 @@
 using namespace mod::controller_rules;
 
 namespace {
+    TEST_CASE("Abandoned callers and live latent transitions") {
+        using namespace mod::executor_rules;
+        REQUIRE(ClassifyCaller(false, false, false, false) == CallerStatus::Unavailable);
+        REQUIRE(ClassifyCaller(true, false, false, false) == CallerStatus::Gone);
+        REQUIRE(ClassifyCaller(true, true, false, true) == CallerStatus::Gone);
+        REQUIRE(ClassifyCaller(true, true, true, false) == CallerStatus::Pending);
+        REQUIRE(ClassifyCaller(true, true, std::nullopt, true) == CallerStatus::Pending);
+        REQUIRE(ClassifyCaller(true, true, true, true) == CallerStatus::Waiting);
+    }
+
     struct Actor {
         bool teammate = false, waiting = false, timer = false, protectedActor = false;
     };

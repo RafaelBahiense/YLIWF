@@ -18,12 +18,20 @@ public static class BuildReceipt
 
     public static string PluginPath(string esp) => esp + ".build.json";
 
-    public static Dictionary<string, string> CaptureInputs(string root, BuildComponent component)
+    public static Dictionary<string, string> CaptureInputs(string root, BuildComponent component, NativeBuildInputs? native = null)
     {
         ValidateToolBuild(root);
-        return SourceSnapshot.ProjectFiles(root)
+        var inputs = SourceSnapshot.ProjectFiles(root)
             .Where(file => IsComponentInput(file.Key, component) || IsSharedInput(file.Key))
             .ToDictionary(file => file.Key, file => Artifacts.HashFile(file.Value), StringComparer.Ordinal);
+        if (native != null)
+        {
+            foreach (var (name, hash) in native.Capture())
+            {
+                inputs.Add(name, hash);
+            }
+        }
+        return inputs;
     }
 
     private static bool IsComponentInput(string name, BuildComponent component)
@@ -88,9 +96,9 @@ public static class BuildReceipt
     private static bool SameHashes(Dictionary<string, string> left, Dictionary<string, string> right) =>
         left.Count == right.Count && left.All(pair => right.TryGetValue(pair.Key, out var hash) && pair.Value == hash);
 
-    public static void Write(string root, BuildComponent component, Dictionary<string, string> inputs, IEnumerable<string> outputs, string path)
+    public static void Write(string root, BuildComponent component, Dictionary<string, string> inputs, IEnumerable<string> outputs, string path, NativeBuildInputs? native = null)
     {
-        if (!SameHashes(inputs, CaptureInputs(root, component)))
+        if (!SameHashes(inputs, CaptureInputs(root, component, native)))
         {
             throw new InvalidDataException($"{component} sources changed during the build; rebuild before publishing");
         }
@@ -98,7 +106,7 @@ public static class BuildReceipt
         File.WriteAllText(path, JsonSerializer.Serialize(new Receipt(SchemaVersion, component, inputs, hashes), JsonOptions));
     }
 
-    public static void Validate(string root, BuildComponent component, IEnumerable<string> outputs, string path)
+    public static void Validate(string root, BuildComponent component, IEnumerable<string> outputs, string path, NativeBuildInputs? native = null)
     {
         if (!File.Exists(path))
         {
@@ -114,7 +122,7 @@ public static class BuildReceipt
             throw new InvalidDataException($"Invalid build receipt: {path}", error);
         }
         if (receipt.Schema != SchemaVersion || receipt.Component != component || receipt.Inputs == null || receipt.Outputs == null ||
-            !SameHashes(receipt.Inputs, CaptureInputs(root, component)))
+            !SameHashes(receipt.Inputs, CaptureInputs(root, component, native)))
         {
             throw new InvalidDataException($"{component} outputs do not match this checkout; rebuild this component");
         }

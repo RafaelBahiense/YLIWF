@@ -3,6 +3,17 @@
 #include "AdapterRules.h"
 
 namespace {
+    TEST_CASE("Adapter observations do not require a visible menu") {
+        float seconds = 0;
+        REQUIRE_FALSE(mod::adapter_rules::ObservationDue(seconds, 0));
+        REQUIRE_FALSE(mod::adapter_rules::ObservationDue(seconds, -1));
+        REQUIRE_FALSE(mod::adapter_rules::ObservationDue(seconds, 0.5f));
+        REQUIRE(mod::adapter_rules::ObservationDue(seconds, 0.5f));
+        REQUIRE(seconds == 0);
+        REQUIRE(mod::adapter_rules::ObservationDue(seconds, 5));
+        REQUIRE_FALSE(mod::adapter_rules::ObservationDue(seconds, 0));
+    }
+
     using namespace yliwf::sdk;
     using mod::adapter_rules::Requests;
     using mod::adapter_rules::Valid;

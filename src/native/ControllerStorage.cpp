@@ -266,12 +266,18 @@ namespace mod::controller::storage {
         return caller;
     }
 
-    bool CurrentCaller(const Caller& caller) {
-        const auto current = CaptureCaller(caller.stack, caller.request);
+    executor_rules::CallerStatus InspectCaller(const Caller& caller) {
         auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
         RE::BSScript::Stack* stack = nullptr;
-        return vm && vm->GetStackByID(caller.stack, &stack) && stack &&
-               stack->state == RE::BSScript::Stack::State::kWaitingOnLatentFunction && SameCaller(caller, current);
+        const bool exists = vm && vm->GetStackByID(caller.stack, &stack) && stack;
+        std::optional<bool> same;
+        // A live stack can briefly lack a frame during a VM transition. Only
+        // a readable, different identity proves that its ID was reused.
+        if (exists && stack->top && stack->top->owningFunction)
+            same = SameCaller(caller, CaptureCaller(caller.stack, caller.request));
+        return executor_rules::ClassifyCaller(
+            vm != nullptr, exists, same,
+            exists && stack->state == RE::BSScript::Stack::State::kWaitingOnLatentFunction);
     }
 
     std::vector<RE::BGSRefAlias*> ExtraAliases() {
