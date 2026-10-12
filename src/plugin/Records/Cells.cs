@@ -133,6 +133,7 @@ internal static partial class FollowerPlugin
         var placement8 = new Placement();
         homeMarker07.Placement = placement8;
         homeMarkerCell.Persistent.Add(homeMarker07);
+        AddFormationTargets(homeMarkerCell);
         homeMarkerCell.MajorFlags = (Cell.MajorFlag)0x40000;
         interiorCellSubBlock.Cells.Add(homeMarkerCell);
         interiorCellBlock.SubBlocks.Add(interiorCellSubBlock);

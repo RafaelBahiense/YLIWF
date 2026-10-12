@@ -258,6 +258,32 @@ namespace mod::adapters {
         return actor && (MainThread() ? Inspect(actor).has_value() : knownOwners.contains(actor));
     }
 
+    bool SupportsTravelFormation(yliwf::sdk::ActorID actor) {
+        const auto follower = Inspect(actor, false);
+        return follower && HasTravelFormation(providers[follower->adapter - 1].api);
+    }
+
+    bool CanTravelInFormation(yliwf::sdk::ActorID actor) {
+        const auto follower = Inspect(actor);
+        if (!loaded || !follower || follower->state.state != State::Following ||
+            !Supports(follower->state, Command::Follow))
+            return false;
+        const auto& adapter = providers[follower->adapter - 1].api;
+        return HasTravelFormation(adapter) && adapter.canTravelInFormation(adapter.context, actor) == 1;
+    }
+
+    bool SetFormationPackage(yliwf::sdk::ActorID actor, std::uint32_t package) {
+        // Release also works for dismissed, locked or pending actors. Their
+        // movement must be restored before the owner's command can proceed.
+        const auto follower = Inspect(actor, false);
+        if (!follower || !HasTravelFormation(providers[follower->adapter - 1].api))
+            return false;
+        if (package && !CanTravelInFormation(actor))
+            return false;
+        const auto& adapter = providers[follower->adapter - 1].api;
+        return adapter.setFormationPackage(adapter.context, actor, package) == 1;
+    }
+
     bool HasFollowers() {
         std::scoped_lock lock(settings::Mutex);
         if (!MainThread())

@@ -23,6 +23,7 @@ namespace mod::settings {
             constexpr char Crossfire[] = "bFollowerCrossfireProtection";
             constexpr char Homes[] = "bFollowerHomes";
             constexpr char FollowDistance[] = "iFollowDistance";
+            constexpr char Formation[] = "iTravelFormation";
             constexpr char DebugEnabled[] = "bEnabled";
             constexpr char FlowLogging[] = "bFlowLogging";
         }
@@ -158,6 +159,7 @@ namespace mod::settings {
         FollowerCrossfire = ReadBoolean(ini::General, ini::Crossfire);
         FollowerHomes = ReadBoolean(ini::General, ini::Homes);
         FollowDistance = ReadInteger(ini::General, ini::FollowDistance, 0, 2);
+        Formation = static_cast<formation_geometry::Style>(ReadInteger(ini::General, ini::Formation, 0, 3));
         mod::debug::OptionsEnabled = ReadBoolean(ini::Debug, ini::DebugEnabled);
         mod::debug::SetLogging(ReadBoolean(ini::Debug, ini::FlowLogging));
         mod::debug::Trace("Settings.Load", nullptr, force ? "forced" : "initial");
@@ -188,6 +190,7 @@ namespace mod::settings {
         writeInt(ini::Crossfire, FollowerCrossfire ? 1 : 0);
         writeInt(ini::Homes, FollowerHomes ? 1 : 0);
         writeInt(ini::FollowDistance, FollowDistance);
+        writeInt(ini::Formation, static_cast<std::int32_t>(Formation));
         ParsePerkListIntoSpecs(PerkListBuffer);
         BuildPerkListBuffer();
         write(ini::General, ini::Perks, PerkListBuffer);

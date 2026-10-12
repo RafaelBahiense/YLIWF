@@ -13,6 +13,7 @@
 #include "DeadlineScheduler.h"
 #include "Adapters.h"
 #include "FollowDistance.h"
+#include "Formation.h"
 
 #include <atomic>
 #include <bit>
@@ -397,12 +398,14 @@ namespace mod::controller::executor {
 
             auto object = Object();
             if (!loaded || !object) {
-                DeadlineScheduler().Set(false);
+                formation::Tick();
+                DeadlineScheduler().Set(formation::HasWork(), false, formation::HasWork());
                 return;
             }
             auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
             if (!vm || vm->IsCompletelyFrozen()) {
-                DeadlineScheduler().Set(true);
+                formation::Tick();
+                DeadlineScheduler().Set(true, false, formation::HasWork());
                 RefreshClock();
                 return;
             }
@@ -453,11 +456,12 @@ namespace mod::controller::executor {
                     }
                 }
             }
+            formation::Tick();
             const bool delay = storage::Get().active && storage::Active().phase == Phase::Delay;
-            const bool work = adapters::HasWork() || delay || countsDirty || !storage::Get().queue.empty() ||
-                              !storage::Get().callers.empty() ||
+            const bool work = formation::HasWork() || adapters::HasWork() || delay || countsDirty ||
+                              !storage::Get().queue.empty() || !storage::Get().callers.empty() ||
                               std::ranges::any_of(storage::Get().deadlines, [](float time) { return time > 0; });
-            DeadlineScheduler().Set(work, delay && !paused);
+            DeadlineScheduler().Set(work, delay && !paused, formation::HasWork() && !paused);
         }
 
         RE::BSScript::LatentStatus Run(RE::BSScript::Internal::VirtualMachine*, RE::VMStackID stack,
@@ -695,6 +699,7 @@ namespace mod::controller::executor {
     }
 
     void Invalidate() {
+        formation::Invalidate();
         loaded = false;
         countsDirty = false;
         ++generation;

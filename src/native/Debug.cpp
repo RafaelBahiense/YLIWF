@@ -3,6 +3,7 @@
 #include "Debug.h"
 #include "Adapters.h"
 #include "FollowDistance.h"
+#include "Formation.h"
 
 #include "DebugRules.h"
 #include "Controller.h"
@@ -637,6 +638,7 @@ namespace mod::debug {
                     out << "  caller request=" << caller.request << " stack=" << caller.stack << " self=" << caller.self
                         << " result=" << caller.result << " function=" << caller.type << '.' << caller.function << '\n';
             }
+            mod::formation::WriteDiagnostics(out);
             out << "Selection: mod quests; follower/hireling/SkyHavenTemple quests; quests containing current party "
                    "actors; linked quest properties.\n"
                 << "VM values are read individually: this is a diagnostic snapshot, not an atomic VM/save-game "

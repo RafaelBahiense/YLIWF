@@ -21,11 +21,17 @@ See [architecture](docs/architecture.md) for the design.
 
 ## Gameplay features
 
-- Up to eight vanilla-system followers; fixed, perk-based or Speech-based limits.
-- Follow, Wait and Dismiss through dialogue.
+- Up to eight vanilla-system humanoid followers, alongside a separate vanilla
+  animal companion; fixed, perk-based or Speech-based humanoid limits.
+- Individual Follow, Wait and Dismiss through dialogue or the SKSE menu, plus
+  Follow All, Wait All and Dismiss All in the menu.
+- Waiting core followers dismiss themselves after 72 in-game hours.
 - Primary-slot selection without dismissal, for integrations such as Blades recruitment.
 - Follower homes and idle sandboxing.
 - Close, Normal or Far following distance, globally or per follower.
+- Travel formations: Column follows your route, Line places followers
+  beside you, and Wedge forms behind you with the player at its tip. Slots adjust to
+  nearby navigable ground; ordinary following resumes in combat, interiors and settlements.
 - Essential status, friendly-fire protection and crossfire protection.
 - Native add-ons for quest-managed followers, respecting their controllers.
 
@@ -57,7 +63,7 @@ Install optional add-on ZIPs alongside a compatible core. Add-ons have independe
 release versions; their required adapter API version defines compatibility.
 
 - **[Serana](docs/follower-adapters.md#serana-example)** (`-Serana-<version>.zip`):
-  Makes Serana available to YLIWF's follower controls and combat protection when her Dawnguard quests allow them.
+  Makes Serana available to YLIWF's follower controls, combat protection and travel formations when her Dawnguard quests allow them.
 
 ## Configuration
 

@@ -4,10 +4,10 @@ namespace mod {
     DeadlineScheduler::DeadlineScheduler(WakeCallback wake)
         : wake(wake), worker([this](std::stop_token stop) { Run(stop); }) {}
 
-    void DeadlineScheduler::Set(bool value, bool fast) {
+    void DeadlineScheduler::Set(bool value, bool fast, bool formation) {
         std::scoped_lock lock(mutex);
         active = value;
-        interval = std::chrono::milliseconds(fast ? 50 : 1000);
+        interval = std::chrono::milliseconds(fast ? 50 : formation ? 200 : 1000);
         changed.notify_all();
     }
 

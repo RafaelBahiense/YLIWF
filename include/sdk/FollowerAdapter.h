@@ -70,9 +70,21 @@ namespace yliwf::sdk {
         // Optional v1 extension. Read-only, main thread: may the host apply its
         // combat-protection ability? Does not grant essential status or ownership.
         std::uint32_t (*canReceiveCombatProtection)(void*, ActorID) = nullptr;
+        // Optional v1 extension. Read-only: ordinary travel is currently allowed;
+        // quest packages, scenes and pending controller work must retain priority.
+        std::uint32_t (*canTravelInFormation)(void*, ActorID) = nullptr;
+        // Main thread, synchronous. Apply a host-owned Travel package by FormID.
+        // Zero releases only this adapter's formation movement, even when blocked.
+        // Never replace another controller's interrupt package or transfer ownership.
+        std::uint32_t (*setFormationPackage)(void*, ActorID, std::uint32_t package) = nullptr;
     };
 
     inline constexpr std::uint32_t BaseAdapterSize = offsetof(Adapter, setFollowDistance);
+
+    inline bool HasTravelFormation(const Adapter& adapter) {
+        return adapter.size >= offsetof(Adapter, setFormationPackage) + sizeof(adapter.setFormationPackage) &&
+               adapter.canTravelInFormation && adapter.setFormationPackage;
+    }
 
     inline bool HasFollowDistance(const Adapter& adapter) {
         return adapter.size >= offsetof(Adapter, setFollowDistance) + sizeof(adapter.setFollowDistance) &&
@@ -113,7 +125,8 @@ namespace yliwf::sdk {
     static_assert(std::is_standard_layout_v<Adapter> && std::is_standard_layout_v<API>);
     static_assert(sizeof(void*) == 8 && sizeof(FollowerState) == 204 && BaseAdapterSize == 56 &&
                       offsetof(Adapter, canRecruitThroughDialogue) == 64 &&
-                      offsetof(Adapter, canReceiveCombatProtection) == 72 && sizeof(Adapter) == 80 &&
-                      BaseAPISize == 24 && sizeof(API) == 32,
+                      offsetof(Adapter, canReceiveCombatProtection) == 72 &&
+                      offsetof(Adapter, canTravelInFormation) == 80 && sizeof(Adapter) == 96 && BaseAPISize == 24 &&
+                      sizeof(API) == 32,
                   "Follower adapter API v1 requires the standard x64 structure layout");
 }

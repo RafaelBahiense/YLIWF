@@ -10,7 +10,8 @@ namespace {
 
     static_assert(sizeof(void*) == 8 && sizeof(FollowerState) == 204 && BaseAdapterSize == 56 &&
                   offsetof(Adapter, canRecruitThroughDialogue) == 64 &&
-                  offsetof(Adapter, canReceiveCombatProtection) == 72 && sizeof(Adapter) == 80 && BaseAPISize == 24 &&
+                  offsetof(Adapter, canReceiveCombatProtection) == 72 &&
+                  offsetof(Adapter, canTravelInFormation) == 80 && sizeof(Adapter) == 96 && BaseAPISize == 24 &&
                   sizeof(API) == 32);
 
     void Check(bool condition, const char* message) {
@@ -30,6 +31,8 @@ namespace {
         adapter.setFollowDistance = [](void*, ActorID, FollowDistance) { return 1u; };
         adapter.canRecruitThroughDialogue = [](void*, ActorID) { return 1u; };
         adapter.canReceiveCombatProtection = [](void*, ActorID) { return 1u; };
+        adapter.canTravelInFormation = [](void*, ActorID) { return 1u; };
+        adapter.setFormationPackage = [](void*, ActorID, std::uint32_t) { return 1u; };
         return adapter;
     }
 
@@ -46,6 +49,17 @@ namespace {
         Check(!Valid(Adapter{}), "Incomplete adapter accepted");
 
         auto adapter = ValidAdapter();
+        Check(HasTravelFormation(adapter), "Complete travel capability unavailable");
+        adapter.size = offsetof(Adapter, setFormationPackage);
+        Check(!HasTravelFormation(adapter), "Partial travel extension accepted");
+        adapter.size = offsetof(Adapter, canTravelInFormation);
+        Check(!HasTravelFormation(adapter) && HasCombatProtection(adapter),
+              "Protection-only table exposes travel callbacks");
+        Check(Valid(adapter), "Protection-only v1 table rejected after travel extension");
+        adapter.size = sizeof(Adapter);
+        adapter.setFormationPackage = nullptr;
+        Check(!HasTravelFormation(adapter), "Permission without movement callback accepted");
+        adapter = ValidAdapter();
         Check(HasFollowDistance(adapter) && HasRecruitmentEligibility(adapter) && HasCombatProtection(adapter),
               "Optional callbacks unavailable");
 

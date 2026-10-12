@@ -13,6 +13,7 @@
 #include "ControllerStorage.h"
 #include "Adapters.h"
 #include "FollowDistance.h"
+#include "Formation.h"
 #include "PartyRules.h"
 
 namespace {
@@ -71,6 +72,8 @@ namespace {
         g_followDistance = ResolveForm<RE::TESGlobal>(0x993, kRequiredPluginName, mod::record_names::FollowDistance);
         mod::follow_distance::Configure(
             ResolveForm<RE::TESFaction>(0x994, kRequiredPluginName, mod::record_names::FollowDistanceChoice));
+        mod::formation::Configure(
+            ResolveForm<RE::TESFaction>(0x995, kRequiredPluginName, mod::record_names::FormationSlot));
         g_friendlyFireSpell =
             ResolveForm<RE::SpellItem>(0x800, kRequiredPluginName, mod::record_names::ProtectionSpell);
         mod::adapters::ConfigureCombatProtection(g_friendlyFireSpell);
@@ -389,6 +392,7 @@ namespace {
     }
 
     bool RegisterPapyrus(RE::BSScript::IVirtualMachine* vm) {
+        mod::formation::RegisterPapyrus(vm);
         mod::debug::RegisterPapyrus(vm);
         mod::controller::RegisterPapyrus(vm);
         return true;
@@ -492,8 +496,12 @@ namespace {
 
         RE::BSEventNotifyControl ProcessEvent(const RE::TESObjectLoadedEvent* event,
                                               RE::BSTEventSource<RE::TESObjectLoadedEvent>*) override {
-            if (event && !event->loaded)
-                mod::controller::Unloaded(RE::TESForm::LookupByID<RE::Actor>(event->formID));
+            if (event) {
+                auto* actor = RE::TESForm::LookupByID<RE::Actor>(event->formID);
+                mod::formation::Observe(actor);
+                if (!event->loaded)
+                    mod::controller::Unloaded(actor);
+            }
             return RE::BSEventNotifyControl::kContinue;
         }
     };
@@ -551,6 +559,7 @@ namespace {
         mod::debug::GameLoaded();
         mod::controller::GameLoaded();
         mod::follow_distance::Loaded();
+        mod::formation::Loaded();
     }
 
     void OnMessage(SKSE::MessagingInterface::Message* msg) {
@@ -585,6 +594,7 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
     mod::settings::SandboxCallback = []() { QueueGameTask(ApplySandbox); };
     mod::settings::HomesCallback = []() { QueueGameTask(ApplyHomes); };
     mod::settings::FollowDistanceCallback = []() { QueueGameTask(ApplyFollowDistance); };
+    mod::settings::FormationCallback = []() { QueueGameTask(mod::formation::Changed); };
     mod::settings::EssentialCallback = []() { DeferSyncParty(); };
     mod::settings::CrossfireCallback = []() { DeferSyncParty(); };
 

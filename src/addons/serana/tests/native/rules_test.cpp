@@ -151,7 +151,30 @@ namespace {
 
 }
 
+namespace {
+    void CheckTravelFormationRestrictions() {
+        using mod::serana_rules::CanTravelInFormation;
+        mod::serana_rules::ControllerState state{.following = true};
+        Check(CanTravelInFormation(state), "Ordinary following cannot form up");
+        state.waiting = true;
+        Check(!CanTravelInFormation(state), "Waiting follower received travel movement");
+        state.waiting = false;
+        state.locked = true;
+        Check(!CanTravelInFormation(state), "Formation bypassed the quest lock");
+        state.locked = false;
+        state.canFollow = false;
+        Check(!CanTravelInFormation(state), "Formation bypassed CanFollow");
+        state.canFollow = true;
+        state.dismissed = true;
+        Check(!CanTravelInFormation(state), "Dismissed follower received travel movement");
+        state.dismissed = false;
+        state.following = false;
+        Check(!CanTravelInFormation(state), "Inactive follower received travel movement");
+    }
+}
+
 int main() {
+    CheckTravelFormationRestrictions();
     CheckNormalFollowerCommands();
     CheckQuestLocks();
     CheckCommandRestrictions();

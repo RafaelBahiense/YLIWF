@@ -1,5 +1,16 @@
 Scriptname YLIWF_Engine Hidden
 
+Function Formation(Actor target, Actor leader, Int ticket, Int sessionHigh, Int sessionLow, Bool enabled, Float behind) Global
+	Bool current = YLIWF_SKSE.SetNativeFormationCurrent(target, ticket, sessionHigh, sessionLow)
+	If current
+		; Retained only to clear offsets saved by the earlier formation preview.
+		If !enabled
+			target.ClearKeepOffsetFromActor()
+		EndIf
+	EndIf
+	YLIWF_SKSE.SetNativeFormationReturned(target, ticket, sessionHigh, sessionLow, current)
+EndFunction
+
 ; Mechanical adapters to vanilla engine APIs and external controllers.
 ; Policy, ordering, waits and receipts belong to the native controller.
 ; The saved VM stack reports completion after the API call returns.

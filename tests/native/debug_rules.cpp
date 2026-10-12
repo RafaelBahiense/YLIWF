@@ -100,6 +100,7 @@ namespace {
         assert(ParseInteger(*IniValue(mod::settings_defaults::Ini, "General", "iMaxFollowers"), 1, 8) == 8);
         assert(ParseInteger(*IniValue(mod::settings_defaults::Ini, "General", "bFollowerHomes"), 0, 1) == 0);
         assert(ParseInteger(*IniValue(mod::settings_defaults::Ini, "General", "iFollowDistance"), 0, 2) == 1);
+        assert(ParseInteger(*IniValue(mod::settings_defaults::Ini, "General", "iTravelFormation"), 0, 3) == 0);
         assert(ParseInteger(" 2 // comment", 0, 2) == 2);
         for (auto text : {"", "invalid", "1junk", "-1", "3", "9999999999999"})
             assert(!ParseInteger(text, 0, 2));

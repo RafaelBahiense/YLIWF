@@ -5,6 +5,7 @@
 #include <string>
 #include <mutex>
 #include "ModInfo.h"
+#include "FormationStyle.h"
 
 namespace mod::settings {
     inline std::recursive_mutex Mutex;
@@ -28,6 +29,7 @@ namespace mod::settings {
     inline bool FollowerCrossfire = false;
     inline bool FollowerHomes = false;
     inline std::int32_t FollowDistance = 1;
+    inline formation_geometry::Style Formation = formation_geometry::Style::Off;
     inline char PerkListBuffer[2048]{};
     inline bool Loaded = false;
     inline std::string SaveStatus;
@@ -37,6 +39,7 @@ namespace mod::settings {
     inline void (*CrossfireCallback)() = nullptr;
     inline void (*HomesCallback)() = nullptr;
     inline void (*FollowDistanceCallback)() = nullptr;
+    inline void (*FormationCallback)() = nullptr;
     inline void (*EssentialCallback)() = nullptr;
     void Load(bool force = false);
     bool Save();

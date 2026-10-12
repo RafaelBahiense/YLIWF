@@ -23,6 +23,8 @@ Function SetNativeSpeaker(Quest owner, Actor target, Bool clear) Global Native
 Bool Function SetNativeEffectCurrent(Quest owner, Int ticket, Int offset) Global Native
 Function SetNativeEffectReturned(Quest owner, Int ticket, Int offset, Bool succeeded) Global Native
 Bool Function GetNativeBefriendRank(Int rank) Global Native
+Bool Function SetNativeFormationCurrent(Actor target, Int ticket, Int sessionHigh, Int sessionLow) Global Native
+Function SetNativeFormationReturned(Actor target, Int ticket, Int sessionHigh, Int sessionLow, Bool executed) Global Native
 
 ; Flow logging.
 Bool Function IsDebugLoggingEnabled() Global Native

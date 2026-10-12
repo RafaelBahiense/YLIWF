@@ -174,6 +174,15 @@ internal static partial class ProtocolTests
 
     private static void CheckEngineAdapters(string executor, string bridge)
     {
+        var formation = FunctionBody(bridge, "Formation");
+        Require(formation.Contains("SetNativeFormationCurrent", StringComparison.Ordinal) &&
+            formation.Contains("SetNativeFormationReturned", StringComparison.Ordinal) &&
+            formation.Contains("sessionHigh, sessionLow", StringComparison.Ordinal),
+            "formation adapter lost completion or saved-stack session guards");
+        Require(!formation.Contains("Utility.Wait", StringComparison.Ordinal) &&
+            !formation.Contains("MoveTo", StringComparison.Ordinal), "formation adapter polls or teleports actors");
+        Require(!formation.Contains(".KeepOffsetFromActor", StringComparison.Ordinal),
+            "Formation movement still depends on the Papyrus VM");
         Require(!FunctionBody(bridge, "Counts").Contains("vanilla.SetValue", StringComparison.Ordinal),
             "delayed Papyrus counts can overwrite the native recruitment dialogue gate");
         Require(string.IsNullOrEmpty(FunctionBody(bridge, "CancelTimer")),

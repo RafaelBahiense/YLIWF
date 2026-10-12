@@ -11,6 +11,11 @@ internal static partial class FollowerPlugin
             EditorID = RecordNames.FollowDistanceChoice,
             Flags = Faction.FactionFlag.HiddenFromPC
         });
+        mod.Factions.Add(new Faction(OwnForm(0x000995), SkyrimRelease.SkyrimSE)
+        {
+            EditorID = RecordNames.FormationSlot,
+            Flags = Faction.FactionFlag.HiddenFromPC
+        });
     }
 
     private static Faction CreateHomeFaction()

@@ -7,6 +7,7 @@ internal static class RecordNames
     internal const string FollowerHomes = "YLIWF_FollowerHomes";
     internal const string FollowDistance = "YLIWF_FollowDistance";
     internal const string FollowDistanceChoice = "YLIWF_FollowDistanceChoice";
+    internal const string FormationSlot = "YLIWF_FormationSlot";
     internal const string ProtectionSpell = "YLIWF_CompanionsSafeSpell";
     internal const string HomeQuest = "YLIWF_HomeQuest";
     internal const string HomeFaction = "YLIWF_HomeFaction";

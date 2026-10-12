@@ -12,7 +12,7 @@ namespace mod {
         using WakeCallback = void (*)();
 
         explicit DeadlineScheduler(WakeCallback wake);
-        void Set(bool value, bool fast = false);
+        void Set(bool value, bool fast = false, bool formation = false);
 
     private:
         void Run(std::stop_token stop);

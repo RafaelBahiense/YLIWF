@@ -41,11 +41,14 @@ internal static partial class PluginTests
         BuildReceipt.Write(root, BuildComponent.Plugin, BuildReceipt.CaptureInputs(root, BuildComponent.Plugin), [esp], BuildReceipt.PluginPath(esp));
         using (var loaded = SkyrimMod.CreateFromBinaryOverlay(esp, SkyrimRelease.SkyrimSE))
         {
-            Check(loaded.EnumerateMajorRecords().Count() == 67, "Record count changed");
+            Check(loaded.EnumerateMajorRecords().Count() == 92, "Record count changed");
+            Check(loaded.Factions.Single(faction => faction.FormKey == new FormKey(loaded.ModKey, 0x995)).Flags.HasFlag(Faction.FactionFlag.HiddenFromPC),
+                "Formation recovery marker is not hidden metadata");
             Check(loaded.ModHeader.Author == ModInfo.Identity.Author, "Plugin header did not use centralized author");
             var quest = loaded.Quests.Single(q => q.FormKey == FormKey.Factory("0750BA:Skyrim.esm"));
             Check(quest.EditorID == "DialogueFollower", "Wrong follower quest");
             CheckDistancePackages(loaded, quest);
+            CheckFormationPackages(loaded, quest);
             CheckScriptBindings(quest);
             CheckFollowerAliases(loaded, quest);
         }
@@ -74,6 +77,65 @@ internal static partial class PluginTests
             Check(quest.Aliases.Where(alias => alias.ID != 1).All(alias => alias.PackageData.Count(p => p.FormKey == packageKey) == 1), "Human alias is missing a distance preset");
             Check(!quest.Aliases.Single(alias => alias.ID == 1).PackageData.Any(p => p.FormKey == packageKey), "Distance preset affects the animal alias");
         }
+    }
+
+    private static void CheckFormationPackages(ISkyrimModGetter loaded, IQuestGetter quest)
+    {
+        var targets = loaded.EnumerateMajorRecords().OfType<IPlacedObjectGetter>().ToArray();
+        for (var slot = 0; slot < 8; ++slot)
+        {
+            CheckFormationPackage(loaded, quest, targets, slot, alternate: false);
+            CheckFormationPackage(loaded, quest, targets, slot, alternate: true);
+        }
+    }
+
+    private static void CheckFormationPackage(ISkyrimModGetter loaded, IQuestGetter quest,
+        IPlacedObjectGetter[] targets, int slot, bool alternate)
+    {
+        var packageKey = new FormKey(loaded.ModKey, (uint)((alternate ? 0x9C0 : 0x9A0) + slot));
+        var targetKey = new FormKey(loaded.ModKey, (uint)(0x9B0 + slot));
+        var package = loaded.Packages.Single(p => p.FormKey == packageKey);
+        CheckFormationHold(package);
+        Check(package.PreferredSpeed == Package.Speed.Run && package.Flags.HasFlag(Package.Flag.PreferredSpeed),
+            "Formation running speed is missing or its override is disabled");
+        var location = (ILocationTargetRadiusGetter)((IPackageDataLocationGetter)package.Data[0]).Location;
+        Check(((ILocationTargetGetter)location.Target).Link.FormKey == targetKey && location.Radius == 64,
+            "Formation slot has the wrong destination or arrival tolerance");
+        Check((targets.Single(target => target.FormKey == targetKey).MajorRecordFlagsRaw & 0x400) != 0,
+            "Formation destination is not persistent");
+        var conditions = package.Conditions.Cast<IConditionFloatGetter>().ToArray();
+        Check(conditions.Length == 3 && conditions[0].ComparisonValue == (alternate ? 24 : 16) + slot &&
+            ((IGetFactionRankConditionDataGetter)conditions[0].Data).Faction.Link.FormKey == new FormKey(loaded.ModKey, 0x995) &&
+            conditions[1].Data is IGetPlayerTeammateConditionDataGetter && conditions[1].ComparisonValue == 1 &&
+            conditions[2].Data is IGetActorValueConditionDataGetter value && value.ActorValue == ActorValue.WaitingForPlayer &&
+            conditions[2].ComparisonValue == 0, "Formation bypasses its native gate, dismissal or waiting");
+        foreach (var alias in quest.Aliases.Where(alias => alias.ID != 1))
+        {
+            var packages = alias.PackageData.Select(p => p.FormKey).ToList();
+            Check(packages.Count(p => p == packageKey) == 1 &&
+                packages.IndexOf(packageKey) < packages.IndexOf(new FormKey(loaded.ModKey, 0x990)),
+                "Formation package is missing or shadowed by ordinary following");
+        }
+        Check(!quest.Aliases.Single(alias => alias.ID == 1).PackageData.Any(p => p.FormKey == packageKey),
+            "Formation affects the animal alias");
+    }
+
+    private static void CheckFormationHold(IPackageGetter package)
+    {
+        var tree = package.ProcedureTree;
+        Check(package.PackageTemplate.IsNull && tree is { Count: 3 },
+            "Formation must define its travel-and-hold procedure");
+        Check(tree![0].BranchType == "Sequence" &&
+            tree[0].Root is { BranchCount: 2, Flags: PackageRoot.Flag.RepeatWhenComplete },
+            "Formation stops after arriving instead of repeating its hold sequence");
+        Check(tree[1].ProcedureType == "Travel" && tree[1].Flags == 0 &&
+            tree[1].DataInputIndices.SequenceEqual(new byte[] { 0, 2, 4 }),
+            "Travel completes the package or uses the wrong destination inputs");
+        Check(tree[2].ProcedureType == "Wait" && tree[2].Flags == 0 &&
+            tree[2].DataInputIndices.SequenceEqual(new byte[] { 5, 6 }) &&
+            package.Data[5] is IPackageDataFloatGetter { Data: 1 } &&
+            package.Data[6] is IPackageDataBoolGetter { Data: true },
+            "Formation does not hold still between travel checks");
     }
 
     private static void CheckNativeNames(string root)

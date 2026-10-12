@@ -10,8 +10,9 @@ See the [available add-ons](../README.md#add-ons).
 Active followers appear in Followers and participate in party commands when
 allowed. They retain their owner's state, aliases and recruitment.
 
-They do not consume YLIWF slots or receive its packages, essential-status changes,
-homes, timers or primary promotion. Combat protection requires adapter opt-in.
+They do not consume YLIWF recruitment slots or receive essential-status changes,
+homes, timers or primary promotion. Combat protection and travel formations require
+adapter opt-in. Formation packages temporarily control movement only.
 The vanilla presence flag includes active external
 followers; YLIWF's count and recruitment limit remain separate.
 Duplicate claims or an actor already in YLIWF aliases disable commands.
@@ -39,6 +40,8 @@ const auto registration = api->registerAdapter(&adapter);
 | `setFollowDistance` (optional) | Apply Close/Normal/Far synchronously, return 1 on success, preserve follow/wait state and respect restrictions |
 | `canRecruitThroughDialogue` (optional) | Read-only: return 1 for an inactive actor eligible for the owner's recruitment dialogue, ignoring only the vanilla one-follower limit |
 | `canReceiveCombatProtection` (optional) | Read-only: return 1 when the host may apply its crossfire-protection ability; respect quest restrictions |
+| `canTravelInFormation` (optional) | Read-only: return 1 only during ordinary following; reject quest movement, scenes and foreign overrides |
+| `setFormationPackage` (optional) | Apply the supplied host Travel package FormID synchronously; zero releases only the adapter's formation movement, even when its controller is blocked |
 
 Callbacks run on the main thread: keep them quick, nonblocking and exception-free.
 Pointers and context must remain valid until process exit; no hot unloading.
@@ -48,9 +51,11 @@ Invalid versions, tables, IDs, states and capabilities are rejected.
 
 The mandatory table prefixes are `BaseAPISize` and `BaseAdapterSize`.
 Optional callbacks are `stateChanged`, `setFollowDistance`, `canRecruitThroughDialogue`
-and `canReceiveCombatProtection`.
+and `canReceiveCombatProtection`, plus the paired travel callbacks.
 Use `CanNotifyState`, `HasFollowDistance`, `HasRecruitmentEligibility` and `HasCombatProtection` before
 accessing optional callbacks.
+Use `HasTravelFormation` before accessing either travel callback. Older v1 tables
+remain valid and retain ordinary movement.
 
 Call `stateChanged(registration)` after external state changes. It is thread-safe;
 the host coalesces notifications and checks state/counts on the main thread.
@@ -95,6 +100,18 @@ invalidates old completions; accepted calls are not reissued. The owner's saved
 state is rediscovered. Add-ons must account for the owner's persistence and
 saved VM stacks.
 
+## Travel formations
+
+The host assigns eligible adapter followers a shared formation target and distance
+preference. There are eight movement slots; core followers have priority when full.
+These slots are separate from recruitment aliases and do not transfer ownership.
+Movement suspends for pending commands and the ordinary formation restrictions.
+
+The adapter must recheck permission when applying a package, preserve foreign
+movement overrides, and release only its own temporary movement. Releases are
+allowed while waiting, dismissed or quest-locked. The host clears saved formation
+movement on load and reevaluates permission during travel updates.
+
 ## Serana example
 
 [Serana.cpp](../src/addons/serana/native/Serana.cpp) connects YLIWF's follower
@@ -124,6 +141,12 @@ Combat protection applies while following or waiting with `CanFollow` and no
 
 Replacement scripts must preserve the controller's behavior as well as its
 interface; validate compatibility in game.
+
+Serana participates in travel formations while her controller allows ordinary
+following or sandboxing. Native temporary Travel packages leave Dawnguard's
+records, scripts and aliases unchanged. Quest packages, foreign interrupts,
+scenes, waiting and combat retain priority. Wait and Dismiss release formation
+movement before calling her controller.
 
 ## Source layout and build
 

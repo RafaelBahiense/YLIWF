@@ -67,6 +67,11 @@ internal static partial class FollowerPlugin
 
     private static void AddFollowDistancePackages(QuestAlias alias)
     {
+        for (var slot = 0; slot < FormationSlots; ++slot)
+        {
+            alias.PackageData.Add(new FormLink<IPackageGetter>(FormationPackageForm(slot, alternate: false)));
+            alias.PackageData.Add(new FormLink<IPackageGetter>(FormationPackageForm(slot, alternate: true)));
+        }
         foreach (var id in new uint[] { 0x000990, 0x000991, 0x000992 })
         {
             alias.PackageData.Add(new FormLink<IPackageGetter>(OwnForm(id)));

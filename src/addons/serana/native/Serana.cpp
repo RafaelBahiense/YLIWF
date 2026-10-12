@@ -4,6 +4,7 @@
 #include "ModInfo.h"
 #include "AddonInfo.h"
 #include "Rules.h"
+#include "TravelFormation.h"
 #include "sdk/PapyrusController.h"
 #include <array>
 #include <cstdio>
@@ -118,6 +119,33 @@ namespace {
                    : 0u;
     }
 
+    std::uint32_t CanTravelInFormation(void*, ActorID actor) {
+        FollowerState state;
+        if (!Inspect(nullptr, actor, &state) || state.state != State::Following || !Supports(state, Command::Follow) ||
+            !mod::serana_formation::PermittedPackage(serana))
+            return 0;
+        const auto object = papyrus::Bound(mentalModel, Script);
+        const auto following = papyrus::Boolean(object, "IsFollowing");
+        const auto waiting = papyrus::Boolean(object, "IsWaiting");
+        const auto dismissed = papyrus::Boolean(object, "IsDismissed");
+        const auto locked = papyrus::Boolean(object, "LockedIn");
+        const auto canFollow = papyrus::Boolean(object, "CanFollow");
+        return following && waiting && dismissed && locked && canFollow &&
+                       mod::serana_rules::CanTravelInFormation({.following = *following,
+                                                                .waiting = *waiting,
+                                                                .dismissed = *dismissed,
+                                                                .locked = *locked,
+                                                                .canFollow = *canFollow})
+                   ? 1u
+                   : 0u;
+    }
+
+    std::uint32_t SetFormationPackage(void*, ActorID actor, std::uint32_t package) {
+        if (!serana || serana->GetFormID() != actor || (package && !CanTravelInFormation(nullptr, actor)))
+            return 0;
+        return mod::serana_formation::Apply(serana, package) ? 1u : 0u;
+    }
+
     class Completion final : public RE::BSScript::IStackCallbackFunctor {
     public:
         Completion(RequestID request, ActorID actor, Command command)
@@ -159,6 +187,7 @@ namespace {
         }
         if (Reached(state, command))
             return StartResult::Completed;
+        mod::serana_formation::Release(serana);
         auto object = papyrus::Bound(mentalModel, Script);
         auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
         if (!vm || !object)
@@ -270,11 +299,14 @@ namespace {
                                   Start,
                                   SetFollowDistance,
                                   CanRecruitThroughDialogue,
-                                  CanReceiveCombatProtection};
+                                  CanReceiveCombatProtection,
+                                  CanTravelInFormation,
+                                  SetFormationPackage};
             registration = host->registerAdapter(&adapter);
             if (!registration)
                 SKSE::log::warn("Serana adapter registration rejected");
         } else if (message->type == SKSE::MessagingInterface::kDataLoaded) {
+            mod::serana_formation::Configure();
             if (auto* data = RE::TESDataHandler::GetSingleton()) {
                 mentalModel = data->LookupForm<RE::TESQuest>(0x2B6E, "Dawnguard.esm");
                 serana = data->LookupForm<RE::Actor>(0x2B74, "Dawnguard.esm");

@@ -4,6 +4,7 @@
 #include "Debug.h"
 #include "DebugRules.h"
 #include "FollowDistance.h"
+#include "Formation.h"
 #include <array>
 #include <charconv>
 #include <unordered_set>
@@ -292,6 +293,16 @@ namespace {
         if (ImGuiMCP::Button("Repair flags / duplicates"))
             mod::debug::RequestAction(mod::debug::Action::Repair, row.formID, row.aliasID, state.generation);
         EndDisabled(!canRepair);
+        if (row.adapterName.empty()) {
+            BeginDisabled(!canRepair);
+            if (ImGuiMCP::Button("Clear movement offset"))
+                mod::formation::RequestOffsetCleanup(row.formID, state.generation);
+            EndDisabled(!canRepair);
+            HelpMarker(
+                "Clears a saved KeepOffsetFromActor constraint for this follower.\n"
+                "Use if turning in place still makes them circle behind you with formation disabled.\n"
+                "This also clears an offset assigned by another mod; that mod may apply it again.");
+        }
         ImGuiMCP::SameLine();
         const bool canClear = CanRequest(state, mod::debug::Action::ClearSlot);
         BeginDisabled(!canClear);
@@ -622,6 +633,31 @@ void __stdcall mod::ui::RenderSettings() {
         "the default for newly configured followers.\nPaths, combat and sandboxing may change actual spacing. "
         "Quest-managed followers apply changes when allowed.");
     ImGuiMCP::Spacing();
+    ImGuiMCP::SeparatorText("TRAVEL FORMATION (EXPERIMENTAL)");
+    for (const auto style : {mod::formation_geometry::Style::Off, mod::formation_geometry::Style::Column,
+                             mod::formation_geometry::Style::Line, mod::formation_geometry::Style::Wedge}) {
+        if (style != mod::formation_geometry::Style::Off)
+            ImGuiMCP::SameLine();
+        if (ImGuiMCP::RadioButton(mod::formation_geometry::Name(style).data(), mod::settings::Formation == style)) {
+            mod::settings::Formation = style;
+            changed = true;
+            if (mod::settings::FormationCallback)
+                mod::settings::FormationCallback();
+        }
+    }
+    HelpMarker(
+        "Core followers and supported add-ons. Column traces your route; you occupy the center of Line and the tip of "
+        "Wedge.\n"
+        "Eight movement slots; core followers have priority when full. Quest behavior keeps priority.\n"
+        "Following-distance choices control spacing. Orientation follows movement, not turning in place.\n"
+        "Targets adjust onto nearby ground; spacing may compress near terrain. No suitable ground means ordinary "
+        "following.\n"
+        "Suspends in cities, towns, settlements and Orc strongholds, indoors, during combat, dialogue, scenes, waiting "
+        "and mounted/swimming movement.\n"
+        "Save keeps the selection for future sessions; actor slots are stored in game saves.\n"
+        "Walk far enough to establish the route. Turning in place does not move the targets.");
+    ImGuiMCP::TextWrapped("%s", mod::formation::Status().c_str());
+    ImGuiMCP::Spacing();
     ImGuiMCP::SeparatorText("FEATURES");
 
     {
@@ -773,6 +809,8 @@ void __stdcall mod::ui::RenderSettings() {
         mod::settings::SandboxCallback();
         mod::settings::HomesCallback();
         mod::settings::EssentialCallback();
+        if (mod::settings::FormationCallback)
+            mod::settings::FormationCallback();
         changed = true;
     }
     ImGuiMCP::SameLine();

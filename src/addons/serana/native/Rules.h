@@ -21,6 +21,10 @@ namespace mod::serana_rules {
         return value.following && !value.dismissed && !value.locked && value.canFollow;
     }
 
+    inline bool CanTravelInFormation(const ControllerState& value) {
+        return value.following && !value.waiting && !value.dismissed && !value.locked && value.canFollow;
+    }
+
     inline std::optional<std::array<bool, 3>> DistanceFlags(yliwf::sdk::FollowDistance distance) {
         using yliwf::sdk::FollowDistance;
         if (static_cast<unsigned>(distance) > 2)
