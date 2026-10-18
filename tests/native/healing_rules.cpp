@@ -1,6 +1,8 @@
 #include <doctest/doctest.h>
 
 #include "combat/HealingRules.h"
+#include "combat/HealingForecast.h"
+#include "combat/HealingSelection.h"
 #include "combat/HealerMovementRules.h"
 #include <array>
 #include <limits>
@@ -8,8 +10,126 @@
 namespace {
     using namespace mod::healing_rules;
 
+    TEST_CASE("Healing throughput can favor a stronger spell over the cheapest spell") {
+        const std::array weak{HealingEffect{10, 0}}, strong{HealingEffect{40, 0}};
+        const HealingBudget budget{100, 100, 0, 0};
+        CHECK(HealingPerSecond(strong, 30, 1, 0.5f, budget, 500) > HealingPerSecond(weak, 10, 1, 0.5f, budget, 500));
+    }
+
+    TEST_CASE("Magicka regeneration changes which spell sustains more healing") {
+        const std::array weak{HealingEffect{10, 0}}, strong{HealingEffect{25, 0}};
+        HealingBudget budget{30, 30, 0, 0};
+        CHECK(HealingPerSecond(weak, 10, 1, 0.5f, budget, 500) > HealingPerSecond(strong, 30, 1, 0.5f, budget, 500));
+        budget.regeneration = 60;
+        CHECK(HealingPerSecond(strong, 30, 1, 0.5f, budget, 500) > HealingPerSecond(weak, 10, 1, 0.5f, budget, 500));
+        budget.regenerationDelay = HealingWindow;
+        CHECK(HealingPerSecond(strong, 30, 1, 0.5f, budget, 500) == doctest::Approx(25 / HealingWindow));
+    }
+
+    TEST_CASE("The healing window excludes late restoration and overhealing") {
+        const std::array instant{HealingEffect{100, 0}}, gradual{HealingEffect{10, 30}};
+        const HealingBudget budget{10, 10, 0, 0};
+        CHECK(HealingPerSecond(instant, 10, 1, 0, budget, 20) == doctest::Approx(20 / HealingWindow));
+        CHECK(HealingPerSecond(gradual, 10, 1, 0, budget, 500) == doctest::Approx(50 / HealingWindow));
+        CHECK(HealingPerSecond(instant, 10, HealingWindow + 1, 0, budget, 500) == 0);
+    }
+
+    TEST_CASE("Repeated duration healing refreshes rather than multiplying the healing rate") {
+        const std::array gradual{HealingEffect{10, 30}};
+        const HealingBudget budget{100, 100, 0, 0};
+        CHECK(HealingPerSecond(gradual, 0, 1, 0, budget, 500) == doctest::Approx(50 / HealingWindow));
+    }
+
+    TEST_CASE("Casting time, recovery and affordability constrain the healing forecast") {
+        const std::array instant{HealingEffect{20, 0}};
+        const HealingBudget budget{100, 100, 0, 0};
+        CHECK(HealingPerSecond(instant, 10, 1, 0, budget, 500) > HealingPerSecond(instant, 10, 2, 1, budget, 500));
+        CHECK(HealingPerSecond(instant, 101, 1, 0, budget, 500) == 0);
+        CHECK(HealingPerSecond(instant, 10, 1, 0, budget, 0) == 0);
+        CHECK(HealingPerSecond(instant, 10, std::numeric_limits<float>::quiet_NaN(), 0, budget, 500) == 0);
+    }
+
     Target InjuredAlly(std::uint32_t id, float health = 50, float distance = 100) {
         return {id, health, 100, distance, true, true, true, true, true, false};
+    }
+
+    SpellOption HealingOption(std::size_t targets, float magnitude, float cost = 10, bool self = false) {
+        return {cost, 1, MaximumRange, self, true, std::vector<std::vector<HealingEffect>>(targets, {{magnitude, 0}})};
+    }
+
+    HealingChoice RequireSelection(std::span<const SpellOption> spells, std::span<const Target> targets,
+                                   const HealingBudget& budget) {
+        const auto choice = SelectHealing(spells, targets, 1, true, budget, 0.5f);
+        REQUIRE(choice.has_value());
+        return *choice;
+    }
+
+    TEST_CASE("Spell selection prioritizes self healing independently of engine spell order") {
+        const std::array targets{InjuredAlly(1, 40), InjuredAlly(2, 10)};
+        const auto self = HealingOption(targets.size(), 20, 10, true);
+        const auto ally = HealingOption(targets.size(), 100);
+        const HealingBudget budget{100, 100, 0, 0};
+        SUBCASE("Self spell first") {
+            const std::array spells{self, ally};
+            const auto choice = SelectHealing(spells, targets, 1, true, budget, 0.5f);
+            REQUIRE(choice);
+            CHECK(choice->spell == 0);
+            CHECK(choice->target == 0);
+        }
+        SUBCASE("Self spell last") {
+            const std::array spells{ally, self};
+            const auto choice = SelectHealing(spells, targets, 1, true, budget, 0.5f);
+            REQUIRE(choice);
+            CHECK(choice->spell == 1);
+            CHECK(choice->target == 0);
+        }
+    }
+
+    TEST_CASE("Spell selection preserves target urgency and rejects incompatible effects") {
+        const std::array targets{InjuredAlly(2, 60), InjuredAlly(3, 10)};
+        std::array spells{HealingOption(targets.size(), 20)};
+        const HealingBudget budget{100, 100, 0, 0};
+        CHECK(RequireSelection(spells, targets, budget).target == 1);
+        spells[0].targetEffects[1].clear();
+        CHECK(RequireSelection(spells, targets, budget).target == 0);
+        spells[0].targetEffects[0].clear();
+        CHECK_FALSE(SelectHealing(spells, targets, 1, true, budget, 0.5f));
+    }
+
+    TEST_CASE("Spell selection favors a reachable spell before higher healing throughput") {
+        const std::array targets{InjuredAlly(2, 10, 500)};
+        std::array spells{HealingOption(1, 100), HealingOption(1, 10)};
+        spells[0].range = TouchRange;
+        const auto choice = SelectHealing(spells, targets, 1, true, {100, 100, 0, 0}, 0.5f);
+        REQUIRE(choice);
+        CHECK(choice->spell == 1);
+    }
+
+    TEST_CASE("Spell selection favors range when approaching an injured ally") {
+        const std::array targets{InjuredAlly(2, 10, 2000)};
+        std::array spells{HealingOption(1, 100), HealingOption(1, 10)};
+        spells[0].range = TouchRange;
+        CHECK(RequireSelection(spells, targets, {100, 100, 0, 0}).spell == 1);
+    }
+
+    TEST_CASE("Spell selection compares healing throughput and breaks ties by magicka cost") {
+        auto target = InjuredAlly(2, 100);
+        target.maximumHealth = 1000;
+        const std::array targets{target};
+        std::array spells{HealingOption(1, 10, 10), HealingOption(1, 40, 30)};
+        const HealingBudget budget{100, 100, 0, 0};
+        CHECK(RequireSelection(spells, targets, budget).spell == 1);
+        spells[0] = HealingOption(1, 40, 20);
+        CHECK(RequireSelection(spells, targets, budget).spell == 0);
+    }
+
+    TEST_CASE("Engine rejection and affordability remain inputs to pure spell selection") {
+        const std::array targets{InjuredAlly(2, 10)};
+        std::array spells{HealingOption(1, 10), HealingOption(1, 50, 80)};
+        spells[0].castable = false;
+        CHECK_FALSE(SelectHealing(spells, targets, 1, true, {40, 100, 100, 0}, 0.5f));
+        spells[0].castable = true;
+        CHECK(RequireSelection(spells, targets, {40, 100, 100, 0}).spell == 0);
     }
 
     TEST_CASE("Self healing does not require an ally ray or an unreserved target") {
@@ -150,10 +270,10 @@ namespace {
     }
 
     TEST_CASE("Paused time does not advance cooldowns and expiry never becomes negative") {
-        CHECK(Remaining(Cooldown, 0) == Cooldown);
-        CHECK(Remaining(Cooldown, -1) == Cooldown);
-        CHECK(Remaining(Cooldown, 1) == Cooldown - 1);
-        CHECK(Remaining(Cooldown, 100) == 0);
+        CHECK(Remaining(RetryBackoff, 0) == RetryBackoff);
+        CHECK(Remaining(RetryBackoff, -1) == RetryBackoff);
+        CHECK(Remaining(RetryBackoff, 1) == RetryBackoff - 1);
+        CHECK(Remaining(RetryBackoff, 100) == 0);
     }
 
     TEST_CASE("A healer can seek an injured ally beyond casting range or behind an obstacle") {

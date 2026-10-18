@@ -71,7 +71,8 @@ namespace mod::combat_roles {
                 const bool health = base->data.primaryAV == RE::ActorValue::kHealth;
                 const bool positive = effect->GetMagnitude() > 0 && !base->IsDetrimental() && !base->IsHostile();
                 traits.hostile |= base->IsHostile() || base->IsDetrimental();
-                traits.restoresHealth |= modifier && health && positive;
+                traits.restoresHealth |= modifier && health && positive &&
+                                         !base->data.flags.any(RE::EffectSetting::EffectSettingData::Flag::kRecover);
                 traits.damagesHealth |= health && base->IsHostile() && (modifier || archetype == Archetype::kAbsorb);
                 traits.allyBuff |= positive && ((modifier && !health) || archetype == Archetype::kPeakValueModifier ||
                                                 archetype == Archetype::kRally);

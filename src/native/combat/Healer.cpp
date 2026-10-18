@@ -1,5 +1,6 @@
 #include "combat/Healer.h"
 #include "combat/HealingRules.h"
+#include "combat/HealingSpells.h"
 #include "combat/HealingGeometry.h"
 #include "combat/HealerPackages.h"
 #include "combat/HealerMovement.h"
@@ -18,10 +19,12 @@ namespace mod::healer {
         struct Observation {
             RE::ActorHandle actor;
             std::size_t slot = healer_packages::Slots;
-            float cooldown = 0;
+            float retrySeconds = 0;
             float diagnosticCooldown = 0;
             float castSeconds = 0, stalledSeconds = 0;
             float offensiveSeconds = 0;
+            bool released = false;
+            float releasedAt = 0, recoveryEstimate = 0.5f;
             healing_rules::EscapeAttempt escape;
             std::uint32_t spell = 0, target = 0;
             float cost = 0, magickaBefore = 0;
@@ -34,7 +37,13 @@ namespace mod::healer {
         };
 
         std::unordered_map<std::uint32_t, Observation> observations;
-        std::unordered_map<std::uint32_t, float> reservations;
+
+        struct Reservation {
+            std::uint32_t healer = 0;
+            float seconds = 0;
+        };
+
+        std::unordered_map<std::uint32_t, Reservation> reservations;
         float sinceObservation = 0;
 
         std::vector<RE::Actor*> NativeParty() {
@@ -114,7 +123,8 @@ namespace mod::healer {
             result.alive = !target->IsDead() && !target->IsDisabled();
             result.loaded = target->Is3DLoaded();
             result.sameArea = SameArea(caster, target);
-            result.reserved = reservations.contains(result.id);
+            const auto reservation = reservations.find(result.id);
+            result.reserved = reservation != reservations.end() && reservation->second.healer != caster->GetFormID();
             result.health = target->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth);
             result.bleedingOut = target->AsActorState()->IsBleedingOut();
             result.maximumHealth = result.health - target->GetActorValueModifier(RE::ACTOR_VALUE_MODIFIER::kDamage,
@@ -136,27 +146,7 @@ namespace mod::healer {
             return result;
         }
 
-        bool HealingConditionsPass(RE::SpellItem* spell, RE::Actor* caster, RE::Actor* target) {
-            using Archetype = RE::EffectArchetypes::ArchetypeID;
-            for (auto* effect : spell->effects) {
-                if (!effect || !effect->baseEffect)
-                    continue;
-                auto* base = effect->baseEffect;
-                if (base->data.primaryAV == RE::ActorValue::kHealth && !base->IsDetrimental() && !base->IsHostile() &&
-                    effect->GetMagnitude() > 0 &&
-                    (base->data.archetype == Archetype::kValueModifier ||
-                     base->data.archetype == Archetype::kDualValueModifier) &&
-                    effect->conditions.IsTrue(target, caster) && base->conditions.IsTrue(target, caster))
-                    return true;
-            }
-            return false;
-        }
-
-        float Range(RE::SpellItem* spell) {
-            // SPIT range is authored in feet, unlike actor world coordinates.
-            return healing_rules::SpellRange(spell->GetRange(),
-                                             spell->GetDelivery() == RE::MagicSystem::Delivery::kTouch);
-        }
+        using healing_spells::Range;
 
         struct Choice {
             combat_roles::HealingSpell spell;
@@ -188,68 +178,29 @@ namespace mod::healer {
         std::optional<Choice> ChooseCast(RE::Actor* actor, RE::MagicCaster* caster,
                                          const std::vector<RE::Actor*>& allies,
                                          const std::vector<healing_rules::Target>& targets,
-                                         std::vector<combat_roles::HealingSpell> spells, Observation& observation,
-                                         bool traceTargets) {
-            std::ranges::sort(spells, {}, &combat_roles::HealingSpell::cost);
-            const auto magicka = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kMagicka);
-            std::optional<Choice> result;
-            bool affordable = false;
-            observation.status = "No injured ally in range with a usable healing spell";
-            for (const auto& candidate : spells) {
-                if (!std::isfinite(magicka) || magicka < candidate.cost)
-                    continue;
-                affordable = true;
-                if (candidate.self) {
-                    for (std::size_t i = 0; i < targets.size(); ++i) {
-                        if (!healing_rules::SelfEligible(targets[i], actor->GetFormID(), observation.combat) ||
-                            !HealingConditionsPass(candidate.spell, actor, actor))
-                            continue;
-                        auto reason = RE::MagicSystem::CannotCastReason::kOK;
-                        float strength = 1;
-                        if (caster->CheckCast(candidate.spell, false, &strength, &reason, false))
-                            return Choice{candidate, i};
-                    }
-                    continue;
-                }
-                auto compatible = targets;
-                for (std::size_t i = 0; i < compatible.size(); ++i) {
-                    if (!healing_rules::Seekable(compatible[i], actor->GetFormID(), observation.combat))
-                        continue;
-                    compatible[i].spellApplicable = HealingConditionsPass(candidate.spell, actor, allies[i]);
-                    if (traceTargets)
-                        debug::Trace("Healer.SpellTarget", actor, "spell={:08X} target={:08X} conditions={}",
-                                     candidate.spell->GetFormID(), targets[i].id, compatible[i].spellApplicable);
-                }
-                std::optional<std::size_t> selected;
-                for (std::size_t i = 0; i < compatible.size(); ++i)
-                    if (healing_rules::Seekable(compatible[i], actor->GetFormID(), observation.combat) &&
-                        (!selected || healing_rules::MoreUrgent(compatible[i], compatible[*selected])))
-                        selected = i;
-                if (!selected)
-                    continue;
-                auto reason = RE::MagicSystem::CannotCastReason::kOK;
-                float strength = 1;
-                if (!caster->CheckCast(candidate.spell, false, &strength, &reason, false)) {
-                    observation.status = "Engine rejected the healing cast";
-                    continue;
-                }
-                // Prefer a spell that can already reach the selected ally. When
-                // movement is needed, prefer range to avoid walking into melee.
-                const bool sameTarget = result && *selected == result->target;
-                const bool canCast = healing_rules::Eligible(compatible[*selected], actor->GetFormID(),
-                                                             Range(candidate.spell), observation.combat);
-                const bool previousCanCast =
-                    result && healing_rules::Eligible(targets[result->target], actor->GetFormID(),
-                                                      Range(result->spell.spell), observation.combat);
-                if (!result || healing_rules::MoreUrgent(targets[*selected], targets[result->target]) ||
-                    (sameTarget &&
-                     ((canCast && !previousCanCast) ||
-                      (!canCast && !previousCanCast && Range(candidate.spell) > Range(result->spell.spell)))))
-                    result = Choice{candidate, *selected};
+                                         const std::vector<combat_roles::HealingSpell>& spells,
+                                         Observation& observation, bool traceTargets) {
+            const auto budget = healing_spells::ReadBudget(actor);
+            const auto options = healing_spells::ReadOptions(actor, caster, allies, spells, traceTargets);
+            const auto selected = healing_rules::SelectHealing(options, targets, actor->GetFormID(), observation.combat,
+                                                               budget, observation.recoveryEstimate);
+            if (!selected) {
+                const bool affordable = std::ranges::any_of(spells, [&](const auto& spell) {
+                    return std::isfinite(budget.magicka) && budget.magicka >= spell.cost;
+                });
+                observation.status = affordable ? "No injured ally in range with a usable healing spell"
+                                                : "Insufficient magicka for an ally-healing spell";
+                return std::nullopt;
             }
-            if (!affordable)
-                observation.status = "Insufficient magicka for an ally-healing spell";
-            return result;
+            const auto& spell = spells[selected->spell];
+            if (traceTargets)
+                debug::Trace("Healer.Selection", actor,
+                             "target={:08X} spell={:08X} estimatedHPPerSecond={} window={} magicka={} "
+                             "regeneration={} regenerationDelay={} recoveryEstimate={}",
+                             targets[selected->target].id, spell.spell->GetFormID(), selected->throughput,
+                             healing_rules::HealingWindow, budget.magicka, budget.regeneration,
+                             budget.regenerationDelay, observation.recoveryEstimate);
+            return Choice{spell, selected->target};
         }
 
         void Cast(RE::Actor* actor, RE::Actor* target, const combat_roles::HealingSpell& candidate,
@@ -259,13 +210,14 @@ namespace mod::healer {
             observation.cost = candidate.cost;
             observation.magickaBefore = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kMagicka);
             observation.castSeconds = 0;
+            observation.released = false;
             if (!healer_packages::Cast(actor, observation.slot, target, candidate.spell)) {
                 observation.spell = 0;
-                observation.cooldown = healing_rules::Cooldown;
+                observation.retrySeconds = healing_rules::RetryBackoff;
                 observation.status = "Animated casting package unavailable or blocked";
                 return;
             }
-            reservations[target->GetFormID()] = healing_rules::CastTimeout;
+            reservations[target->GetFormID()] = {actor->GetFormID(), healing_rules::CastTimeout};
             observation.moving = false;
             observation.status = "Casting healing spell";
             debug::Trace("Healer.CastRequested", actor, "target={:08X} spell={:08X} cost={}", observation.target,
@@ -273,19 +225,42 @@ namespace mod::healer {
         }
 
         void CancelCast(RE::Actor* actor, Observation& observation) {
-            if (observation.spell && healer_packages::Casting(actor, observation.slot))
+            if (observation.spell && !observation.released && healer_packages::Casting(actor, observation.slot))
                 for (const auto source :
                      {RE::MagicSystem::CastingSource::kLeftHand, RE::MagicSystem::CastingSource::kRightHand})
                     if (auto* caster = actor->GetMagicCaster(source);
                         caster && caster->currentSpell && caster->currentSpell->GetFormID() == observation.spell)
                         caster->InterruptCast(true);
             observation.spell = 0;
+            observation.released = false;
+            const auto reservation = reservations.find(observation.target);
+            if (reservation != reservations.end() && reservation->second.healer == actor->GetFormID())
+                reservations.erase(reservation);
             healer_packages::Release(actor);
         }
 
         bool MaintainCast(RE::Actor* actor, Observation& observation) {
             if (!observation.spell)
                 return false;
+            if (observation.released) {
+                const bool ready = CanAct(actor);
+                if (!ready && observation.castSeconds < healing_rules::CastTimeout) {
+                    observation.status = "Waiting for casting animation to finish";
+                    return true;
+                }
+                if (ready) {
+                    observation.recoveryEstimate = std::max(0.0f, observation.castSeconds - observation.releasedAt);
+                    observation.spell = 0;
+                    observation.released = false;
+                    healer_packages::Release(actor);
+                } else {
+                    observation.retrySeconds = healing_rules::RetryBackoff;
+                    debug::Trace("Healer.RecoveryTimeout", actor, "spell={:08X} elapsed={}", observation.spell,
+                                 observation.castSeconds);
+                    CancelCast(actor, observation);
+                }
+                return false;
+            }
             auto* target = RE::TESForm::LookupByID<RE::Actor>(observation.target);
             const auto position = actor->GetPosition();
             const auto threats =
@@ -322,7 +297,7 @@ namespace mod::healer {
                     observation.target, observation.spell, observation.castSeconds, reason, enemyDistance,
                     package ? package->GetFormID() : 0, handCast);
                 CancelCast(actor, observation);
-                observation.cooldown = healing_rules::Cooldown;
+                observation.retrySeconds = healing_rules::RetryBackoff;
                 observation.status = "Healing cast interrupted or timed out";
                 return false;
             }
@@ -339,7 +314,7 @@ namespace mod::healer {
             observation.lastPosition = position;
             observation.moving = true;
             if (observation.stalledSeconds >= healing_rules::TravelTimeout) {
-                observation.cooldown = healing_rules::Cooldown;
+                observation.retrySeconds = healing_rules::RetryBackoff;
                 observation.stalledSeconds = 0;
                 healer_packages::Move(actor, observation.slot, position);
                 observation.status = "Healing route stalled; holding position before retry";
@@ -436,7 +411,7 @@ namespace mod::healer {
             }
             // Self-healing is a stationary Self-target cast and does not need
             // separation from enemies. Preserve ongoing attacks/casts until ready.
-            if (choice->spell.self && observation.cooldown <= 0 && CanAct(actor)) {
+            if (choice->spell.self && observation.retrySeconds <= 0 && CanAct(actor)) {
                 Cast(actor, actor, choice->spell, observation);
                 return;
             }
@@ -449,9 +424,9 @@ namespace mod::healer {
             // runs while a usable healing action is needed.
             if (Retreat(actor, observation, elapsed))
                 return;
-            if (observation.cooldown > 0 || !CanAct(actor) || choice->spell.self) {
+            if (observation.retrySeconds > 0 || !CanAct(actor) || choice->spell.self) {
                 ResumeCombat(actor, observation);
-                observation.status = "Waiting for an uninterrupted casting opportunity or cooldown";
+                observation.status = "Waiting for an uninterrupted casting opportunity or retry backoff";
                 return;
             }
             const auto threats =
@@ -514,7 +489,7 @@ namespace mod::healer {
     void SpellReleased(std::uint32_t actorID, std::uint32_t spell) {
         std::scoped_lock lock(settings::Mutex);
         const auto found = observations.find(actorID);
-        if (found == observations.end() || found->second.spell != spell)
+        if (found == observations.end() || found->second.spell != spell || found->second.released)
             return;
         auto actor = found->second.actor.get();
         auto& observation = found->second;
@@ -524,13 +499,13 @@ namespace mod::healer {
                      "target={:08X} spell={:08X} cost={} magickaBefore={} magickaAfter={} mode=UseMagic",
                      observation.target, spell, observation.cost, observation.magickaBefore,
                      actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kMagicka));
-        observation.spell = 0;
-        observation.cooldown = healing_rules::Cooldown;
-        reservations[observation.target] = healing_rules::TargetReservation;
-        observation.status = "Healing spell released; waiting for cooldown";
-        healer_packages::Release(actor.get());
+        observation.released = true;
+        observation.releasedAt = observation.castSeconds;
+        reservations[observation.target] = {actorID, healing_rules::TargetReservation};
+        observation.status = "Healing spell released; waiting for casting animation";
         observation.moving = false;
     }
+
 
     bool NeedsObservation() {
         if (!controller::storage::Available())
@@ -548,15 +523,15 @@ namespace mod::healer {
         if (!controller::storage::Available() || !std::isfinite(elapsed) || elapsed <= 0)
             return;
         for (auto& [actor, observation] : observations) {
-            observation.cooldown = healing_rules::Remaining(observation.cooldown, elapsed);
+            observation.retrySeconds = healing_rules::Remaining(observation.retrySeconds, elapsed);
             observation.diagnosticCooldown = healing_rules::Remaining(observation.diagnosticCooldown, elapsed);
             observation.offensiveSeconds = healing_rules::Remaining(observation.offensiveSeconds, elapsed);
             if (observation.spell)
                 observation.castSeconds += elapsed;
         }
-        for (auto& [actor, seconds] : reservations)
-            seconds = healing_rules::Remaining(seconds, elapsed);
-        std::erase_if(reservations, [](const auto& entry) { return entry.second <= 0; });
+        for (auto& [actor, reservation] : reservations)
+            reservation.seconds = healing_rules::Remaining(reservation.seconds, elapsed);
+        std::erase_if(reservations, [](const auto& entry) { return entry.second.seconds <= 0; });
         sinceObservation += elapsed;
         if (sinceObservation < 1)
             return;

@@ -39,5 +39,10 @@ Healing requires enough magicka and a suitable spell. Ally healing also needs
 an unobstructed target within spell range. Supported spells are single-shot
 (fire-and-forget). Self-healing alone does not qualify a follower for the Healer role.
 
+Spell selection favors estimated useful healing over six seconds, accounting for
+magicka cost, regeneration, casting time and healing duration. Extra healing beyond
+the target's missing health adds no benefit. Casts resume when casting finishes;
+interrupted or blocked attempts have a short retry delay.
+
 Dialogue, quest scenes, waiting and incapacitation take priority over healing.
 Active quest-managed companions can receive healing when recognized as allies.

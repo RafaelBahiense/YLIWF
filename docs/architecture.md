@@ -30,6 +30,11 @@ Rule headers use ordinary C++ values and do not depend on Skyrim, SKSE or the PC
 Engine code reads a snapshot, passes it to the rules, then applies the result on
 the game thread. Tests supply snapshots directly.
 
+For healing, `combat/HealingSpells` reads costs, effects and engine cast checks.
+`combat/HealingSelection.h` decides which spell and target to use.
+`combat/HealingForecast.h` estimates restoration through named casting, healing
+and regeneration steps. `combat/Healer.cpp` coordinates execution and receipts.
+
 ESP records are generated from C# so aliases, packages, dialogue and bindings can
 be reviewed and versioned with their implementations. Creation Kit and xEdit
 support inspection. Dependency pins and release source archives identify

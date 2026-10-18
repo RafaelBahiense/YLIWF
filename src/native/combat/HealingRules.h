@@ -11,7 +11,7 @@ namespace mod::healing_rules {
     inline constexpr float RecoveryHealthThreshold = 0.999f;
     inline constexpr float MaximumRange = 1024.0f;
     inline constexpr float TouchRange = 128.0f;
-    inline constexpr float Cooldown = 4.0f;
+    inline constexpr float RetryBackoff = 4.0f;
     inline constexpr float TargetReservation = 2.0f;
     inline constexpr float WorldUnitsPerFoot = 128.0f / 6.0f;
     inline constexpr float SearchRange = 4096;
