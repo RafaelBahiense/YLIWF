@@ -15,7 +15,7 @@ public sealed partial class PluginTests : TestWorkspace
         var esp = CreatePlugin();
         Artifacts.ValidateEsp(esp);
         using var loaded = SkyrimMod.CreateFromBinaryOverlay(esp, SkyrimRelease.SkyrimSE);
-        Assert.Equal(127, loaded.EnumerateMajorRecords().Count());
+        Assert.Equal(181, loaded.EnumerateMajorRecords().Count());
         Assert.True(loaded.Factions.Single(faction => faction.FormKey == new FormKey(loaded.ModKey, 0x995)).Flags.HasFlag(Faction.FactionFlag.HiddenFromPC));
         Assert.Equal(ModInfo.Identity.Author, loaded.ModHeader.Author);
         Assert.Equal("DialogueFollower", loaded.Quests.Single(q => q.FormKey == FormKey.Factory("0750BA:Skyrim.esm")).EditorID);
@@ -39,9 +39,10 @@ public sealed partial class PluginTests : TestWorkspace
         var overridesKey = new FormKey(loaded.ModKey, 0xA09);
         var activityKey = new FormKey(loaded.ModKey, 0xA08);
         var overrides = loaded.FormLists.Single(record => record.FormKey == overridesKey);
-        Assert.Equal(26, overrides.Items.Count);
-        Assert.Equal(FormKey.Factory("109124:Skyrim.esm"), overrides.Items[24].FormKey);
-        Assert.Equal(FormKey.Factory("05C851:Skyrim.esm"), overrides.Items[25].FormKey);
+        Assert.Equal(62, overrides.Items.Count);
+        Assert.Equal(new FormKey(loaded.ModKey, 0xA20), overrides.Items[0].FormKey);
+        Assert.Equal(FormKey.Factory("109124:Skyrim.esm"), overrides.Items[60].FormKey);
+        Assert.Equal(FormKey.Factory("05C851:Skyrim.esm"), overrides.Items[61].FormKey);
         Assert.Equal(Faction.FactionFlag.HiddenFromPC, loaded.Factions.Single(record => record.FormKey == activityKey).Flags);
         Assert.All(quest.Aliases.Where(alias => alias.ID != 1), alias => Assert.Equal(overridesKey, alias.CombatOverridePackageList.FormKey));
         Assert.Equal(FormKey.Null, quest.Aliases.Single(alias => alias.ID == 1).CombatOverridePackageList.FormKey);
@@ -76,6 +77,53 @@ public sealed partial class PluginTests : TestWorkspace
             Assert.Equal(1u, ((IPackageDataIntGetter)cast.Data[11]).Data);
             Assert.False(((IPackageDataBoolGetter)cast.Data[12]).Data);
         }
+    }
+
+    [Fact]
+    public void StandDownOverridesCombatWithoutChangingFollowerWaitState()
+    {
+        using var loaded = SkyrimMod.CreateFromBinaryOverlay(CreatePlugin(), SkyrimRelease.SkyrimSE);
+        var packageKey = new FormKey(loaded.ModKey, 0xA11);
+        var package = loaded.Packages.Single(record => record.FormKey == packageKey);
+        Assert.True(package.Flags.HasFlag(Package.Flag.IgnoreCombat));
+        Assert.Equal(3, package.Unknown);
+        Assert.True(package.ProcedureTree[0].Root!.Flags.HasFlag(PackageRoot.Flag.RepeatWhenComplete));
+        Assert.Equal("Wait", package.ProcedureTree[1].ProcedureType);
+        var condition = package.Conditions.Cast<IConditionFloatGetter>().First();
+        Assert.Equal(new FormKey(loaded.ModKey, 0xA10), ((IGetGlobalValueConditionDataGetter)condition.Data).Global.Link.FormKey);
+        Assert.Equal(1, condition.ComparisonValue);
+        Assert.IsType<IGetActorValueConditionDataGetter>(package.Conditions[1].Data, exactMatch: false);
+        float[] minimum = [128, 256, 512], maximum = [192, 384, 768];
+        for (var preset = 0; preset < 3; ++preset)
+        {
+            var follow = loaded.Packages.Single(record => record.FormKey == new FormKey(loaded.ModKey, (uint)(0xA12 + preset)));
+            Assert.True(follow.Flags.HasFlag(Package.Flag.IgnoreCombat));
+            Assert.Equal(FormKey.Factory("0D530D:Skyrim.esm"), follow.PackageTemplate.FormKey);
+            Assert.Equal(minimum[preset], ((IPackageDataFloatGetter)follow.Data[1]).Data);
+            Assert.Equal(maximum[preset], ((IPackageDataFloatGetter)follow.Data[2]).Data);
+            Assert.Contains(follow.Conditions.Cast<IConditionFloatGetter>(), condition =>
+                condition.Data is IGetActorValueConditionDataGetter value && value.ActorValue == ActorValue.WaitingForPlayer &&
+                condition.CompareOperator == CompareOperator.EqualTo && condition.ComparisonValue == 0);
+            Assert.Contains(follow.Conditions.Cast<IConditionFloatGetter>(), condition =>
+                condition.Data is IGetFactionRankConditionDataGetter rank && rank.Faction.Link.FormKey == new FormKey(loaded.ModKey, 0xA15) &&
+                condition.CompareOperator == CompareOperator.LessThan && condition.ComparisonValue == 0);
+        }
+        var markers = loaded.EnumerateMajorRecords().OfType<IPlacedObjectGetter>().ToArray();
+        for (var slot = 0; slot < 32; ++slot)
+        {
+            var avoidance = loaded.Packages.Single(record => record.FormKey == new FormKey(loaded.ModKey, (uint)(0xA20 + slot)));
+            CheckFormationHold(avoidance);
+            Assert.True(avoidance.Flags.HasFlag(Package.Flag.IgnoreCombat));
+            var activity = avoidance.Conditions.Cast<IConditionFloatGetter>().Last();
+            Assert.Equal(new FormKey(loaded.ModKey, 0xA15), ((IGetFactionRankConditionDataGetter)activity.Data).Faction.Link.FormKey);
+            Assert.Equal(slot, activity.ComparisonValue);
+            var location = (ILocationTargetRadiusGetter)((IPackageDataLocationGetter)avoidance.Data[0]).Location;
+            var target = ((ILocationTargetGetter)location.Target).Link.FormKey;
+            Assert.Equal(new FormKey(loaded.ModKey, (uint)(0xA40 + slot % 16)), target);
+            Assert.Contains(markers, marker => marker.FormKey == target && (marker.MajorRecordFlagsRaw & 0x400) != 0);
+        }
+        var quest = loaded.Quests.Single(record => record.FormKey == FormKey.Factory("0750BA:Skyrim.esm"));
+        Assert.All(quest.Aliases.Where(alias => alias.ID != 1), alias => Assert.Equal(new FormKey(loaded.ModKey, 0xA20), alias.PackageData[0].FormKey));
     }
 
     [Fact]

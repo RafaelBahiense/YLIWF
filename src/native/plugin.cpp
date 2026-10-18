@@ -16,6 +16,7 @@
 #include "combat/CombatRoles.h"
 #include "formations/Formation.h"
 #include "combat/Healer.h"
+#include "combat/CombatOrders.h"
 #include "followers/PartyRules.h"
 
 namespace {
@@ -79,6 +80,7 @@ namespace {
         mod::combat_roles::Configure(
             ResolveForm<RE::TESFaction>(0x996, kRequiredPluginName, mod::record_names::CombatRole));
         mod::healer::Configure();
+        mod::combat_orders::Configure();
         g_friendlyFireSpell =
             ResolveForm<RE::SpellItem>(0x800, kRequiredPluginName, mod::record_names::ProtectionSpell);
         mod::adapters::ConfigureCombatProtection(g_friendlyFireSpell);

@@ -8,6 +8,7 @@
 
 #include "diagnostics/DebugRules.h"
 #include "followers/Controller.h"
+#include "combat/CombatOrders.h"
 #include "followers/ControllerStorage.h"
 #include "ui/Refresh.h"
 #include "followers/FollowerView.h"
@@ -609,6 +610,9 @@ namespace mod::debug {
             out << std::boolalpha << mod::info::ShortName << " context dump v1\n";
             out << "Runtime=" << REL::Module::get().version().string() << " generation=" << state.generation << '\n';
             out << "Controller: " << state.executionStatus << '\n';
+            out << "Combat order: " << (combat_orders::Enabled ? "Stand down" : "Normal behavior")
+                << " affected=" << combat_orders::Affected.load()
+                << " unavailable=" << combat_orders::Unavailable.load() << '\n';
             for (const auto& follower : state.adaptedFollowers)
                 out << "Quest-managed follower: actor=" << fmt::format("{:08X}", follower.formID)
                     << " controller=" << std::quoted(follower.adapterName)

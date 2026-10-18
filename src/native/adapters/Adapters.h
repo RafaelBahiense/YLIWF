@@ -27,6 +27,7 @@ namespace mod::adapters {
     bool SupportsTravelFormation(yliwf::sdk::ActorID actor);
     bool CanTravelInFormation(yliwf::sdk::ActorID actor);
     bool SetFormationPackage(yliwf::sdk::ActorID actor, std::uint32_t package);
+    bool SetStandDownPackage(yliwf::sdk::ActorID actor, std::uint32_t package);
     void ConfigureCombatProtection(RE::SpellItem* ability);
     void ApplyCombatProtection();
     void ApplyFollowDistance(bool replaceAll = false);

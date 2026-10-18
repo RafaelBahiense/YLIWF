@@ -146,6 +146,14 @@ namespace {
         return mod::serana_formation::Apply(serana, package) ? 1u : 0u;
     }
 
+    std::uint32_t SetStandDownPackage(void*, ActorID actor, std::uint32_t package) {
+        if (!serana || serana->GetFormID() != actor)
+            return 0;
+        if (package && !CanReceiveCombatProtection(nullptr, actor))
+            return 0;
+        return mod::serana_formation::ApplyStandDown(serana, package) ? 1u : 0u;
+    }
+
     class Completion final : public RE::BSScript::IStackCallbackFunctor {
     public:
         Completion(RequestID request, ActorID actor, Command command)
@@ -188,6 +196,7 @@ namespace {
         if (Reached(state, command))
             return StartResult::Completed;
         mod::serana_formation::Release(serana);
+        mod::serana_formation::ApplyStandDown(serana, 0);
         auto object = papyrus::Bound(mentalModel, Script);
         auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
         if (!vm || !object)
@@ -301,7 +310,8 @@ namespace {
                                   CanRecruitThroughDialogue,
                                   CanReceiveCombatProtection,
                                   CanTravelInFormation,
-                                  SetFormationPackage};
+                                  SetFormationPackage,
+                                  SetStandDownPackage};
             registration = host->registerAdapter(&adapter);
             if (!registration)
                 SKSE::log::warn("Serana adapter registration rejected");

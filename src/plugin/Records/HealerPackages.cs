@@ -56,6 +56,11 @@ internal static partial class FollowerPlugin
         {
             EditorID = "YLIWF_HealerCombatOverrides"
         };
+        foreach (var package in StandDownPackages)
+        {
+            overrides.Items.Add(new FormLink<ISkyrimMajorRecordGetter>(package));
+        }
+
         for (var slot = 0; slot < HealerSlots; ++slot)
         {
             foreach (var alternate in new[] { false, true })
@@ -142,6 +147,10 @@ internal static partial class FollowerPlugin
             for (var index = packages.Count - 1; index >= 0; --index)
             {
                 alias.PackageData.Insert(0, new FormLink<IPackageGetter>(packages[index]));
+            }
+            foreach (var package in StandDownPackages.Reverse())
+            {
+                alias.PackageData.Insert(0, new FormLink<IPackageGetter>(package));
             }
         }
     }

@@ -1,4 +1,5 @@
 #include "formations/Formation.h"
+#include "combat/CombatOrders.h"
 #include "formations/FormationRules.h"
 #include "formations/FormationPath.h"
 #include "formations/FormationGeometry.h"
@@ -223,7 +224,8 @@ namespace mod::formation {
             const auto slots = formation_rules::AssignSlots(preferences, static_cast<int>(count));
             for (std::size_t i = 0; i < count; ++i)
                 presets[slots[i]] = follow_distance::Read(roster[i]).preset;
-            const bool active = (settings::Formation != formation_geometry::Style::Off) && TravelAllowed(player);
+            const bool active = !combat_orders::Enabled && (settings::Formation != formation_geometry::Style::Off) &&
+                                TravelAllowed(player);
             if (!active || world != (player ? player->GetWorldspace() : nullptr)) {
                 path.Clear();
                 formation_ground::Clear();

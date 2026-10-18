@@ -289,6 +289,17 @@ namespace mod::adapters {
         return adapter.setFormationPackage(adapter.context, actor, package) == 1;
     }
 
+    bool SetStandDownPackage(yliwf::sdk::ActorID actor, std::uint32_t package) {
+        if (package &&
+            std::ranges::any_of(requests.items, [actor](const auto& request) { return request.actor == actor; }))
+            return false;
+        const auto follower = Inspect(actor, false);
+        if (!follower)
+            return false;
+        const auto& adapter = providers[follower->adapter - 1].api;
+        return yliwf::sdk::HasStandDown(adapter) && adapter.setStandDownPackage(adapter.context, actor, package) == 1;
+    }
+
     bool HasFollowers() {
         std::scoped_lock lock(settings::Mutex);
         if (!MainThread())

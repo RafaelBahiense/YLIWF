@@ -42,6 +42,7 @@ const auto registration = api->registerAdapter(&adapter);
 | `canReceiveCombatProtection` (optional) | Read-only: return 1 when the host may apply its crossfire-protection ability; respect quest restrictions |
 | `canTravelInFormation` (optional) | Read-only: return 1 only during ordinary following; reject quest movement, scenes and foreign overrides |
 | `setFormationPackage` (optional) | Apply the supplied host Travel package FormID synchronously; zero releases only the adapter's formation movement, even when its controller is blocked |
+| `setStandDownPackage` (optional) | Apply the host combat-ignore package only when permitted; zero releases only the adapter's stand-down override, including while quest-blocked |
 
 Callbacks run on the main thread: keep them quick, nonblocking and exception-free.
 Pointers and context must remain valid until process exit; no hot unloading.
@@ -51,16 +52,19 @@ Invalid versions, tables, IDs, states and capabilities are rejected.
 
 The mandatory table prefixes are `BaseAPISize` and `BaseAdapterSize`.
 Optional callbacks are `stateChanged`, `setFollowDistance`, `canRecruitThroughDialogue`
-and `canReceiveCombatProtection`, plus the paired travel callbacks.
+and `canReceiveCombatProtection`, plus the paired travel callbacks and `setStandDownPackage`.
 Use `CanNotifyState`, `HasFollowDistance`, `HasRecruitmentEligibility` and `HasCombatProtection` before
 accessing optional callbacks.
 Use `HasTravelFormation` before accessing either travel callback. Older v1 tables
 remain valid and retain ordinary movement.
+Use `HasStandDown` before accessing the stand-down callback; unsupported adapters
+remain under their own controller and are reported as unavailable for that order.
 
 Call `stateChanged(registration)` after external state changes. It is thread-safe;
 the host coalesces notifications and checks state/counts on the main thread.
-Notifications do not complete pending commands. Roster discovery runs on
-notifications and visible captures, without continuous polling.
+Notifications do not complete pending commands. The host also observes adapters
+once per unpaused, unfrozen second to catch controller changes without events.
+This runs independently of menu visibility and does not dispatch Papyrus calls.
 
 For `Pending`, call `complete(registration, request, success, reason)` exactly
 once when finished. It is thread-safe and copies the reason. The host verifies
@@ -78,7 +82,7 @@ The host stores choices in a hidden marker faction, without adding packages or
 aliases. Global selection resets the current roster; individual selection changes
 one actor. Unsupported adapters retain their own spacing.
 
-Choices apply on load, notifications and visible captures when Follow is allowed.
+Choices apply on load and observed controller changes when Follow is allowed.
 Blocked followers retain a global choice for later; their individual controls
 are disabled. Callbacks must recheck eligibility before modifying state.
 
@@ -129,7 +133,7 @@ Recruitment eligibility requires dismissal, `CanFollow`, no `LockedIn` or
 
 VM completion schedules a main-thread state check before acknowledgement.
 Quest locks and recruitment are never bypassed.
-Location and Dawnguard quest events notify the host; visible refreshes cover
+Location and Dawnguard quest events notify the host; periodic observation covers
 other changes. Events are hints, not proof Papyrus has finished.
 
 Distance sets exactly one of `FollowDistanceClose`, `FollowDistanceMedium`
@@ -147,6 +151,8 @@ following or sandboxing. Native temporary Travel packages leave Dawnguard's
 records, scripts and aliases unchanged. Quest packages, foreign interrupts,
 scenes, waiting and combat retain priority. Wait and Dismiss release formation
 movement before calling her controller.
+Stand-down uses the same ordinary-package boundary, permits existing combat, and
+respects Dawnguard locks and scenes. Its override is released before controller commands.
 
 ## Source layout and build
 

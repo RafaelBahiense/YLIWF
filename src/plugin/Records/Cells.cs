@@ -135,6 +135,7 @@ internal static partial class FollowerPlugin
         homeMarkerCell.Persistent.Add(homeMarker07);
         AddFormationTargets(homeMarkerCell);
         AddHealerTargets(homeMarkerCell);
+        AddStandDownTargets(homeMarkerCell);
         homeMarkerCell.MajorFlags = (Cell.MajorFlag)0x40000;
         interiorCellSubBlock.Cells.Add(homeMarkerCell);
         interiorCellBlock.SubBlocks.Add(interiorCellSubBlock);

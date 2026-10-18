@@ -1,4 +1,5 @@
 #include "combat/Healer.h"
+#include "combat/CombatOrders.h"
 #include "combat/HealingRules.h"
 #include "combat/HealingSpells.h"
 #include "combat/HealingGeometry.h"
@@ -506,8 +507,16 @@ namespace mod::healer {
         observation.moving = false;
     }
 
+    void Suspend() {
+        for (auto& [id, observation] : observations)
+            if (auto actor = observation.actor.get())
+                CancelCast(actor.get(), observation);
+        Invalidate();
+    }
 
     bool NeedsObservation() {
+        if (combat_orders::Enabled)
+            return false;
         if (!controller::storage::Available())
             return false;
         // Keep ticking until old role assignments have released their packages.
@@ -520,6 +529,8 @@ namespace mod::healer {
     }
 
     void Tick(float elapsed) {
+        if (combat_orders::Enabled)
+            return;
         if (!controller::storage::Available() || !std::isfinite(elapsed) || elapsed <= 0)
             return;
         for (auto& [actor, observation] : observations) {

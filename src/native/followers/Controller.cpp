@@ -1,6 +1,7 @@
 #include "common/RecordNames.h"
 #include "common/PapyrusNames.h"
 #include "followers/Controller.h"
+#include "combat/CombatOrders.h"
 #include "followers/ControllerExecutor.h"
 #include "followers/ExecutorRules.h"
 
@@ -667,6 +668,8 @@ namespace mod::controller {
     }
 
     void CombatChanged(RE::Actor* actor, RE::Actor* target) {
+        if (combat_orders::Enabled)
+            executor::Wake();
         if (target != RE::PlayerCharacter::GetSingleton())
             return;
         ForActorAlias(actor, [actor](std::int32_t id) { Enqueue(Operation::Dismiss, actor, id, 0, 0, 0); });

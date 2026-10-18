@@ -77,9 +77,18 @@ namespace yliwf::sdk {
         // Zero releases only this adapter's formation movement, even when blocked.
         // Never replace another controller's interrupt package or transfer ownership.
         std::uint32_t (*setFormationPackage)(void*, ActorID, std::uint32_t package) = nullptr;
+        // Optional v1 extension. Apply a host-owned combat-ignore package.
+        // Zero releases only the adapter's stand-down override. Quest restrictions
+        // retain priority; return 0 when taking control is not permitted.
+        std::uint32_t (*setStandDownPackage)(void*, ActorID, std::uint32_t package) = nullptr;
     };
 
     inline constexpr std::uint32_t BaseAdapterSize = offsetof(Adapter, setFollowDistance);
+
+    inline bool HasStandDown(const Adapter& adapter) {
+        return adapter.size >= offsetof(Adapter, setStandDownPackage) + sizeof(adapter.setStandDownPackage) &&
+               adapter.setStandDownPackage;
+    }
 
     inline bool HasTravelFormation(const Adapter& adapter) {
         return adapter.size >= offsetof(Adapter, setFormationPackage) + sizeof(adapter.setFormationPackage) &&
@@ -126,7 +135,7 @@ namespace yliwf::sdk {
     static_assert(sizeof(void*) == 8 && sizeof(FollowerState) == 204 && BaseAdapterSize == 56 &&
                       offsetof(Adapter, canRecruitThroughDialogue) == 64 &&
                       offsetof(Adapter, canReceiveCombatProtection) == 72 &&
-                      offsetof(Adapter, canTravelInFormation) == 80 && sizeof(Adapter) == 96 && BaseAPISize == 24 &&
-                      sizeof(API) == 32,
+                      offsetof(Adapter, canTravelInFormation) == 80 && offsetof(Adapter, setStandDownPackage) == 96 &&
+                      sizeof(Adapter) == 104 && BaseAPISize == 24 && sizeof(API) == 32,
                   "Follower adapter API v1 requires the standard x64 structure layout");
 }

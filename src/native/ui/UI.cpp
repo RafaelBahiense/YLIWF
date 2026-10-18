@@ -1,4 +1,5 @@
 #include "ui/UI.h"
+#include "combat/CombatOrders.h"
 
 #include "settings/Settings.h"
 #include "diagnostics/Debug.h"
@@ -482,6 +483,20 @@ void __stdcall mod::ui::RenderFollowers() {
         return;
     }
     RenderPartyCommands(state);
+    bool standDown = mod::combat_orders::Enabled.load();
+    const bool canChangeCombatOrder = mod::combat_orders::Ready.load() &&
+                                      (standDown || (state.structureReady && state.scriptReady && state.bindingsReady));
+    BeginDisabled(!canChangeCombatOrder);
+    if (ImGuiMCP::Checkbox("Stand down (everyone)", &standDown))
+        mod::combat_orders::Set(standDown);
+    EndDisabled(!canChangeCombatOrder);
+    if (standDown) {
+        ImGuiMCP::Text("Not fighting: %zu | Unavailable: %zu", mod::combat_orders::Affected.load(),
+                       mod::combat_orders::Unavailable.load());
+        ImGuiMCP::TextWrapped(
+            "Followers keep following and avoid nearby enemies. Healing is paused. Uncheck for normal behavior. Resets "
+            "on save load.");
+    }
     if (!state.structureReady || !state.scriptReady || !state.bindingsReady)
         ImGuiMCP::TextWrapped(
             "Follower controls are unavailable. Enable debug options on the Debug page to check the installation.");

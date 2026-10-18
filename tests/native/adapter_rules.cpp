@@ -21,7 +21,7 @@ namespace {
     static_assert(sizeof(void*) == 8 && sizeof(FollowerState) == 204 && BaseAdapterSize == 56 &&
                   offsetof(Adapter, canRecruitThroughDialogue) == 64 &&
                   offsetof(Adapter, canReceiveCombatProtection) == 72 &&
-                  offsetof(Adapter, canTravelInFormation) == 80 && sizeof(Adapter) == 96 && BaseAPISize == 24 &&
+                  offsetof(Adapter, canTravelInFormation) == 80 && sizeof(Adapter) == 104 && BaseAPISize == 24 &&
                   sizeof(API) == 32);
 
     Adapter ValidAdapter() {
@@ -37,6 +37,17 @@ namespace {
         adapter.canTravelInFormation = [](void*, ActorID) { return 1u; };
         adapter.setFormationPackage = [](void*, ActorID, std::uint32_t) { return 1u; };
         return adapter;
+    }
+
+    TEST_CASE("Stand-down is optional and never reads beyond an older adapter table") {
+        auto adapter = ValidAdapter();
+        adapter.setStandDownPackage = [](void*, ActorID, std::uint32_t) { return 1u; };
+        CHECK(HasStandDown(adapter));
+        adapter.size = 96;
+        CHECK_FALSE(HasStandDown(adapter));
+        adapter.size = sizeof(Adapter);
+        adapter.setStandDownPackage = nullptr;
+        CHECK_FALSE(HasStandDown(adapter));
     }
 
     TEST_CASE("Host Notification Compatibility") {

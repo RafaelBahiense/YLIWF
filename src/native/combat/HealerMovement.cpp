@@ -2,6 +2,7 @@
 #include "combat/HealingRules.h"
 #include "combat/HealerMovementRules.h"
 #include "combat/HealingGeometry.h"
+#include "combat/CombatOrderRules.h"
 
 #include <numbers>
 #include <chrono>
@@ -71,10 +72,11 @@ namespace mod::healer_movement {
         }
     }
 
-    std::vector<Point> Threats(RE::Actor* healer) {
+    std::vector<Point> Threats(RE::Actor* healer, bool includePlayerEnemies) {
         if (!healer)
             return {};
         std::vector<RE::ActorHandle> handles;
+        std::vector<RE::ActorHandle> playerTargets;
         auto* combat = healer ? healer->GetActorRuntimeData().combatController : nullptr;
         auto* player = RE::PlayerCharacter::GetSingleton();
         auto* playerCombat = player ? player->GetActorRuntimeData().combatController : nullptr;
@@ -83,21 +85,57 @@ namespace mod::healer_movement {
             if (!group)
                 continue;
             RE::BSReadLockGuard lock(group->lock);
-            for (const auto& target : group->targets)
+            for (const auto& target : group->targets) {
                 if (std::ranges::find(handles, target.targetHandle) == handles.end())
                     handles.push_back(target.targetHandle);
+                if (includePlayerEnemies && controller == playerCombat)
+                    playerTargets.push_back(target.targetHandle);
+            }
         }
+        if (includePlayerEnemies)
+            if (auto* processes = RE::ProcessLists::GetSingleton())
+                for (const auto& handle : processes->highActorHandles)
+                    if (std::ranges::find(handles, handle) == handles.end())
+                        handles.push_back(handle);
         std::vector<Point> result;
         for (const auto& handle : handles) {
             auto enemy = handle.get();
             if (enemy && !enemy->IsDead() && !enemy->IsDisabled() && enemy->Is3DLoaded() &&
                 ((healer->GetWorldspace() && healer->GetWorldspace() == enemy->GetWorldspace()) ||
                  healer->GetParentCell() == enemy->GetParentCell()) &&
-                (healer->IsHostileToActor(enemy.get()) || enemy->IsHostileToActor(healer)) &&
+                (healer->IsHostileToActor(enemy.get()) || enemy->IsHostileToActor(healer) ||
+                 (includePlayerEnemies && player &&
+                  (player->IsHostileToActor(enemy.get()) || enemy->IsHostileToActor(player) ||
+                   (!enemy->IsPlayerTeammate() && std::ranges::find(playerTargets, handle) != playerTargets.end())))) &&
                 enemy->GetPosition().GetDistance(healer->GetPosition()) <= healing_rules::SearchRange)
                 result.push_back(Position(enemy.get()));
         }
         return result;
+    }
+
+    std::optional<Point> PassiveDestination(RE::Actor* actor, RE::Actor* player, float followRadius,
+                                            std::span<const Point> threats) {
+        if (!actor || !player || threats.empty())
+            return {};
+        Refresh(actor);
+        const auto origin = Position(actor), center = Position(player);
+        std::optional<Point> selected;
+        float best = std::numeric_limits<float>::max();
+        for (const float radius : {followRadius, std::max(followRadius, 640.0f)})
+            for (int direction = 0; direction < 12; ++direction) {
+                const float angle = direction * std::numbers::pi_v<float> / 6;
+                const Point desired{center.x + std::cos(angle) * radius, center.y + std::sin(angle) * radius, center.z};
+                const auto candidate = formation_ground::Project(desired, triangles);
+                if (!candidate)
+                    continue;
+                const auto score =
+                    combat_order_rules::AvoidanceScore(origin, center, *candidate, threats, followRadius);
+                if (score && *score < best) {
+                    best = *score;
+                    selected = candidate;
+                }
+            }
+        return selected;
     }
 
     float ThreatDistance(Point position, std::span<const Point> threats) {

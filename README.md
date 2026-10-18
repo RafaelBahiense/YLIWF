@@ -26,6 +26,8 @@ See [architecture](docs/architecture.md) for the design.
 - Individual Follow, Wait and Dismiss through dialogue or the SKSE menu, plus
   Follow All, Wait All and Dismiss All in the menu.
 - Waiting core followers dismiss themselves after 72 in-game hours.
+- Party-wide Stand down: keep following without fighting or healing, avoiding nearby enemies; toggle off
+  to restore normal behavior. Quest restrictions retain priority.
 - Primary-slot selection without dismissal, for integrations such as Blades recruitment.
 - Follower homes and idle sandboxing.
 - Close, Normal or Far following distance, globally or per follower.

@@ -8,6 +8,13 @@ Open **SKSE Menu Framework → You Lead, I Will Follow**.
 **Debug options** adds IDs, empty slots, repairs and inspection/recruitment.
 **Log mod flow** is independent; both settings default to off.
 
+**Stand down (everyone)** keeps followers following at their selected distance and suspends
+combat and party healing. Nearby hostiles trigger movement toward safer navmesh positions;
+followers may temporarily widen their distance to avoid the fight. Explicit Wait orders
+stay in effect. Uncheck it for normal behavior. It resets on save load and does not change
+recruitment or waiting state. The count shows affected and unavailable actors;
+quest-controlled followers require add-on support and permission from their controller.
+
 Global Close/Normal/Far or **Apply to all followers** replaces the current
 party's distance choices. Row controls change one actor. Choices persist in
 game saves and through primary promotion; Settings **Save** retains the default

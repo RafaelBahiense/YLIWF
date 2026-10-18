@@ -21,11 +21,11 @@ internal static partial class FollowerPlugin
         }
     }
 
-    private static Package CreateFormationTravelPackage(int slot, bool alternate)
+    private static Package CreateFormationTravelPackage(int slot, bool alternate, uint? id = null)
     {
         // Travel to the marker, then hold there. A bare Travel procedure's
         // SuccessCompletesPackage flag ends temporary adapter movement on arrival.
-        var package = new Package(FormationPackageForm(slot, alternate), SkyrimRelease.SkyrimSE)
+        var package = new Package(id.HasValue ? OwnForm(id.Value) : FormationPackageForm(slot, alternate), SkyrimRelease.SkyrimSE)
         {
             EditorID = "YLIWF_FormationTravel" + slot + (alternate ? "Alternate" : ""),
             Type = Package.Types.Package,

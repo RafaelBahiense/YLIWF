@@ -11,6 +11,7 @@ internal static partial class FollowerPlugin
     private static void AddPackages(SkyrimMod mod)
     {
         AddFormationPackages(mod);
+        AddCombatOrders(mod);
         AddHealerPackages(mod);
         mod.Packages.Add(CreateFollowDistancePackage(0x000990, "Close", 0, 128, 192));
         mod.Packages.Add(CreateFollowDistancePackage(0x000991, "Normal", 1, 256, 384));
