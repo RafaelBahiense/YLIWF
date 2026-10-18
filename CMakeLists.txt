@@ -77,12 +77,14 @@ configure_file(cmake/plugin_info.cpp.in plugin_info.cpp @ONLY)
 # Keep discovery scoped to the core; add-ons and tests own separate targets.
 file(GLOB_RECURSE MOD_SOURCES CONFIGURE_DEPENDS
   "${PROJECT_SOURCE_DIR}/src/native/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/native/*.h" "${PROJECT_SOURCE_DIR}/src/native/*.hpp"
   "${PROJECT_SOURCE_DIR}/include/*.h" "${PROJECT_SOURCE_DIR}/include/*.hpp")
 add_library(mod SHARED ${MOD_SOURCES}
   "${CMAKE_CURRENT_BINARY_DIR}/version.rc" "${CMAKE_CURRENT_BINARY_DIR}/plugin_info.cpp")
 include(cmake/NativePlugins.cmake)
 configure_native_plugin(mod "${MOD_BINARY_NAME}")
-target_precompile_headers(mod PRIVATE include/PCH.h)
+target_include_directories(mod PRIVATE "${PROJECT_SOURCE_DIR}/src/native")
+target_precompile_headers(mod PRIVATE src/native/PCH.h)
 add_custom_target(native_plugins DEPENDS mod)
 add_custom_target(native_analysis)
 add_native_analysis(mod)

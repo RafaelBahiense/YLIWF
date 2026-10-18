@@ -118,8 +118,8 @@ public sealed class PackagingTests : TestWorkspace
     }
 
     [Theory]
-    [InlineData("src/native/DeadlineScheduler.cpp")]
-    [InlineData("include/FormationRules.h")]
+    [InlineData("src/native/runtime/DeadlineScheduler.cpp")]
+    [InlineData("src/native/formations/FormationRules.h")]
     [InlineData("src/papyrus/core/YLIWF_HomeTopicScript.psc")]
     public void SourceArchiveRejectsRemovedInputs(string name)
     {

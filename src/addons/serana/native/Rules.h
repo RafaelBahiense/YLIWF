@@ -1,5 +1,5 @@
 #pragma once
-#include "sdk/FollowerAdapter.h"
+#include "FollowerAdapter.h"
 #include <cstdio>
 #include <cstring>
 #include <array>

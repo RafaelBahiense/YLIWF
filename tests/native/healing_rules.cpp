@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
 
-#include "HealingRules.h"
-#include "HealerMovementRules.h"
+#include "combat/HealingRules.h"
+#include "combat/HealerMovementRules.h"
 #include <array>
 #include <limits>
 

@@ -8,7 +8,8 @@ reproducible source builds.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/native/`, `include/` | Follower behavior and Skyrim integration |
+| `src/native/` | Native implementation and private headers |
+| `include/` | Public add-on API headers |
 | `src/papyrus/` | Vanilla compatibility and engine-call adapters |
 | `src/plugin/` | Mutagen C# definitions generating the ESP |
 | `src/addons/` | Optional follower adapters |
@@ -16,6 +17,18 @@ reproducible source builds.
 | `src/shared/`, `mod.json` | Shared identity and filenames |
 | `tools/`, `cmake/` | Setup, builds, validation and packaging |
 | `tests/` | Native and tooling checks |
+
+Native sources and headers are grouped by subsystem: `followers`, `combat`,
+`formations`, `adapters`, `diagnostics`, `ui`, `settings` and `runtime`.
+Private headers sit beside their implementations. Shared helpers live in
+`src/native/common`; the PCH lives in `src/native/PCH.h`. Only public add-on
+headers belong in `include/`.
+
+## Gameplay rules and engine access
+
+Rule headers use ordinary C++ values and do not depend on Skyrim, SKSE or the PCH.
+Engine code reads a snapshot, passes it to the rules, then applies the result on
+the game thread. Tests supply snapshots directly.
 
 ESP records are generated from C# so aliases, packages, dialogue and bindings can
 be reviewed and versioned with their implementations. Creation Kit and xEdit

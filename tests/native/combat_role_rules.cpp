@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
 
-#include "CombatRoleRules.h"
+#include "combat/CombatRoleRules.h"
 
 namespace {
     using namespace mod::combat_roles;

@@ -78,7 +78,7 @@ public sealed partial class ProtocolTests : TestWorkspace
     [Fact]
     public void SavedEnumNumbers()
     {
-        var rules = ReadSource(root, "include/ControllerRules.h");
+        var rules = ReadSource(root, "src/native/followers/ControllerRules.h");
         CheckEnum(rules, "Operation", ExpectedOperations, first: 0);
         CheckEnum(rules, "Effect", ExpectedEffects, first: 1);
     }
@@ -141,7 +141,7 @@ public sealed partial class ProtocolTests : TestWorkspace
         callers.Add("DebugInt"); // Retain the typed integer diagnostic helper.
         Assert.True(declared.SetEquals(callers), "unused native export added without a caller");
 
-        var registrations = Directory.EnumerateFiles(Path.Combine(root, "src/native"), "*.cpp")
+        var registrations = Directory.EnumerateFiles(Path.Combine(root, "src/native"), "*.cpp", SearchOption.AllDirectories)
             .SelectMany(path => NativeRegistrationRegex().Matches(File.ReadAllText(path)))
             .Select(match => match.Groups[1].Value).ToArray();
         Assert.True(registrations.Length == declared.Count && declared.SetEquals(registrations),
@@ -151,9 +151,9 @@ public sealed partial class ProtocolTests : TestWorkspace
     [Fact]
     public void NativeExecution()
     {
-        var rules = ReadSource(root, "include/ControllerRules.h");
-        var executor = ReadSource(root, "src/native/ControllerExecutor.cpp");
-        var controller = ReadSource(root, "src/native/Controller.cpp");
+        var rules = ReadSource(root, "src/native/followers/ControllerRules.h");
+        var executor = ReadSource(root, "src/native/followers/ControllerExecutor.cpp");
+        var controller = ReadSource(root, "src/native/followers/Controller.cpp");
         foreach (var effect in ExpectedEffects)
         {
             Assert.True((executor + controller).Contains("case Effect::" + effect + ":", StringComparison.Ordinal),
@@ -166,7 +166,7 @@ public sealed partial class ProtocolTests : TestWorkspace
     [Fact]
     public void EngineAdapters()
     {
-        var executor = ReadSource(root, "src/native/ControllerExecutor.cpp");
+        var executor = ReadSource(root, "src/native/followers/ControllerExecutor.cpp");
         var bridge = ReadSource(root, "src/papyrus/core/YLIWF_Engine.psc");
         var formation = FunctionBody(bridge, "Formation");
         Assert.True(formation.Contains("SetNativeFormationCurrent", StringComparison.Ordinal) &&
@@ -213,8 +213,8 @@ public sealed partial class ProtocolTests : TestWorkspace
     [Fact]
     public void DebugCommands()
     {
-        var executor = ReadSource(root, "src/native/ControllerExecutor.cpp");
-        var ui = ReadSource(root, "src/native/Debug.cpp");
+        var executor = ReadSource(root, "src/native/followers/ControllerExecutor.cpp");
+        var ui = ReadSource(root, "src/native/diagnostics/Debug.cpp");
         Assert.True(ui.Contains("controller::SubmitDebug(", StringComparison.Ordinal) &&
             !ui.Contains("DispatchMethodCall(object, \"DebugCommand\"", StringComparison.Ordinal),
             "UI still depends on a Papyrus controller method");

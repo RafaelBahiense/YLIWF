@@ -4,6 +4,7 @@
             "name": "Release x64",
             "includePath": [
                 "${workspaceFolder}/include",
+                "${workspaceFolder}/src/native",
                 "${workspaceFolder}/build/native/release/generated"
             ],
             "defines": [
@@ -22,6 +23,7 @@
             "name": "Debug x64",
             "includePath": [
                 "${workspaceFolder}/include",
+                "${workspaceFolder}/src/native",
                 "${workspaceFolder}/build/native/debug/generated"
             ],
             "defines": [

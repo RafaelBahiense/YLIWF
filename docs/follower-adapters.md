@@ -1,7 +1,7 @@
 # Native follower add-ons
 
 An add-on is a separate SKSE DLL implementing
-[FollowerAdapter.h](../include/sdk/FollowerAdapter.h). It delegates commands to
+[FollowerAdapter.h](../include/FollowerAdapter.h). It delegates commands to
 a follower's existing controller and reports completion.
 See the [available add-ons](../README.md#add-ons).
 

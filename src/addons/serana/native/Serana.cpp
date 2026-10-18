@@ -5,7 +5,7 @@
 #include "AddonInfo.h"
 #include "Rules.h"
 #include "TravelFormation.h"
-#include "sdk/PapyrusController.h"
+#include "PapyrusController.h"
 #include <array>
 #include <cstdio>
 

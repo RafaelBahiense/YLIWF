@@ -1,4 +1,4 @@
-#include "RecordNames.h"
+#include "common/RecordNames.h"
 #include <Windows.h>
 
 #include <cstdint>
@@ -6,17 +6,17 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "Settings.h"
-#include "UI.h"
-#include "Debug.h"
-#include "Controller.h"
-#include "ControllerStorage.h"
-#include "Adapters.h"
-#include "FollowDistance.h"
-#include "CombatRoles.h"
-#include "Formation.h"
-#include "Healer.h"
-#include "PartyRules.h"
+#include "settings/Settings.h"
+#include "ui/UI.h"
+#include "diagnostics/Debug.h"
+#include "followers/Controller.h"
+#include "followers/ControllerStorage.h"
+#include "adapters/Adapters.h"
+#include "followers/FollowDistance.h"
+#include "combat/CombatRoles.h"
+#include "formations/Formation.h"
+#include "combat/Healer.h"
+#include "followers/PartyRules.h"
 
 namespace {
     RE::TESGlobal* g_playerFollowerCount = nullptr;

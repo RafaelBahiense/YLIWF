@@ -193,8 +193,8 @@ public sealed partial class PluginTests : TestWorkspace
     public void NativeNames()
     {
         // Both languages consume fixed engine names. Detect drift across that boundary.
-        CheckNameConstants(root, "include/PapyrusNames.h", typeof(PapyrusNames.Properties), propertiesOnly: true);
-        CheckNameConstants(root, "include/RecordNames.h", typeof(RecordNames));
+        CheckNameConstants(root, "src/native/common/PapyrusNames.h", typeof(PapyrusNames.Properties), propertiesOnly: true);
+        CheckNameConstants(root, "src/native/common/RecordNames.h", typeof(RecordNames));
     }
 
     private static void CheckNameConstants(string root, string header, Type definitions, bool propertiesOnly = false)

@@ -1,14 +1,14 @@
 #include <doctest/doctest.h>
 
-#include "DebugRules.h"
-#include "Debug.h"
-#include "Refresh.h"
-#include "PartyRules.h"
-#include "SettingsRules.h"
+#include "diagnostics/DebugRules.h"
+#include "diagnostics/Debug.h"
+#include "ui/Refresh.h"
+#include "followers/PartyRules.h"
+#include "settings/SettingsRules.h"
 #include "SettingsDefaults.h"
-#include "SettingsFile.h"
-#include "FollowerView.h"
-#include "FollowDistanceRules.h"
+#include "settings/SettingsFile.h"
+#include "followers/FollowerView.h"
+#include "followers/FollowDistanceRules.h"
 #include "TemporaryDirectory.h"
 
 #include <limits>

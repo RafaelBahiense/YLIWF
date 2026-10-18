@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
 
-#include "AdapterRules.h"
+#include "adapters/AdapterRules.h"
 
 namespace {
     TEST_CASE("Adapter observations do not require a visible menu") {

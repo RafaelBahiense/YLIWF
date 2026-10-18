@@ -80,10 +80,10 @@ public sealed class BuildReceiptTests : TestWorkspace
         BuildReceipt.Write(checkout, BuildComponent.Native, inputs, [output], receipt);
         BuildReceipt.Validate(checkout, BuildComponent.Native, [output], receipt);
 
-        var source = Path.Combine(checkout, "src/native/Controller.cpp");
+        var source = Path.Combine(checkout, "src/native/followers/Controller.cpp");
         File.AppendAllText(source, "\n// changed native input\n");
         Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.Native, [output], receipt));
-        File.Copy(Path.Combine(root, "src/native/Controller.cpp"), source, true);
+        File.Copy(Path.Combine(root, "src/native/followers/Controller.cpp"), source, true);
 
         var addon = Path.Combine(checkout, "src/addons/new/addon.json");
         Directory.CreateDirectory(Path.GetDirectoryName(addon)!);

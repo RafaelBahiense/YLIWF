@@ -1,9 +1,9 @@
 #include <doctest/doctest.h>
 
-#include "ControllerRules.h"
-#include "CommandRules.h"
-#include "ExecutorRules.h"
-#include "StateCodec.h"
+#include "followers/ControllerRules.h"
+#include "followers/CommandRules.h"
+#include "followers/ExecutorRules.h"
+#include "common/StateCodec.h"
 
 #include <array>
 #include <unordered_map>

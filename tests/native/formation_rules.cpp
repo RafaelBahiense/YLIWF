@@ -1,11 +1,11 @@
 #include <doctest/doctest.h>
 
-#include "FormationRules.h"
-#include "FormationPath.h"
-#include "FormationGeometry.h"
-#include "FormationProgress.h"
-#include "FormationGroundRules.h"
-#include "FormationLocationRules.h"
+#include "formations/FormationRules.h"
+#include "formations/FormationPath.h"
+#include "formations/FormationGeometry.h"
+#include "formations/FormationProgress.h"
+#include "formations/FormationGroundRules.h"
+#include "formations/FormationLocationRules.h"
 
 namespace {
     using namespace mod::formation_rules;
