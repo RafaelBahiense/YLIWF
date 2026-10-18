@@ -25,6 +25,8 @@ See [architecture](docs/architecture.md) for the design.
   animal companion; fixed, perk-based or Speech-based humanoid limits.
 - Individual Follow, Wait and Dismiss through dialogue or the SKSE menu, plus
   Follow All, Wait All and Dismiss All in the menu.
+- Configurable keyboard shortcuts, including Shift/Ctrl/Alt combinations, for
+  party Follow/Wait, Stand down, following distance and travel formation.
 - Waiting core followers dismiss themselves after 72 in-game hours.
 - Party-wide Stand down: keep following without fighting or healing, avoiding nearby enemies; toggle off
   to restore normal behavior. Quest restrictions retain priority.
@@ -72,6 +74,8 @@ release versions; their required adapter API version defines compatibility.
 ## Configuration
 
 Use Settings or edit `Data/SKSE/Plugins/YouLeadIWillFollow.ini`.
+Assign shortcuts in **Hotkeys** and save them. All start unbound and work only
+during gameplay. Dismiss All remains menu-only.
 The mod creates a missing INI; releases omit it to preserve your settings.
 Invalid values fall back to [defaults](assets/settings.ini).
 Click **Save** to persist menu settings. In MO2, keep the generated INI in a

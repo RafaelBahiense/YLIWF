@@ -6,6 +6,7 @@
 #include <mutex>
 #include "ModInfo.h"
 #include "formations/FormationStyle.h"
+#include "input/HotkeyRules.h"
 
 namespace mod::settings {
     inline std::recursive_mutex Mutex;
@@ -30,6 +31,7 @@ namespace mod::settings {
     inline bool FollowerHomes = false;
     inline std::int32_t FollowDistance = 1;
     inline formation_geometry::Style Formation = formation_geometry::Style::Off;
+    inline hotkey_rules::Bindings Hotkeys{};
     inline char PerkListBuffer[2048]{};
     inline bool Loaded = false;
     inline std::string SaveStatus;

@@ -13,6 +13,7 @@ namespace mod::settings {
         namespace ini {
             constexpr char General[] = "General";
             constexpr char Debug[] = "Debug";
+            constexpr char Hotkeys[] = "Hotkeys";
             constexpr char MaxFollowers[] = "iMaxFollowers";
             constexpr char LimitMode[] = "bFollowerOptionSelector";
             constexpr char SpeechLevelsPerSlot[] = "iSpeechLevelsPerSlot";
@@ -160,6 +161,15 @@ namespace mod::settings {
         FollowerHomes = ReadBoolean(ini::General, ini::Homes);
         FollowDistance = ReadInteger(ini::General, ini::FollowDistance, 0, 2);
         Formation = static_cast<formation_geometry::Style>(ReadInteger(ini::General, ini::Formation, 0, 3));
+        Hotkeys = {};
+        for (std::size_t i = 0; i < Hotkeys.size(); ++i) {
+            const auto binding = static_cast<std::uint32_t>(
+                ReadInteger(ini::Hotkeys, hotkey_rules::Definitions[i].iniKey, 0, hotkey_rules::MaximumBinding));
+            if (hotkey_rules::Valid(binding) && !hotkey_rules::Conflict(Hotkeys, binding))
+                Hotkeys[i] = binding;
+            else
+                logger::warn("Invalid or duplicate hotkey {}; leaving it unbound", hotkey_rules::Definitions[i].iniKey);
+        }
         mod::debug::OptionsEnabled = ReadBoolean(ini::Debug, ini::DebugEnabled);
         mod::debug::SetLogging(ReadBoolean(ini::Debug, ini::FlowLogging));
         mod::debug::Trace("Settings.Load", nullptr, force ? "forced" : "initial");
@@ -191,6 +201,8 @@ namespace mod::settings {
         writeInt(ini::Homes, FollowerHomes ? 1 : 0);
         writeInt(ini::FollowDistance, FollowDistance);
         writeInt(ini::Formation, static_cast<std::int32_t>(Formation));
+        for (std::size_t i = 0; i < Hotkeys.size(); ++i)
+            write(ini::Hotkeys, hotkey_rules::Definitions[i].iniKey, std::to_string(Hotkeys[i]).c_str());
         ParsePerkListIntoSpecs(PerkListBuffer);
         BuildPerkListBuffer();
         write(ini::General, ini::Perks, PerkListBuffer);

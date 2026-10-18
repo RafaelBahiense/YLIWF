@@ -17,6 +17,7 @@
 #include "formations/Formation.h"
 #include "combat/Healer.h"
 #include "combat/CombatOrders.h"
+#include "input/Hotkeys.h"
 #include "followers/PartyRules.h"
 
 namespace {
@@ -531,6 +532,7 @@ namespace {
 
     void Install() {
         mod::debug::Trace("Native.InstallEventSinks");
+        mod::hotkeys::Install();
         if (auto* ui = RE::UI::GetSingleton())
             ui->AddEventSink<RE::MenuOpenCloseEvent>(MenuSink::GetSingleton());
         auto* events = RE::ScriptEventSourceHolder::GetSingleton();
@@ -591,6 +593,7 @@ namespace {
         if (msg->type == SKSE::MessagingInterface::kDataLoaded) {
             InitializeGameData();
         } else if (msg->type == SKSE::MessagingInterface::kPreLoadGame) {
+            mod::hotkeys::Reset();
             InvalidateGameState();
         } else if (msg->type == SKSE::MessagingInterface::kPostLoadGame ||
                    msg->type == SKSE::MessagingInterface::kNewGame) {
@@ -602,6 +605,7 @@ namespace {
             if (msg->type == SKSE::MessagingInterface::kNewGame)
                 InvalidateGameState();
             ApplyLoadedGameState();
+            mod::hotkeys::Reset();
         }
     }
 }

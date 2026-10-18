@@ -989,10 +989,9 @@ namespace mod::debug {
         const auto label = PartyActionName(action);
         {
             std::scoped_lock lock(snapshotMutex);
-            if (snapshot.generation != generation || snapshot.busy ||
-                !mod::debug_rules::CanCommand(snapshot.structureReady, snapshot.scriptReady, snapshot.bindingsReady,
-                                              static_cast<std::int32_t>(action), OptionsEnabled.load()))
+            if (snapshot.busy)
                 return;
+            snapshot.generation = generation;
             snapshot.busy = true;
             snapshot.commandState = CommandState::Pending;
             snapshot.status = snapshot.commandStatus =
@@ -1003,6 +1002,13 @@ namespace mod::debug {
                 return;
             const auto ticket = ticketSequence.fetch_add(1) + 1;
             activeTicket = ticket;
+            const auto state = Capture();
+            if (!state.ready ||
+                !mod::debug_rules::CanCommand(state.structureReady, state.scriptReady, state.bindingsReady,
+                                              static_cast<std::int32_t>(action), OptionsEnabled.load())) {
+                CompleteCommand(ticket, false, "Follower controls are unavailable; check installation diagnostics.");
+                return;
+            }
             struct Group {
                 std::uint32_t remaining = 2;
                 std::size_t targets = 0;

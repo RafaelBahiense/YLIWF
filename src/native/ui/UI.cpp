@@ -1,4 +1,6 @@
 #include "ui/UI.h"
+#include "ui/HotkeysPage.h"
+#include "input/Hotkeys.h"
 #include "combat/CombatOrders.h"
 
 #include "settings/Settings.h"
@@ -51,7 +53,7 @@ static bool StyledRadio(const char* label, const char* desc, bool selected) {
 }
 
 namespace {
-    enum class Page { Followers, Settings, Debug };
+    enum class Page { Followers, Settings, Hotkeys, Debug };
     Page lastPage = Page::Settings;
     int lastPageFrame = -1;
     std::atomic_bool snapshotPageVisible{false};
@@ -62,6 +64,8 @@ namespace {
     // The framework calls HUD observers before section pages every frame. This
     // observer only tracks visibility; it never reads Skyrim or queues a refresh.
     void __stdcall ObserveVisibility() {
+        if (lastPage != Page::Hotkeys || !mod::ui::IsMenuOpen() || lastPageFrame != ImGuiMCP::GetFrameCount() - 1)
+            mod::hotkeys::CancelCapture();
         if (!mod::ui::IsRefreshVisible() || lastPageFrame != ImGuiMCP::GetFrameCount() - 1) {
             snapshotPageVisible = false;
             mod::debug::SetRefreshVisible(false);
@@ -455,6 +459,7 @@ void mod::ui::Register() {
     SKSEMenuFramework::SetSection(mod::info::DisplayName);
     SKSEMenuFramework::AddSectionItem("Followers", mod::ui::RenderFollowers);
     SKSEMenuFramework::AddSectionItem("Settings", mod::ui::RenderSettings);
+    SKSEMenuFramework::AddSectionItem("Hotkeys", mod::ui::RenderHotkeys);
     SKSEMenuFramework::AddSectionItem("Debug", mod::ui::RenderDebug);
 }
 
@@ -464,6 +469,24 @@ bool mod::ui::IsRefreshVisible() {
     if (auto* window = mainWindow.load())
         return window->IsOpen.load();
     return SKSEMenuFramework::IsAnyBlockingWindowOpened();
+}
+
+bool mod::ui::IsMenuOpen() {
+    if (!SKSEMenuFramework::IsInstalled())
+        return false;
+    if (!mainWindow.load() && getMainWindow)
+        mainWindow = getMainWindow();
+    if (const auto* window = mainWindow.load())
+        return window->IsOpen.load();
+    return SKSEMenuFramework::IsAnyBlockingWindowOpened();
+}
+
+void __stdcall mod::ui::RenderHotkeys() {
+    snapshotPageVisible = false;
+    mod::debug::SetRefreshVisible(false);
+    lastPage = Page::Hotkeys;
+    lastPageFrame = ImGuiMCP::GetFrameCount();
+    hotkeys_page::Render();
 }
 
 void __stdcall mod::ui::RenderFollowers() {

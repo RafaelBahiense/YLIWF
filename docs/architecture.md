@@ -19,7 +19,7 @@ reproducible source builds.
 | `tests/` | Native and tooling checks |
 
 Native sources and headers are grouped by subsystem: `followers`, `combat`,
-`formations`, `adapters`, `diagnostics`, `ui`, `settings` and `runtime`.
+`formations`, `adapters`, `diagnostics`, `input`, `ui`, `settings` and `runtime`.
 Private headers sit beside their implementations. Shared helpers live in
 `src/native/common`; the PCH lives in `src/native/PCH.h`. Only public add-on
 headers belong in `include/`.
