@@ -138,6 +138,12 @@ namespace mod::debug {
                 << " protectionSpell=" << row.crossfire << '\n'
                 << "    cell=" << Form(actor->GetParentCell()) << " package=" << Form(actor->GetCurrentPackage())
                 << '\n';
+            if (const auto* process = actor->GetActorRuntimeData().currentProcess) {
+                out << "    processIgnoringCombat=" << process->ignoringCombat;
+                if (const auto* state = process->middleHigh)
+                    out << " preventCombat=" << state->preventCombat;
+                out << '\n';
+            }
             auto pos = actor->GetPosition();
             out << "    position=" << pos.x << ',' << pos.y << ',' << pos.z << " combat=" << actor->IsInCombat()
                 << " disabled=" << actor->IsDisabled() << " mounted=" << actor->IsOnMount()
@@ -611,8 +617,10 @@ namespace mod::debug {
             out << "Runtime=" << REL::Module::get().version().string() << " generation=" << state.generation << '\n';
             out << "Controller: " << state.executionStatus << '\n';
             out << "Combat order: " << (combat_orders::Enabled ? "Stand down" : "Normal behavior")
-                << " affected=" << combat_orders::Affected.load()
-                << " unavailable=" << combat_orders::Unavailable.load() << '\n';
+                << " controlled=" << combat_orders::Affected.load()
+                << " needsAttention=" << combat_orders::Unavailable.load()
+                << " suppressedUpdates=" << combat_orders::SuppressedUpdates.load()
+                << " reentryFailures=" << combat_orders::Reentries.load() << '\n';
             for (const auto& follower : state.adaptedFollowers)
                 out << "Quest-managed follower: actor=" << fmt::format("{:08X}", follower.formID)
                     << " controller=" << std::quoted(follower.adapterName)

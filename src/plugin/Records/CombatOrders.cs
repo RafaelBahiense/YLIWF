@@ -25,6 +25,11 @@ internal static partial class FollowerPlugin
             EditorID = "YLIWF_StandDownMovement",
             Flags = Faction.FactionFlag.HiddenFromPC
         });
+        mod.Factions.Add(new Faction(OwnForm(0x000A16), SkyrimRelease.SkyrimSE)
+        {
+            EditorID = "YLIWF_StandDownCombatPrevention",
+            Flags = Faction.FactionFlag.HiddenFromPC
+        });
         // Waiting remains an explicit follower order, independent of combat policy.
         mod.Packages.Add(new Package(StandDownPackageForm, SkyrimRelease.SkyrimSE)
         {

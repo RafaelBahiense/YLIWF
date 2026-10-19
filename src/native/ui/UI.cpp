@@ -514,8 +514,11 @@ void __stdcall mod::ui::RenderFollowers() {
         mod::combat_orders::Set(standDown);
     EndDisabled(!canChangeCombatOrder);
     if (standDown) {
-        ImGuiMCP::Text("Not fighting: %zu | Unavailable: %zu", mod::combat_orders::Affected.load(),
+        ImGuiMCP::Text("Controlled: %zu | Needs attention: %zu", mod::combat_orders::Affected.load(),
                        mod::combat_orders::Unavailable.load());
+        ImGuiMCP::Text("Suppressed combat updates: %llu | Combat re-entry failures: %llu",
+                       static_cast<unsigned long long>(mod::combat_orders::SuppressedUpdates.load()),
+                       static_cast<unsigned long long>(mod::combat_orders::Reentries.load()));
         ImGuiMCP::TextWrapped(
             "Followers keep following and avoid nearby enemies. Healing is paused. Uncheck for normal behavior. Resets "
             "on save load.");

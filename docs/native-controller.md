@@ -88,6 +88,23 @@ The scheduler sleeps when idle and posts main-thread work when needed.
 Its thread never reads engine/VM state. Menu snapshots refresh independently,
 only while visible.
 
+Stand down suppresses `Character::UpdateCombat` for actors with an accepted
+passive package lease. Scenes and foreign interrupt packages pass through.
+The combat-job hook reads a synchronized lease table; package changes and combat
+cleanup stay in controller tasks. Non-controlled actors call the previous hook.
+See the [CommonLib mapping](https://github.com/CharmedBaryon/CommonLibSSE-NG/blob/main/src/RE/A/Actor.cpp)
+and [combat hook reference](https://github.com/RedyellowUnit/SmartTargetingNPC/blob/main/src/hook.cpp).
+
+Combat cleanup explicitly stops a surviving actor combat controller. Adapted
+followers restart their accepted temporary package after this transition;
+package identity alone does not establish that movement resumed.
+
+Runtime process prevention also carries a persistent ownership marker. Normal
+behavior, quest handoff and actor loading release host-owned restrictions;
+unloaded actors retain the marker until cleanup can finish. The process flag
+alone does not prevent combat re-entry. UI counters report suppressed updates
+and retain observed re-entry failures until the next order or load.
+
 Loading invalidates transient tasks and clocks, then resumes native state.
 Accepted engine calls wait for their saved adapter stack; they are never
 redispatched because of loading or VM pressure. Caller identities are checked

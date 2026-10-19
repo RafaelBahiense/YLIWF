@@ -17,6 +17,7 @@
 #include "formations/Formation.h"
 #include "combat/Healer.h"
 #include "combat/CombatOrders.h"
+#include "combat/CombatUpdate.h"
 #include "input/Hotkeys.h"
 #include "followers/PartyRules.h"
 
@@ -521,7 +522,11 @@ namespace {
                 mod::formation::Observe(actor);
                 if (event->loaded && actor) {
                     const auto actorID = actor->GetFormID();
-                    QueueGameTask([actorID] { mod::healer::Observe(actorID); });
+                    QueueGameTask([actorID] {
+                        auto* loaded = RE::TESForm::LookupByID<RE::Actor>(actorID);
+                        mod::combat_orders::ActorLoaded(loaded);
+                        mod::healer::Observe(actorID);
+                    });
                 }
                 if (!event->loaded)
                     mod::controller::Unloaded(actor);
@@ -532,6 +537,7 @@ namespace {
 
     void Install() {
         mod::debug::Trace("Native.InstallEventSinks");
+        mod::combat_update::Install();
         mod::hotkeys::Install();
         if (auto* ui = RE::UI::GetSingleton())
             ui->AddEventSink<RE::MenuOpenCloseEvent>(MenuSink::GetSingleton());

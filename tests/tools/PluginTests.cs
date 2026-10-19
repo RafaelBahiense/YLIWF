@@ -15,7 +15,7 @@ public sealed partial class PluginTests : TestWorkspace
         var esp = CreatePlugin();
         Artifacts.ValidateEsp(esp);
         using var loaded = SkyrimMod.CreateFromBinaryOverlay(esp, SkyrimRelease.SkyrimSE);
-        Assert.Equal(181, loaded.EnumerateMajorRecords().Count());
+        Assert.Equal(182, loaded.EnumerateMajorRecords().Count());
         Assert.True(loaded.Factions.Single(faction => faction.FormKey == new FormKey(loaded.ModKey, 0x995)).Flags.HasFlag(Faction.FactionFlag.HiddenFromPC));
         Assert.Equal(ModInfo.Identity.Author, loaded.ModHeader.Author);
         Assert.Equal("DialogueFollower", loaded.Quests.Single(q => q.FormKey == FormKey.Factory("0750BA:Skyrim.esm")).EditorID);
@@ -83,6 +83,9 @@ public sealed partial class PluginTests : TestWorkspace
     public void StandDownOverridesCombatWithoutChangingFollowerWaitState()
     {
         using var loaded = SkyrimMod.CreateFromBinaryOverlay(CreatePlugin(), SkyrimRelease.SkyrimSE);
+        var ownership = loaded.Factions.Single(record => record.FormKey == new FormKey(loaded.ModKey, 0xA16));
+        Assert.Equal("YLIWF_StandDownCombatPrevention", ownership.EditorID);
+        Assert.Equal(Faction.FactionFlag.HiddenFromPC, ownership.Flags);
         var packageKey = new FormKey(loaded.ModKey, 0xA11);
         var package = loaded.Packages.Single(record => record.FormKey == packageKey);
         Assert.True(package.Flags.HasFlag(Package.Flag.IgnoreCombat));
