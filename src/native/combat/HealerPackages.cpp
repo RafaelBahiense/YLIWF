@@ -1,4 +1,6 @@
 #include "combat/HealerPackages.h"
+#include "combat/CombatOrders.h"
+#include "combat/StandDownMovement.h"
 #include "ModInfo.h"
 #include "diagnostics/Debug.h"
 #include "RE/B/BGSPackageDataPointerTemplate.h"
@@ -69,9 +71,11 @@ namespace mod::healer_packages {
                 return false;
             // Reconcile temporary packages left by earlier previews. New actions
             // are selected through the alias's normal/combat-override lists.
-            if (Owned(Interrupt(actor)))
+            const auto* interrupt = Interrupt(actor);
+            const bool passive = combat_orders::Enabled && stand_down_movement::Owned(interrupt);
+            if (Owned(interrupt) || passive)
                 actor->EndInterruptPackage(true);
-            if (actor->GetFactionRank(activity, false) != rank) {
+            if (actor->GetFactionRank(activity, false) != rank || passive) {
                 actor->AddToFaction(activity, static_cast<std::int8_t>(rank));
                 actor->EvaluatePackage(true, false);
             }
@@ -104,7 +108,11 @@ namespace mod::healer_packages {
 
     bool ForeignInterrupt(RE::Actor* actor) {
         auto* package = Interrupt(actor);
-        return package && !Owned(package);
+        return package && !Owned(package) && !(combat_orders::Enabled && stand_down_movement::Owned(package));
+    }
+
+    bool OwnsPackage(const RE::TESPackage* package) {
+        return Owned(package);
     }
 
     bool Move(RE::Actor* actor, std::size_t slot, const RE::NiPoint3& destination) {

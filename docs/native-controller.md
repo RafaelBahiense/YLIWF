@@ -98,6 +98,9 @@ and [combat hook reference](https://github.com/RedyellowUnit/SmartTargetingNPC/b
 Combat cleanup explicitly stops a surviving actor combat controller. Adapted
 followers restart their accepted temporary package after this transition;
 package identity alone does not establish that movement resumed.
+Active healer packages take priority over passive following while retaining
+the combat gate. Stand-down healing excludes the player and area spells;
+failed retreat never enables offense.
 
 Runtime process prevention also carries a persistent ownership marker. Normal
 behavior, quest handoff and actor loading release host-owned restrictions;

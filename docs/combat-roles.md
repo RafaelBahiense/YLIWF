@@ -46,3 +46,5 @@ interrupted or blocked attempts have a short retry delay.
 
 Dialogue, quest scenes, waiting and incapacitation take priority over healing.
 Active quest-managed companions can receive healing when recognized as allies.
+During Stand down, healers heal themselves and other followers, but never select
+the player or area spells. They remain passive even when escape fails.

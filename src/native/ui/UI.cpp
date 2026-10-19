@@ -520,7 +520,8 @@ void __stdcall mod::ui::RenderFollowers() {
                        static_cast<unsigned long long>(mod::combat_orders::SuppressedUpdates.load()),
                        static_cast<unsigned long long>(mod::combat_orders::Reentries.load()));
         ImGuiMCP::TextWrapped(
-            "Followers keep following and avoid nearby enemies. Healing is paused. Uncheck for normal behavior. Resets "
+            "Followers keep following and avoid nearby enemies. Healers can heal themselves and other followers, "
+            "but not the player. Uncheck for normal behavior. Resets "
             "on save load.");
     }
     if (!state.structureReady || !state.scriptReady || !state.bindingsReady)

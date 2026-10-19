@@ -108,6 +108,9 @@ namespace mod::healer {
                 if (actor && std::ranges::find(result, actor) == result.end())
                     result.push_back(actor);
             }
+            std::erase_if(result, [](const auto* actor) {
+                return !healing_rules::AllowedTarget(combat_orders::Enabled.load(), actor->IsPlayerRef());
+            });
             return result;
         }
 
@@ -264,8 +267,8 @@ namespace mod::healer {
             }
             auto* target = RE::TESForm::LookupByID<RE::Actor>(observation.target);
             const auto position = actor->GetPosition();
-            const auto threats =
-                observation.combat ? healer_movement::Threats(actor) : std::vector<healer_movement::Point>{};
+            const auto threats = observation.combat ? healer_movement::Threats(actor, combat_orders::Enabled.load())
+                                                    : std::vector<healer_movement::Point>{};
             const float enemyDistance = healer_movement::ThreatDistance({position.x, position.y, position.z}, threats);
             // A single-shot UseMagic procedure can finish before the hand
             // animation emits its release event. Keep that in-flight cast's
@@ -336,8 +339,8 @@ namespace mod::healer {
         }
 
         bool Retreat(RE::Actor* actor, Observation& observation, float elapsed) {
-            const auto threats =
-                observation.combat ? healer_movement::Threats(actor) : std::vector<healer_movement::Point>{};
+            const auto threats = observation.combat ? healer_movement::Threats(actor, combat_orders::Enabled.load())
+                                                    : std::vector<healer_movement::Point>{};
             const auto position = actor->GetPosition();
             const auto distance = healer_movement::ThreatDistance({position.x, position.y, position.z}, threats);
             observation.retreating = observation.combat && healing_rules::Retreating(observation.retreating, distance);
@@ -346,7 +349,8 @@ namespace mod::healer {
                 observation.escape.Reset();
                 return false;
             }
-            if (observation.escape.Failed(distance, elapsed)) {
+            if (healing_rules::AllowOffense(combat_orders::Enabled.load()) &&
+                observation.escape.Failed(distance, elapsed)) {
                 ResumeCombat(actor, observation);
                 observation.offensiveSeconds = healing_rules::OffensiveInterval;
                 observation.status = "Unable to escape pursuers; fighting back";
@@ -389,7 +393,13 @@ namespace mod::healer {
         void Heal(RE::Actor* actor, const std::vector<RE::Actor*>& allies, Observation& observation, float elapsed) {
             if (MaintainCast(actor, observation))
                 return;
-            const auto spells = combat_roles::HealingSpells(actor);
+            auto spells = combat_roles::HealingSpells(actor);
+            if (combat_orders::Enabled)
+                // Area healing could also heal the player during a duel.
+                std::erase_if(spells, [](const auto& spell) {
+                    return std::ranges::any_of(
+                        spell.spell->effects, [](const auto* effect) { return effect && effect->effectItem.area > 0; });
+                });
             if (spells.empty()) {
                 ResumeCombat(actor, observation);
                 observation.status = "Needs a known fire-and-forget healing spell";
@@ -430,8 +440,8 @@ namespace mod::healer {
                 observation.status = "Waiting for an uninterrupted casting opportunity or retry backoff";
                 return;
             }
-            const auto threats =
-                observation.combat ? healer_movement::Threats(actor) : std::vector<healer_movement::Point>{};
+            const auto threats = observation.combat ? healer_movement::Threats(actor, combat_orders::Enabled.load())
+                                                    : std::vector<healer_movement::Point>{};
             const auto position = actor->GetPosition();
             const float enemyDistance = healer_movement::ThreatDistance({position.x, position.y, position.z}, threats);
             if (healing_rules::SafeToStartCast(enemyDistance) &&
@@ -515,8 +525,6 @@ namespace mod::healer {
     }
 
     bool NeedsObservation() {
-        if (combat_orders::Enabled)
-            return false;
         if (!controller::storage::Available())
             return false;
         // Keep ticking until old role assignments have released their packages.
@@ -529,8 +537,6 @@ namespace mod::healer {
     }
 
     void Tick(float elapsed) {
-        if (combat_orders::Enabled)
-            return;
         if (!controller::storage::Available() || !std::isfinite(elapsed) || elapsed <= 0)
             return;
         for (auto& [actor, observation] : observations) {
@@ -552,7 +558,8 @@ namespace mod::healer {
         const auto party = NativeParty();
         const auto allies = Allies(party);
         const bool combat =
-            std::ranges::any_of(allies, [](RE::Actor* actor) { return Available(actor) && actor->IsInCombat(); });
+            std::ranges::any_of(allies, [](RE::Actor* actor) { return Available(actor) && actor->IsInCombat(); }) ||
+            (RE::PlayerCharacter::GetSingleton() && RE::PlayerCharacter::GetSingleton()->IsInCombat());
         std::unordered_set<std::uint32_t> healers;
         for (auto* actor : party) {
             if (!actor || actor->IsDead() || combat_roles::Read(actor) != combat_roles::Role::Healer)
@@ -562,7 +569,7 @@ namespace mod::healer {
             auto& observation = observations[id];
             observation.actor = actor->GetHandle();
             observation.combat = combat;
-            if (!combat)
+            if (!combat || !healing_rules::AllowOffense(combat_orders::Enabled.load()))
                 observation.offensiveSeconds = 0;
             if (observation.slot == healer_packages::Slots)
                 for (std::size_t slot = 0; slot < healer_packages::Slots; ++slot)

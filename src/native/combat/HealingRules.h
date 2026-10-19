@@ -7,6 +7,14 @@
 #include <span>
 
 namespace mod::healing_rules {
+    constexpr bool AllowedTarget(bool standDown, bool player) {
+        return !standDown || !player;
+    }
+
+    constexpr bool AllowOffense(bool standDown) {
+        return !standDown;
+    }
+
     inline constexpr float HealthThreshold = 0.70f;
     inline constexpr float RecoveryHealthThreshold = 0.999f;
     inline constexpr float MaximumRange = 1024.0f;

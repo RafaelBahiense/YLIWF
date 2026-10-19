@@ -2,6 +2,7 @@
 #include "CombatOrderRules.h"
 #include "CombatPrevention.h"
 #include "CombatUpdate.h"
+#include "HealerPackages.h"
 #include "StandDownMovement.h"
 #include "ModInfo.h"
 #include "adapters/Adapters.h"
@@ -92,8 +93,16 @@ namespace mod::combat_orders {
             }
             if (!adapted && !combat_order_rules::Eligible(
                                 actor->IsPlayerTeammate(), actor->IsDead(), actor->GetCurrentScene() != nullptr,
-                                Interrupt(actor) && !stand_down_movement::Owned(Interrupt(actor))))
+                                Interrupt(actor) && !stand_down_movement::Owned(Interrupt(actor)) &&
+                                    !healer_packages::OwnsPackage(Interrupt(actor))))
                 return false;
+            if (!adapted && healer_packages::Owned(actor)) {
+                if (!combat_prevention::Acquire(actor))
+                    return false;
+                combat_update::Acquire(actor);
+                StopCombat(actor);
+                return true;
+            }
             auto* package = stand_down_movement::Select(actor);
             if (!ApplyPackage(actor, package, adapted))
                 return false;

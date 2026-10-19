@@ -64,6 +64,22 @@ namespace {
         return *choice;
     }
 
+    TEST_CASE("Stand-down healing excludes the player while retaining injured followers") {
+        std::vector targets{InjuredAlly(2, 10), InjuredAlly(3, 40)};
+        constexpr std::uint32_t player = 2;
+        const HealingBudget budget{100, 100, 0, 0};
+        const std::array normalSpells{HealingOption(targets.size(), 30)};
+        CHECK(RequireSelection(normalSpells, targets, budget).target == 0);
+
+        std::erase_if(targets, [](const auto& target) { return !AllowedTarget(true, target.id == player); });
+        const std::array passiveSpells{HealingOption(targets.size(), 30)};
+        const auto selected = RequireSelection(passiveSpells, targets, budget);
+        CHECK(targets[selected.target].id == 3);
+        CHECK(AllowedTarget(false, true));
+        CHECK_FALSE(AllowOffense(true));
+        CHECK(AllowOffense(false));
+    }
+
     TEST_CASE("Spell selection prioritizes self healing independently of engine spell order") {
         const std::array targets{InjuredAlly(1, 40), InjuredAlly(2, 10)};
         const auto self = HealingOption(targets.size(), 20, 10, true);

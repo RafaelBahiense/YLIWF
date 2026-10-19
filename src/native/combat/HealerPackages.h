@@ -14,6 +14,7 @@ namespace mod::healer_packages {
     void Configure();
     bool Ready(std::size_t slot);
     bool Owned(RE::Actor* actor);
+    bool OwnsPackage(const RE::TESPackage* package);
     bool ForeignInterrupt(RE::Actor* actor);
     bool Move(RE::Actor* actor, std::size_t slot, const RE::NiPoint3& destination);
     bool Cast(RE::Actor* actor, std::size_t slot, RE::Actor* target, RE::SpellItem* spell);
