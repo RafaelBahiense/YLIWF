@@ -15,6 +15,7 @@
 #include "followers/FollowDistance.h"
 #include "formations/Formation.h"
 #include "combat/Healer.h"
+#include "combat/ShieldDefender.h"
 #include "combat/CombatOrders.h"
 
 #include <atomic>
@@ -468,11 +469,14 @@ namespace mod::controller::executor {
             formation::Tick();
             if (!paused)
                 healer::Tick(elapsed);
+            if (!paused)
+                shield_defender::Tick(elapsed);
             if (!paused && combat_orders::Enabled)
                 combat_orders::Tick();
             const bool delay = storage::Get().active && storage::Active().phase == Phase::Delay;
             const bool work = combat_orders::Enabled || formation::HasWork() || adapters::HasWork() ||
-                              adapters::NeedsObservation() || healer::NeedsObservation() || delay || countsDirty ||
+                              adapters::NeedsObservation() || healer::NeedsObservation() ||
+                              shield_defender::NeedsObservation() || delay || countsDirty ||
                               !storage::Get().queue.empty() || !storage::Get().callers.empty() ||
                               std::ranges::any_of(storage::Get().deadlines, [](float time) { return time > 0; });
             DeadlineScheduler().Set(work, delay && !paused, formation::HasWork() && !paused);
@@ -716,6 +720,7 @@ namespace mod::controller::executor {
         combat_orders::Invalidate();
         formation::Invalidate();
         healer::Invalidate();
+        shield_defender::Invalidate();
         loaded = false;
         countsDirty = false;
         ++generation;

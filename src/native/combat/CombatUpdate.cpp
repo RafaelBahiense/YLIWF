@@ -3,6 +3,7 @@
 #include "CombatOrders.h"
 #include "StandDownMovement.h"
 #include "HealerPackages.h"
+#include "ShieldDefender.h"
 
 namespace mod::combat_update {
     namespace {
@@ -10,6 +11,7 @@ namespace mod::combat_update {
         REL::Relocation<void (*)(RE::Actor*)> original;
 
         void Update(RE::Actor* actor) {
+            shield_defender::UpdateCombatStyle(actor);
             if (actor && combat_orders::Enabled.load()) {
                 const auto* process = actor->GetActorRuntimeData().currentProcess;
                 const auto* interrupt =
@@ -22,6 +24,7 @@ namespace mod::combat_update {
             // Preserve the previous hook/engine implementation for every other actor.
             // No StopCombat, package writes or callbacks run on the combat job thread.
             original(actor);
+            shield_defender::UpdateCombatStyle(actor);
         }
     }
 

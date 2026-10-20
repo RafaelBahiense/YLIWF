@@ -20,6 +20,7 @@ internal static partial class FollowerPlugin
     {
         var skyrimMod = new SkyrimMod(OwnMod, SkyrimRelease.SkyrimSE);
         AddHeader(skyrimMod);
+        AddCombatStyles(skyrimMod);
         AddCells(skyrimMod);
         AddDialogBranches(skyrimMod);
         AddDialogTopics(skyrimMod);

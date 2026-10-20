@@ -10,12 +10,70 @@ namespace ModTools.Tests;
 public sealed partial class PluginTests : TestWorkspace
 {
     [Fact]
+    public void ShieldDefenderUsesDefensiveMeleeStyle()
+    {
+        using var loaded = SkyrimMod.CreateFromBinaryOverlay(CreatePlugin(), SkyrimRelease.SkyrimSE);
+        var style = loaded.CombatStyles.Single(record => record.FormKey == new FormKey(loaded.ModKey, 0xA17));
+        Assert.Equal("YLIWF_ShieldDefenderStyle", style.EditorID);
+        Assert.True(style.DefensiveMult > style.OffensiveMult);
+        Assert.True(style.EquipmentScoreMultMelee > style.EquipmentScoreMultMagic);
+        Assert.True(style.EquipmentScoreMultMelee > style.EquipmentScoreMultRanged);
+        Assert.NotNull(style.Melee);
+        Assert.True(style.Melee.BashMult > style.Melee.PowerAttackBlockingMult);
+        Assert.False(style.Flags.GetValueOrDefault().HasFlag(CombatStyle.Flag.AllowDualWielding));
+    }
+
+    [Fact]
+    public void DefenderProfilesConserveStaminaWhileStillFavoringGuardAgainstThreats()
+    {
+        using var loaded = SkyrimMod.CreateFromBinaryOverlay(CreatePlugin(), SkyrimRelease.SkyrimSE);
+        var pressure = loaded.CombatStyles.Single(record => record.FormKey == new FormKey(loaded.ModKey, 0xA17));
+        var guard = loaded.CombatStyles.Single(record => record.FormKey == new FormKey(loaded.ModKey, 0xA18));
+        var recovery = loaded.CombatStyles.Single(record => record.FormKey == new FormKey(loaded.ModKey, 0xA19));
+        var guardRecovery = loaded.CombatStyles.Single(record => record.FormKey == new FormKey(loaded.ModKey, 0xA1A));
+        Assert.True(guard.DefensiveMult > pressure.DefensiveMult);
+        Assert.True(guardRecovery.DefensiveMult > recovery.DefensiveMult);
+        Assert.True(recovery.OffensiveMult < pressure.OffensiveMult);
+        Assert.True(recovery.CloseRange!.FallbackMult > pressure.CloseRange!.FallbackMult);
+        foreach (var style in new[] { recovery, guardRecovery })
+        {
+            Assert.NotNull(style.Melee);
+            Assert.Equal(0, style.Melee.BashMult);
+            Assert.Equal(0, style.Melee.BashAttackMult);
+            Assert.Equal(0, style.Melee.BashRecoilMult);
+            Assert.Equal(0, style.Melee.BashPowerAttackMult);
+            Assert.Equal(0, style.Melee.PowerAttackStaggeredMult);
+            Assert.Equal(0, style.Melee.PowerAttackBlockingMult);
+            Assert.Equal(0, style.Melee.SpecialAttackMult);
+            Assert.True(style.EquipmentScoreMultMelee > style.EquipmentScoreMultMagic);
+            Assert.False(style.Flags.GetValueOrDefault().HasFlag(CombatStyle.Flag.AllowDualWielding));
+        }
+    }
+
+    [Fact]
+    public void DefenderHoldsGroundAndCountersWithoutEncouragingBashSpamDuringOpenings()
+    {
+        using var loaded = SkyrimMod.CreateFromBinaryOverlay(CreatePlugin(), SkyrimRelease.SkyrimSE);
+        var pressure = loaded.CombatStyles.Single(record => record.FormKey == new FormKey(loaded.ModKey, 0xA17));
+        var guard = loaded.CombatStyles.Single(record => record.FormKey == new FormKey(loaded.ModKey, 0xA18));
+        var counter = loaded.CombatStyles.Single(record => record.FormKey == new FormKey(loaded.ModKey, 0xA1B));
+        Assert.True(guard.CloseRange!.FallbackMult < pressure.CloseRange!.FallbackMult);
+        Assert.True(guard.CloseRange.CircleMult < pressure.CloseRange.CircleMult);
+        Assert.True(guard.AvoidThreatChance <= pressure.AvoidThreatChance);
+        Assert.True(guard.Melee!.BashMult > pressure.Melee!.BashMult);
+        Assert.True(guard.Melee.BashPowerAttackMult > guard.Melee.BashAttackMult);
+        Assert.True(counter.OffensiveMult > pressure.OffensiveMult);
+        Assert.True(counter.Melee!.PowerAttackStaggeredMult > pressure.Melee.PowerAttackStaggeredMult);
+        Assert.True(counter.Melee.BashMult < pressure.Melee.BashMult);
+    }
+
+    [Fact]
     public void PluginIdentity()
     {
         var esp = CreatePlugin();
         Artifacts.ValidateEsp(esp);
         using var loaded = SkyrimMod.CreateFromBinaryOverlay(esp, SkyrimRelease.SkyrimSE);
-        Assert.Equal(182, loaded.EnumerateMajorRecords().Count());
+        Assert.Equal(187, loaded.EnumerateMajorRecords().Count());
         Assert.True(loaded.Factions.Single(faction => faction.FormKey == new FormKey(loaded.ModKey, 0x995)).Flags.HasFlag(Faction.FactionFlag.HiddenFromPC));
         Assert.Equal(ModInfo.Identity.Author, loaded.ModHeader.Author);
         Assert.Equal("DialogueFollower", loaded.Quests.Single(q => q.FormKey == FormKey.Factory("0750BA:Skyrim.esm")).EditorID);

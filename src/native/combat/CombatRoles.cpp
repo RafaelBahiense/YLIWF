@@ -4,6 +4,7 @@
 #include "diagnostics/Debug.h"
 #include "settings/Settings.h"
 #include "combat/Healer.h"
+#include "combat/ShieldDefender.h"
 #include "followers/ControllerExecutor.h"
 
 #include <cmath>
@@ -115,6 +116,7 @@ namespace mod::combat_roles {
 
     void Configure(RE::TESFaction* faction) {
         marker = faction;
+        shield_defender::Configure();
     }
 
     Role Read(RE::Actor* actor) {
@@ -136,6 +138,8 @@ namespace mod::combat_roles {
         result.assigned = Read(actor);
         if (actor && result.assigned == Role::Healer)
             result.behavior = healer::Status(actor->GetFormID());
+        if (actor && result.assigned == Role::ShieldDefender)
+            result.behavior = shield_defender::Status(actor->GetFormID());
         if (!marker)
             result.unavailable = "Combat role record is unavailable; install the matching ESP";
         else if (!actor || actor->IsDead())
