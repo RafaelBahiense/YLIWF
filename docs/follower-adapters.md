@@ -116,44 +116,6 @@ movement overrides, and release only its own temporary movement. Releases are
 allowed while waiting, dismissed or quest-locked. The host clears saved formation
 movement on load and reevaluates permission during travel updates.
 
-## Serana example
-
-[Serana.cpp](../src/addons/serana/native/Serana.cpp) connects YLIWF's follower
-controls to `DLC1_NPCMentalModelScript`. Dawnguard owns recruitment and quest behavior;
-the adapter validates its live bindings and respects its restrictions.
-
-Recruitment eligibility requires dismissal, `CanFollow`, no `LockedIn` or
-`TurnOffComeWithMe`, and compatible live bindings.
-
-| Command | Dawnguard method | Guard |
-| --- | --- | --- |
-| Follow | `StopWaiting()` | Active, `CanFollow`, not `LockedIn` |
-| Wait | `Wait()` | Also `IsWillingToWait` |
-| Dismiss | `Dismiss()` | Also `CanBeDismissed` |
-
-VM completion schedules a main-thread state check before acknowledgement.
-Quest locks and recruitment are never bypassed.
-Location and Dawnguard quest events notify the host; periodic observation covers
-other changes. Events are hints, not proof Papyrus has finished.
-
-Distance sets exactly one of `FollowDistanceClose`, `FollowDistanceMedium`
-or `FollowDistanceFar`, after validating all three. AI reevaluates only on change.
-Blocked/inactive controllers wait until eligible.
-
-Combat protection applies while following or waiting with `CanFollow` and no
-`LockedIn` restriction. Quest, location, combat and death events refresh eligibility.
-
-Replacement scripts must preserve the controller's behavior as well as its
-interface; validate compatibility in game.
-
-Serana participates in travel formations while her controller allows ordinary
-following or sandboxing. Native temporary Travel packages leave Dawnguard's
-records, scripts and aliases unchanged. Quest packages, foreign interrupts,
-scenes, waiting and combat retain priority. Wait and Dismiss release formation
-movement before calling her controller.
-Stand-down uses the same ordinary-package boundary, permits existing combat, and
-respects Dawnguard locks and scenes. Its override is released before controller commands.
-
 ## Source layout and build
 
 ```text
@@ -183,7 +145,7 @@ with matching source-manifest hashes.
 
 Core and add-on release versions are independent. `adapterApiVersion` declares
 the API used by the implementation; it must match the version requested during
-registration. Serana checks this against the SDK at compile time. Unsupported
+registration. Validate this against the SDK at compile time. Unsupported
 host APIs are rejected at runtime. Binary and source ZIPs use the add-on's name
 and version, independent of the core ZIP filename.
 
