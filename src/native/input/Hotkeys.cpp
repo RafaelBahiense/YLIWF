@@ -9,6 +9,7 @@ namespace mod::hotkeys {
     namespace {
         using hotkey_rules::Action;
         hotkey_rules::Keyboard keyboard;
+        hotkey_rules::CaptureEscape captureEscape;
         std::optional<Action> capture;
         std::string status;
 
@@ -81,6 +82,7 @@ namespace mod::hotkeys {
                 settings::Hotkeys[index] = binding;
                 status = "Binding changed. Save to keep it after restarting Skyrim.";
                 capture.reset();
+                keyboard.Reset();
                 return;
             }
             if (!GameplayAllowed())
@@ -114,9 +116,59 @@ namespace mod::hotkeys {
                 return RE::BSEventNotifyControl::kContinue;
             }
         };
+
+        bool CaptureButton(const RE::ButtonEvent& button) {
+            std::scoped_lock lock(settings::Mutex);
+            if (capture && !mod::ui::IsMenuOpen())
+                CancelCapture();
+            const auto key = button.GetIDCode();
+            if (key == hotkey_rules::Escape) {
+                const bool consume = captureEscape.Consume(capture.has_value(), button.IsDown(), button.IsUp());
+                if (capture && button.IsDown())
+                    CancelCapture();
+                return consume;
+            }
+            if (!capture)
+                return false;
+            if (const auto binding = keyboard.Update(key, button.IsPressed(), button.IsDown()))
+                KeyDown(*binding);
+            return true;
+        }
+
+        struct CaptureHook {
+            static void Input(RE::BSTEventSource<RE::InputEvent*>* dispatcher, RE::InputEvent* const* events) {
+                auto* head = events ? *events : nullptr;
+                RE::InputEvent* previous = nullptr;
+                std::vector<std::pair<RE::InputEvent*, RE::InputEvent*>> changedLinks;
+                for (auto* event = head; event; event = event->next) {
+                    const auto* button = event->AsButtonEvent();
+                    if (!button || event->GetDevice() != RE::INPUT_DEVICE::kKeyboard || !CaptureButton(*button)) {
+                        previous = event;
+                        continue;
+                    }
+                    if (previous) {
+                        changedLinks.emplace_back(previous, previous->next);
+                        previous->next = event->next;
+                    } else {
+                        head = event->next;
+                    }
+                }
+                original(dispatcher, &head);
+                for (auto it = changedLinks.rbegin(); it != changedLinks.rend(); ++it)
+                    it->first->next = it->second;
+            }
+
+            static inline REL::Relocation<decltype(Input)> original;
+        };
     }
 
     void Install() {
+        // The framework closes on Escape before its public callbacks or game
+        // event sinks. Capture rebinding input first, chaining its existing hook.
+        // https://github.com/QTR-Modding/SKSE-Menu-Framework-3/blob/master/src/Hooks.cpp
+        SKSE::AllocTrampoline(32);
+        CaptureHook::original = SKSE::GetTrampoline().write_call<5>(
+            REL::RelocationID(67315, 68617).address() + REL::Relocate(0x7B, 0x7B, 0x81), CaptureHook::Input);
         if (auto* input = RE::BSInputDeviceManager::GetSingleton()) {
             static InputSink sink;
             input->AddEventSink(&sink);
@@ -135,6 +187,7 @@ namespace mod::hotkeys {
         if (static_cast<std::size_t>(action) >= hotkey_rules::ActionCount)
             return;
         capture = action;
+        keyboard.Reset();
         status = "Press a key combination. Escape cancels.";
     }
 
@@ -142,6 +195,7 @@ namespace mod::hotkeys {
         std::scoped_lock lock(settings::Mutex);
         if (capture) {
             capture.reset();
+            keyboard.Reset();
             status = "Binding cancelled.";
         }
     }

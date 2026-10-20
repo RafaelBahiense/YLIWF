@@ -24,6 +24,21 @@ namespace mod::hotkey_rules {
     inline constexpr std::uint32_t MaximumBinding = 0x7FF;
     inline constexpr std::uint32_t Escape = 0x01;
 
+    class CaptureEscape {
+    public:
+        bool Consume(bool capturing, bool down, bool up) {
+            if (capturing && down)
+                swallowing = true;
+            const bool consumed = swallowing;
+            if (up)
+                swallowing = false;
+            return consumed;
+        }
+
+    private:
+        bool swallowing = false;
+    };
+
     constexpr std::uint32_t Modifier(std::uint32_t scanCode) {
         switch (scanCode) {
             case 0x2A:

@@ -5,6 +5,17 @@ namespace {
     using namespace mod::hotkey_rules;
     constexpr std::uint32_t KeyE = 0x12;
 
+    TEST_CASE("Escape cancels rebinding without leaking its release to the menu") {
+        CaptureEscape escape;
+        CHECK_FALSE(escape.Consume(false, true, false));
+        CHECK(escape.Consume(true, true, false));
+        // Capture ends on key-down; held and release events still belong to it.
+        CHECK(escape.Consume(false, false, false));
+        CHECK(escape.Consume(false, false, true));
+        CHECK_FALSE(escape.Consume(false, true, false));
+        CHECK_FALSE(escape.Consume(false, false, true));
+    }
+
     TEST_CASE("Hotkeys require the exact modifiers and accept either Shift key") {
         for (const auto shift : {0x2Au, 0x36u}) {
             Keyboard keyboard;
