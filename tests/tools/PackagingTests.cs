@@ -244,8 +244,13 @@ public sealed class PackagingTests : TestWorkspace
         foreach (var declaredAddon in Addon.Read(root))
         {
             using var archive = ZipFile.OpenRead(Path.Combine(temporary, declaredAddon.ArchiveName));
-            Assert.True(archive.GetEntry("SKSE/Plugins/" + declaredAddon.DllFile) != null && archive.GetEntry(Artifacts.Plugin) == null &&
-                !archive.Entries.Any(entry => entry.FullName.EndsWith(".pex", StringComparison.OrdinalIgnoreCase)), "Native adapter must be a separate DLL-only add-on");
+            Assert.True(archive.GetEntry("SKSE/Plugins/" + declaredAddon.DllFile) != null && archive.GetEntry(Artifacts.Plugin) == null,
+                "Add-on must have its own DLL without the core ESP");
+            var expectedScripts = Directory.Exists(declaredAddon.PapyrusSource)
+                ? Directory.GetFiles(declaredAddon.PapyrusSource, "*.psc").Select(file => "Scripts/" + Path.GetFileNameWithoutExtension(file) + ".pex").Order().ToArray()
+                : [];
+            Assert.Equal(expectedScripts, archive.Entries.Where(entry => entry.FullName.EndsWith(".pex", StringComparison.OrdinalIgnoreCase))
+                .Select(entry => entry.FullName).Order().ToArray());
             CheckInstallNotices(archive, dependencyNotices);
             var addonSource = Path.Combine(temporary, declaredAddon.SourceArchiveName);
             SourceSnapshot.Validate(addonSource, dll, root);
@@ -293,6 +298,7 @@ public sealed class PackagingTests : TestWorkspace
             Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", previousEpoch);
         }
         var output = Path.Combine(temporary, "independent-release");
+        PapyrusTests.PrepareScripts(checkout, temporary);
         Artifacts.Package(checkout, esp, dll, papyrus, output, false, BuildMode.SuppliedDll, source);
         Assert.True(File.Exists(Path.Combine(output, addon.ArchiveName)) && File.Exists(Path.Combine(output, addon.SourceArchiveName)),
             "Add-on update did not publish independently versioned binary and source archives");

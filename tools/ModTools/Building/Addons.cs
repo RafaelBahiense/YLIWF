@@ -6,6 +6,8 @@ namespace ModTools.Building;
 // A native add-on declares its DLL/package suffix once; CMake reads the same file.
 public sealed partial record Addon(string Name, string Version, uint AdapterApiVersion)
 {
+    public string SourceDirectory { get; init; } = "";
+    public string PapyrusSource => Path.Combine(SourceDirectory, "papyrus");
     public string DllFile => $"{ModInfo.BinaryName}.{Name}.dll";
     public string ArchiveName => $"{ModInfo.BinaryName}-{Name}-{Version}.zip";
     public string SourceArchiveName => $"{ModInfo.BinaryName}-{Name}-{Version}-source.zip";
@@ -40,7 +42,7 @@ public sealed partial record Addon(string Name, string Version, uint AdapterApiV
                 {
                     throw new InvalidDataException($"Invalid adapter API version: {path}");
                 }
-                return new Addon(name, version, apiVersion);
+                return new Addon(name, version, apiVersion) { SourceDirectory = Path.GetDirectoryName(path)! };
             }).ToArray();
         if (addons.Select(addon => addon.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != addons.Length)
         {

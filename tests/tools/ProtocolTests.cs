@@ -133,7 +133,7 @@ public sealed partial class ProtocolTests : TestWorkspace
         var declared = declarations.ToHashSet(StringComparer.OrdinalIgnoreCase);
         Assert.True(declared.Count == declarations.Length, "duplicate native declarations");
 
-        var callers = Directory.EnumerateFiles(Path.Combine(root, "src/papyrus"), "*.psc", SearchOption.AllDirectories)
+        var callers = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.psc", SearchOption.AllDirectories)
             .SelectMany(path => NativeCallRegex().Matches(File.ReadAllText(path)))
             .Select(match => match.Groups[1].Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
         Assert.True(callers.IsSubsetOf(declared), "a Papyrus caller references a removed native export");

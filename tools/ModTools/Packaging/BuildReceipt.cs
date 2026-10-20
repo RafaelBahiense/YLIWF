@@ -4,7 +4,7 @@ namespace ModTools.Packaging;
 
 public enum BuildComponent
 {
-    Plugin = 0, PapyrusCore = 1, Papyrus3Dnpc = 2, Native = 3
+    Plugin = 0, PapyrusCore = 1, Papyrus3Dnpc = 2, Native = 3, PapyrusAddons = 4
 }
 
 // Local sidecars bind reusable outputs to the sources that produced them.
@@ -45,6 +45,8 @@ public static class BuildReceipt
         return name.StartsWith(sourceDirectory, StringComparison.Ordinal) || component switch
         {
             BuildComponent.Native => IsNativeInput(name),
+            BuildComponent.PapyrusAddons => name.StartsWith("src/addons/", StringComparison.Ordinal) &&
+                (name.EndsWith(".psc", StringComparison.Ordinal) || name.EndsWith("/addon.json", StringComparison.Ordinal)),
             BuildComponent.Papyrus3Dnpc => name.StartsWith("src/papyrus/patches/3dnpc/", StringComparison.Ordinal),
             _ => false
         };

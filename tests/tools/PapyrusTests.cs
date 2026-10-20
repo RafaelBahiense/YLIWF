@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Text.Json;
+using ModTools.Building;
 using ModTools.Packaging;
 using ModTools.Papyrus;
 using static ModTools.Tests.TestSupport;
@@ -16,6 +17,13 @@ public sealed class PapyrusTests : TestWorkspace
         BuildReceipt.Write(root, BuildComponent.PapyrusCore, BuildReceipt.CaptureInputs(root, BuildComponent.PapyrusCore),
             Artifacts.ScriptOutputs(Path.Combine(root, "src/papyrus/core"), Path.Combine(papyrus, "Scripts")), Path.Combine(papyrus, "Scripts", BuildReceipt.ScriptsFile));
         File.WriteAllText(Path.Combine(papyrus, "Scripts/Game.pex"), "stale import");
+        foreach (var addon in Addon.Read(root).Where(addon => Directory.Exists(addon.PapyrusSource)))
+        {
+            var output = Path.Combine(papyrus, "addons", addon.Name, "Scripts");
+            Scripts(addon.PapyrusSource, output);
+            BuildReceipt.Write(root, BuildComponent.PapyrusAddons, BuildReceipt.CaptureInputs(root, BuildComponent.PapyrusAddons),
+                Artifacts.ScriptOutputs(addon.PapyrusSource, output), Path.Combine(output, BuildReceipt.ScriptsFile));
+        }
         return papyrus;
     }
 
@@ -57,6 +65,73 @@ public sealed class PapyrusTests : TestWorkspace
             Artifacts.ScriptOutputs(Path.Combine(root, "src/papyrus/core"), Path.Combine(compileOutput, "Scripts")), Path.Combine(compileOutput, "Scripts", BuildReceipt.ScriptsFile));
         BuildReceipt.Validate(root, BuildComponent.Papyrus3Dnpc,
             Artifacts.ScriptOutputs(Path.Combine(root, "src/papyrus/patches/3dnpc"), Path.Combine(compileOutput, "Patches/3DNPC/Scripts")), Path.Combine(compileOutput, "Patches/3DNPC/Scripts", BuildReceipt.ScriptsFile));
+        foreach (var addon in Addon.Read(root).Where(addon => Directory.Exists(addon.PapyrusSource)))
+        {
+            var output = Path.Combine(compileOutput, "addons", addon.Name, "Scripts");
+            BuildReceipt.Validate(root, BuildComponent.PapyrusAddons, Artifacts.ScriptOutputs(addon.PapyrusSource, output),
+                Path.Combine(output, BuildReceipt.ScriptsFile));
+        }
+    }
+
+    [Fact]
+    public void AddonFailurePreservesPublishedScriptsAndReceiptsTrackAddonSources()
+    {
+        var checkout = CopyCheckout("addon-compile");
+        foreach (var suffix in new[] { "A", "B" })
+        {
+            var addonRoot = Path.Combine(checkout, "src/addons/build-fixture-" + suffix);
+            Directory.CreateDirectory(Path.Combine(addonRoot, "papyrus"));
+            File.WriteAllText(Path.Combine(addonRoot, "addon.json"),
+                JsonSerializer.Serialize(new
+                {
+                    name = "BuildFixture" + suffix,
+                    version = "1.0.0",
+                    adapterApiVersion = 1
+                }));
+            File.WriteAllText(Path.Combine(addonRoot, "papyrus/BuildFixture" + suffix + ".psc"),
+                "Scriptname BuildFixture" + suffix + " Hidden\n");
+        }
+        var addons = Addon.Read(checkout);
+        var first = addons.Single(addon => addon.Name == "BuildFixtureA");
+        var second = addons.Single(addon => addon.Name == "BuildFixtureB");
+        var compiler = Path.Combine(temporary, "fixture-compiler");
+        var flags = Path.Combine(temporary, "fixture-flags");
+        File.WriteAllText(compiler, "fixture");
+        File.WriteAllText(flags, "fixture");
+        var output = Path.Combine(temporary, "addon-output");
+        var firstOutput = Path.Combine(output, "addons", first.Name, "Scripts");
+        Directory.CreateDirectory(Path.Combine(output, "Scripts"));
+        Directory.CreateDirectory(firstOutput);
+        File.WriteAllText(Path.Combine(output, "Scripts/YLIWF_SKSE.pex"), "previous core");
+        File.WriteAllText(Path.Combine(firstOutput, "BuildFixtureA.pex"), "previous add-on");
+        Assert.Throws<IOException>(() => PapyrusCompiler.Compile(checkout, compiler, flags, [temporary], output, false,
+            (_, arguments, _) =>
+            {
+                var argv = arguments.ToArray();
+                if (argv[0] == second.PapyrusSource)
+                {
+                    throw new IOException("Add-on compilation failed");
+                }
+                Scripts(argv[0], argv.Single(argument => argument.StartsWith("--output=", StringComparison.Ordinal))[9..]);
+            }));
+        Assert.Equal("previous core", File.ReadAllText(Path.Combine(output, "Scripts/YLIWF_SKSE.pex")));
+        Assert.Equal("previous add-on", File.ReadAllText(Path.Combine(firstOutput, "BuildFixtureA.pex")));
+        Assert.False(File.Exists(Path.Combine(firstOutput, BuildReceipt.ScriptsFile)));
+        Assert.False(Directory.Exists(Path.Combine(output, "addons", second.Name)));
+
+        PapyrusCompiler.Compile(checkout, compiler, flags, [temporary], output, false, (_, arguments, _) =>
+        {
+            var argv = arguments.ToArray();
+            Scripts(argv[0], argv.Single(argument => argument.StartsWith("--output=", StringComparison.Ordinal))[9..]);
+        });
+        var compiled = Artifacts.ScriptOutputs(first.PapyrusSource, firstOutput);
+        var receipt = Path.Combine(firstOutput, BuildReceipt.ScriptsFile);
+        BuildReceipt.Validate(checkout, BuildComponent.PapyrusAddons, compiled, receipt);
+        File.AppendAllText(Path.Combine(first.PapyrusSource, "BuildFixtureA.psc"), "; changed source\n");
+        Assert.Throws<InvalidDataException>(() => BuildReceipt.Validate(checkout, BuildComponent.PapyrusAddons, compiled, receipt));
+        BuildReceipt.Validate(checkout, BuildComponent.PapyrusCore,
+            Artifacts.ScriptOutputs(Path.Combine(checkout, "src/papyrus/core"), Path.Combine(output, "Scripts")),
+            Path.Combine(output, "Scripts", BuildReceipt.ScriptsFile));
     }
 
     [Fact]

@@ -128,7 +128,9 @@ src/addons/<addon>/
 ```
 
 Create folders only when needed. Automatic build discovery supports native
-components; ESP/script components require explicit build integration.
+components and optional `papyrus/` sources. Add-on scripts compile against the
+core bridge and ship only in that add-on's ZIP. ESP components require explicit
+build integration.
 
 ```json
 {"name": "Example", "version": "1.0.0", "adapterApiVersion": 1}

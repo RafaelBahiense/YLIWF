@@ -331,6 +331,16 @@ public static class Artifacts
 
                 SourceSnapshot.ValidateAddon(sourceTemporary, addonDll, addon);
                 var files = new Dictionary<string, string> { ["SKSE/Plugins/" + addon.DllFile] = addonDll };
+                if (Directory.Exists(addon.PapyrusSource))
+                {
+                    var addonScripts = Path.Combine(papyrus, "addons", addon.Name, ProjectPaths.ScriptsOutput);
+                    var compiled = ScriptOutputs(addon.PapyrusSource, addonScripts);
+                    BuildReceipt.Validate(root, BuildComponent.PapyrusAddons, compiled, Path.Combine(addonScripts, BuildReceipt.ScriptsFile));
+                    foreach (var script in compiled)
+                    {
+                        files.Add("Scripts/" + Path.GetFileName(script), script);
+                    }
+                }
                 AddNotices(root, files, dependencyNotices);
                 destination = Path.Combine(output, addon.ArchiveName);
                 pending.Add((PrepareZip(destination, files, metadata, timestamp, includeManifest: false), destination));

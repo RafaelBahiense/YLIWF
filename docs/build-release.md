@@ -86,6 +86,11 @@ Each add-on gets independently named binary and source ZIPs. Source archives
 contain the full build snapshot; add-on source copies preserve a stable download
 for each add-on release even when the core version stays unchanged.
 
+An add-on's optional `papyrus/` directory is discovered with its manifest. Full
+script builds compile it against the staged core bridge and configured imports;
+packaging requires matching receipts and includes those PEX files only in that
+add-on's binary ZIP.
+
 To repackage an external DLL:
 
 ```powershell

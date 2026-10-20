@@ -62,16 +62,23 @@ public static partial class PapyrusCompiler
         var stage = Path.Combine(Path.GetFullPath(output), ".staging-" + Guid.NewGuid().ToString("N"));
         var core = Path.Combine(stage, "Source/Scripts");
         StageCore(Path.Combine(root, ProjectPaths.CoreScripts), core);
-        var groups = new List<(string Source, string Staging, string Destination, string[] Imports)> {
-            (core, Path.Combine(stage, ProjectPaths.ScriptsOutput), Path.Combine(output, ProjectPaths.ScriptsOutput), new[] { core }.Concat(imports).ToArray())
+        var groups = new List<(string Source, string Staging, string Destination, string[] Imports, BuildComponent Component)> {
+            (core, Path.Combine(stage, ProjectPaths.ScriptsOutput), Path.Combine(output, ProjectPaths.ScriptsOutput), new[] { core }.Concat(imports).ToArray(), BuildComponent.PapyrusCore)
         };
         if (patch)
         {
             var source = Path.Combine(root, ProjectPaths.Patch3DnpcScripts);
-            groups.Add((source, Path.Combine(stage, ProjectPaths.Patch3DnpcOutput), Path.Combine(output, ProjectPaths.Patch3DnpcOutput), new[] { source, core }.Concat(imports).ToArray()));
+            groups.Add((source, Path.Combine(stage, ProjectPaths.Patch3DnpcOutput), Path.Combine(output, ProjectPaths.Patch3DnpcOutput), new[] { source, core }.Concat(imports).ToArray(), BuildComponent.Papyrus3Dnpc));
+        }
+        var addonInputs = BuildReceipt.CaptureInputs(root, BuildComponent.PapyrusAddons);
+        foreach (var addon in Addon.Read(root).Where(addon => Directory.Exists(addon.PapyrusSource)))
+        {
+            var relative = Path.Combine("addons", addon.Name, ProjectPaths.ScriptsOutput);
+            groups.Add((addon.PapyrusSource, Path.Combine(stage, relative), Path.Combine(output, relative),
+                new[] { addon.PapyrusSource, core }.Concat(imports).ToArray(), BuildComponent.PapyrusAddons));
         }
         var completed = new List<(string[] Outputs, string Destination)>();
-        foreach (var (source, staging, destination, groupImports) in groups)
+        foreach (var (source, staging, destination, groupImports, _) in groups)
         {
             Directory.CreateDirectory(staging);
             var arguments = new List<string> {
@@ -91,9 +98,10 @@ public static partial class PapyrusCompiler
         for (var i = 0; i < completed.Count; ++i)
         {
             var (outputs, _) = completed[i];
-            var component = i == 0 ? BuildComponent.PapyrusCore : BuildComponent.Papyrus3Dnpc;
+            var component = groups[i].Component;
             var receipt = Path.Combine(Path.GetDirectoryName(outputs[0])!, BuildReceipt.ScriptsFile);
-            BuildReceipt.Write(root, component, i == 0 ? coreInputs : patchInputs!, outputs, receipt);
+            BuildReceipt.Write(root, component, component == BuildComponent.PapyrusCore ? coreInputs :
+                component == BuildComponent.Papyrus3Dnpc ? patchInputs! : addonInputs, outputs, receipt);
         }
         // A failure in an optional patch must not publish the already compiled core.
         foreach (var (outputs, destination) in completed)
