@@ -12,6 +12,7 @@
 #include "common/Strings.h"
 #include "settings/Settings.h"
 #include "adapters/Adapters.h"
+#include "followers/QuestPolicies.h"
 
 #include <mutex>
 #include <limits>
@@ -177,6 +178,11 @@ namespace mod::controller {
                 storage::Get().ticket == std::numeric_limits<std::int32_t>::max())
                 return false;
             auto* actor = storage::Actor(command.actor);
+            if (!quest_policies::AllowsOperation(actor, command.operation)) {
+                logger::warn("Quest policy rejected operation {}: {}", static_cast<int>(command.operation),
+                             quest_policies::Inspect(actor).reason);
+                return false;
+            }
             const auto slots = Slots(object);
             const auto animal = Snapshot(Read<RE::BGSRefAlias*>(object, properties::AnimalAlias), 1);
             const auto request = CaptureRequest(object, static_cast<int>(command.operation), actor, command.selected,
@@ -189,6 +195,15 @@ namespace mod::controller {
                             : Build(slots, animal, request);
             if (!plan.accepted || plan.steps.size() > 63)
                 return false;
+            for (const auto& step : plan.steps) {
+                if (step.effect == Effect::Waiting && command.operation != Operation::QuestRelease &&
+                    !quest_policies::AllowsOperation(RE::TESForm::LookupByID<RE::Actor>(step.actor), command.operation))
+                    return false;
+                if (step.effect == Effect::SwapPrimary && step.otherActor &&
+                    !quest_policies::Allows(RE::TESForm::LookupByID<RE::Actor>(step.otherActor),
+                                            quest_policies::Action::Follow))
+                    return false;
+            }
             if (std::ranges::any_of(plan.steps, [](const auto& step) {
                     return (step.actor && adapters::Owns(step.actor)) ||
                            (step.otherActor && adapters::Owns(step.otherActor));
@@ -691,7 +706,10 @@ namespace mod::controller {
             std::ranges::any_of(slots, [](const auto& slot) { return !slot.valid || (slot.occupied && !slot.actor); }))
             return {0, "Follower bindings changed; refresh and check installation diagnostics."};
         auto targets = PartyTargets(slots, action);
-        std::erase_if(targets, [](auto actor) { return adapters::Owns(actor); });
+        std::erase_if(targets, [action](auto actor) {
+            return adapters::Owns(actor) ||
+                   !quest_policies::AllowsOperation(RE::TESForm::LookupByID<RE::Actor>(actor), action);
+        });
         if (targets.empty())
             return {0, "No eligible registered followers."};
         auto queue = storage::Get().queue;

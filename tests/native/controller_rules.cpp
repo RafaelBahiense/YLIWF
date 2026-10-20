@@ -126,6 +126,31 @@ namespace {
     };
 
     static_assert(mod::command_rules::Capacity == 16);
+
+    TEST_CASE("Quest release dismisses its managed actor and can explicitly clear old external follower markers") {
+        Game game;
+        REQUIRE(game.Run(Operation::Recruit, 100));
+        REQUIRE(game.Run(Operation::Recruit, 101));
+        auto release = game.For(Operation::QuestRelease, 100);
+        REQUIRE(game.Execute(Build(game.slots, {}, release)));
+        CHECK_FALSE(Find(game.slots, 100));
+        CHECK(Find(game.slots, 101));
+        CHECK_FALSE(game.actors[100].teammate);
+        release = game.For(Operation::QuestRelease, 200);
+        release.orphan = true;
+        const auto orphan = Build(game.slots, {}, release);
+        REQUIRE(orphan.accepted);
+        CHECK(std::ranges::none_of(orphan.steps, [](const auto& step) { return step.effect == Effect::Assign; }));
+        release.orphan = false;
+        CHECK_FALSE(Build(game.slots, {}, release).accepted);
+        mod::controller::storage::State state;
+        state.sequence = 1;
+        state.queue.push_back({1, Operation::QuestRelease, 200, -1, 0, 0, 0});
+        mod::controller::storage::State decoded;
+        REQUIRE(mod::controller::storage::DecodeState(mod::controller::storage::EncodeState(state), decoded));
+        CHECK(decoded == state);
+    }
+
     static_assert(static_cast<int>(mod::command_rules::State::Verified) == 4 &&
                   static_cast<int>(mod::command_rules::State::Failed) == 5);
 

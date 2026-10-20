@@ -1,3 +1,4 @@
+#include "followers/QuestPolicies.h"
 #include "ShieldDefender.h"
 #include "ShieldDefenderRules.h"
 #include "CombatRoles.h"
@@ -279,9 +280,10 @@ namespace mod::shield_defender {
                 continue;
             active.insert(actor->GetFormID());
             auto status = Prepare(actor);
+            const bool allowed = quest_policies::Allows(actor, quest_policies::Action::Combat);
             std::lock_guard lock(mutex);
             auto& control = controls[actor->GetFormID()];
-            control.requested = status.empty();
+            control.requested = status.empty() && allowed;
             if (!status.empty())
                 control.status = std::move(status);
             if (control.loggedStatus != control.status) {

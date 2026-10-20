@@ -1,3 +1,4 @@
+#include "followers/QuestPolicies.h"
 #include "CombatOrders.h"
 #include "CombatOrderRules.h"
 #include "CombatPrevention.h"
@@ -75,6 +76,8 @@ namespace mod::combat_orders {
         }
 
         bool Apply(RE::Actor* actor, bool adapted) {
+            if (!quest_policies::Allows(actor, quest_policies::Action::Movement))
+                return false;
             if (!actor || !actor->Is3DLoaded() || actor->IsDead() || actor->GetCurrentScene())
                 return false;
             if (actor->IsInCombat() && held.contains(actor->GetFormID())) {

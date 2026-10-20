@@ -20,8 +20,8 @@ reproducible source builds.
 
 Native sources and headers are grouped by subsystem: `followers`, `combat`,
 `formations`, `adapters`, `diagnostics`, `input`, `ui`, `settings` and `runtime`.
-Private headers sit beside their implementations. Shared helpers live in
-`src/native/common`; the PCH lives in `src/native/PCH.h`. Only public add-on
+Shared helpers live in `src/native/common`; the PCH lives in `src/native/PCH.h`.
+Private headers sit beside their implementations; only public add-on
 headers belong in `include/`.
 
 ## Gameplay rules and engine access
@@ -47,9 +47,8 @@ C++ owns follower policy, commands, timers and controller persistence.
 Small `YLIWF_Engine` adapters perform engine calls without dependable native
 equivalents and acknowledge completion.
 
-This reduces VM work while preserving interfaces used by quests and dialogue.
-Native/VM boundaries require clear ownership, completion checks and save/load
-testing. Performance gains require in-game measurement.
+Quest and dialogue interfaces remain compatible. Completion, save/load behavior
+and performance require in-game testing.
 
 ## Completion and persistence
 

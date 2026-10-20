@@ -13,10 +13,8 @@ I enjoyed SFF and wanted to learn Skyrim modding by building on it. After an
 architectural change broke my save, I started investigating its state and
 developing debugging and repair tools.
 
-This fork explores a framework centered on native code, with less work in the
-Papyrus VM. It also keeps behavior and plugin records in reviewable source and
-aims to make builds easy to reproduce. Its focus is a maintainable foundation
-for studying Skyrim modding and developing follower features.
+The framework moves controller work out of the Papyrus VM and keeps behavior
+and plugin records in reviewable source with reproducible builds.
 See [architecture](docs/architecture.md) for the design.
 
 ## Gameplay features
@@ -28,12 +26,13 @@ See [architecture](docs/architecture.md) for the design.
 - Configurable keyboard shortcuts, including Shift/Ctrl/Alt combinations, for
   party Follow/Wait, Stand down, following distance and travel formation.
 - Waiting core followers dismiss themselves after 72 in-game hours.
-- Party-wide Stand down: keep following without fighting or healing, avoiding nearby enemies; toggle off
-  to restore normal behavior. Quest restrictions retain priority.
+- Party-wide Stand down: keep following and avoid nearby enemies without fighting.
+  Healers may heal themselves and other followers, excluding the player.
+  Quest restrictions retain priority.
 - Primary-slot selection without dismissal, for integrations such as Blades recruitment.
 - Follower homes and idle sandboxing.
 - Close, Normal or Far following distance, globally or per follower.
-- Travel formations: Column follows your route, Line places followers
+- [Travel formations](docs/formations.md): Column follows your route, Line places followers
   beside you, and Wedge forms behind you with the player at its tip. Slots adjust to
   nearby navigable ground; ordinary following resumes in combat, interiors and settlements.
 - Essential status, friendly-fire protection and crossfire protection.
@@ -65,18 +64,23 @@ unless a dedicated add-on supports them.
 
 ## Add-ons
 
-Install optional add-on ZIPs alongside a compatible core. Add-ons have independent
-release versions; their required adapter API version defines compatibility.
+Install optional add-on ZIPs alongside a compatible core. See each add-on's
+README for requirements and installation.
 
-- **[Serana](docs/follower-adapters.md#serana-example)** (`-Serana-<version>.zip`):
+- **[Serana](src/addons/serana/README.md)** (`-Serana-<version>.zip`):
   Makes Serana available to YLIWF's follower controls, combat protection and travel formations when her Dawnguard quests allow them.
+- **[Fura FDE](src/addons/fura-fde/README.md)** (`-FuraFDE-<version>.zip`):
+  Routes FDE Fura's recruitment and dialogue into the core follower controller,
+  with normal slots, distance and combat roles while respecting her quests.
+  Requires **Follower Dialogue Expansion – Fura Bloodmouth** (`FDE Fura.esp`)
+  and a compatible **YLIWF core**.
 
 ## Configuration
 
 Use Settings or edit `Data/SKSE/Plugins/YouLeadIWillFollow.ini`.
-Assign shortcuts in **Hotkeys** and save them. All start unbound and work only
+Assign shortcuts in **Hotkeys**. All start unbound and work only
 during gameplay. Dismiss All remains menu-only.
-The mod creates a missing INI; releases omit it to preserve your settings.
+The mod creates the INI when missing; installing an update preserves your settings.
 Invalid values fall back to [defaults](assets/settings.ini).
 Click **Save** to persist menu settings. In MO2, keep the generated INI in a
 separate settings mod.

@@ -1,3 +1,4 @@
+#include "followers/QuestPolicies.h"
 #include "common/RecordNames.h"
 #include "common/PapyrusNames.h"
 #include "diagnostics/Debug.h"
@@ -410,6 +411,14 @@ namespace mod::debug {
                     continue;
                 auto* ref = static_cast<RE::BGSRefAlias*>(alias)->GetReference();
                 auto row = ActorState(ref ? ref->As<RE::Actor>() : nullptr);
+                if (auto* actor = ref ? ref->As<RE::Actor>() : nullptr) {
+                    const auto policy = quest_policies::Inspect(actor);
+                    row.questRestriction = policy.reason;
+                    row.questCommands = 0;
+                    for (unsigned command = 0; command < 3; ++command)
+                        if (!(policy.blocked & yliwf::policy::Bit(static_cast<quest_policies::Action>(command + 1))))
+                            row.questCommands |= 1u << command;
+                }
                 row.aliasID = alias->aliasID;
                 row.aliasName = alias->aliasName.c_str();
                 if (ref && !row.formID) {

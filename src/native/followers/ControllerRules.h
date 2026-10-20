@@ -37,7 +37,8 @@ namespace mod::controller_rules {
         DialogueFollow = 24,
         DialogueWait = 25,
         DialogueDismiss = 26,
-        PromotePrimary = 27
+        PromotePrimary = 27,
+        QuestRelease = 28
     };
     enum class Effect : std::int32_t {
         CancelTimer = 1,
@@ -118,7 +119,7 @@ namespace mod::controller_rules {
             case Operation::ReservedClearDead:
                 return false;
             default:
-                return operation >= Operation::Sync && operation <= Operation::PromotePrimary;
+                return operation >= Operation::Sync && operation <= Operation::QuestRelease;
         }
     }
 
@@ -268,6 +269,8 @@ namespace mod::controller_rules {
         if (op == Operation::Sync || op == Operation::Recruit || op == Operation::Adopt)
             Sync(plan, slots);
         auto* own = Find(slots, request.actor);
+        if (op == Operation::QuestRelease)
+            op = own ? Operation::Dismiss : Operation::Release;
         const auto actor = request.actor;
         auto reject = [&]() {
             plan.accepted = false;

@@ -12,6 +12,9 @@ Bool Function DismissAnimal() Global Native
 
 ; Follower integrations and dialogue fragments.
 Bool Function DismissActor(Actor follower, Int messageType = 0, Int sayLine = 1) Global Native
+; Only a registered quest-policy owner may release its actor during quest locks.
+Bool Function ReleaseActorForQuest(Actor follower, Quest owner) Global Native
+Bool Function HasQuestPolicy(Actor follower, Quest owner) Global Native
 Bool Function WaitActor(Actor follower) Global Native
 Bool Function FollowActor(Actor follower) Global Native
 Bool Function IsManagedFollower(Actor follower) Global Native

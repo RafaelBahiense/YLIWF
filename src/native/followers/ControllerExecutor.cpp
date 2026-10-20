@@ -13,6 +13,7 @@
 #include "runtime/DeadlineScheduler.h"
 #include "adapters/Adapters.h"
 #include "followers/FollowDistance.h"
+#include "followers/QuestPolicies.h"
 #include "formations/Formation.h"
 #include "combat/Healer.h"
 #include "combat/ShieldDefender.h"
@@ -648,6 +649,19 @@ namespace mod::controller::executor {
                        Target(nullptr, ContextData().quest, nullptr), -1, message, sayLine, 0);
         }
 
+        bool HasQuestPolicy(RE::StaticFunctionTag*, RE::Actor* actor, RE::TESQuest* owner) {
+            return owner && quest_policies::CanRelease(actor, owner);
+        }
+
+        RE::BSScript::LatentStatus ReleaseActorForQuest(RE::BSScript::Internal::VirtualMachine* vm, RE::VMStackID stack,
+                                                        RE::StaticFunctionTag* tag, RE::Actor* actor,
+                                                        RE::TESQuest* owner) {
+            if (!owner || !quest_policies::CanRelease(actor, owner))
+                return RE::BSScript::kFailed;
+            return Run(vm, stack, tag, ContextData().quest, static_cast<int>(Operation::QuestRelease), actor, -1, 0, 0,
+                       0);
+        }
+
         RE::BSScript::LatentStatus DismissActor(RE::BSScript::Internal::VirtualMachine* vm, RE::VMStackID stack,
                                                 RE::StaticFunctionTag* tag, RE::Actor* actor, int message,
                                                 int sayLine) {
@@ -761,6 +775,8 @@ namespace mod::controller::executor {
         RegisterLatent<bool>(vm, "DismissFollower", DismissFollower);
         RegisterLatent<bool>(vm, "DismissAnimal", DismissAnimal);
         RegisterLatent<bool>(vm, "DismissActor", DismissActor);
+        RegisterLatent<bool>(vm, "ReleaseActorForQuest", ReleaseActorForQuest);
+        vm->RegisterFunction("HasQuestPolicy", mod::info::NativeScript, HasQuestPolicy);
         RegisterLatent<bool>(vm, "WaitActor", WaitActor);
         RegisterLatent<bool>(vm, "SetHome", SetHome);
         RegisterLatent<bool>(vm, "FollowActor", FollowActor);

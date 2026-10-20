@@ -1,8 +1,8 @@
 # Combat roles
 
 Choose a role under **Followers → Combat role preference** in the SKSE menu.
-Roles are available for YLIWF-managed humanoid followers. Quest-managed followers,
-including Serana, do not support role assignment (yet).
+Roles are available for core-managed humanoid followers and add-on followers
+whose add-ons implement role support.
 
 ## Available roles
 
@@ -65,7 +65,7 @@ the player or area spells. They remain passive even when escape fails.
 Skyrim controls attack, block and bash timing. The style applies to the follower's
 active combat controller; shared NPC records stay unchanged. Clearing the role or
 losing the required equipment returns control to ordinary combat AI. Equipment is
-not locked. Guarding a particular ally and taunts are not implemented.
+not locked.
 Combat mods may trigger dodges independently of these combat-style preferences.
 Requiem's perks, stamina costs and animation restrictions remain in effect.
 

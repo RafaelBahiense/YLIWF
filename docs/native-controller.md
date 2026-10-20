@@ -22,6 +22,14 @@ Papyrus adapters handle remaining engine APIs. They validate the ticket before
 acting and acknowledge afterward, without follower policy or their own queue.
 `YLIWF_SKSE` exports only maintained script entrypoints and logging helpers.
 
+Core-owned followers can have read-only quest restrictions through
+`QuestPolicies` and the separate `FollowerPolicy.h` API. Admission and execution
+recheck restrictions; main-thread movement and combat updates respect them.
+`ReleaseActorForQuest` validates the registered quest owner before queueing
+`QuestRelease` (operation 28). It releases the explicit actor through the normal
+verified transaction even when player dismissal is restricted. It never adopts
+an unmanaged follower or selects the primary as a fallback.
+
 ## Registry and saved ABI
 
 `DialogueFollower` aliases are the roster: primary 0, animal 1, extras 2–8.
@@ -48,8 +56,7 @@ execution; an unavailable speaker hint can be cleared. Bounded invalid or
 unsupported records remain blocked diagnostics when saved again. Recovery needs
 the original save pair and matching build, not another save's load-order table.
 
-Extra aliases and mod globals resolve from the canonical plugin; aliases are
-the sole authoritative roster.
+Extra aliases and mod globals resolve from the canonical plugin.
 
 ## Requests and completion
 
@@ -64,6 +71,8 @@ dismissal. Up to 32 callers retain stack, function, script and object identity.
 Registration precedes execution; results return only after the original stack
 suspends. Identity checks prevent resuming a reused stack, and pending results
 outlive rolling receipt history.
+Missing or reused caller stacks are discarded without replaying their commands;
+live stacks in a VM transition remain pending.
 
 Activation requests count refresh only. Explicit reconciliation also cleans
 dead slots and promotes followers. Background success preserves command feedback.
@@ -84,7 +93,7 @@ Dismissal saves its remaining two-second delay, excluding paused time.
 Waiting deadlines are 72 game hours ahead; follow, cancel and clear remove them.
 Timers enqueue ordinary commands after checking the saved deadline.
 
-The scheduler sleeps when idle and posts main-thread work when needed.
+The scheduler sleeps when no work or adapter observation is needed and posts main-thread work otherwise.
 Its thread never reads engine/VM state. Menu snapshots refresh independently,
 only while visible.
 
@@ -114,7 +123,7 @@ redispatched because of loading or VM pressure. Caller identities are checked
 against the loaded VM. Returning to the main menu stops scheduling.
 
 After 30 unpaused seconds without progress, diagnostics retain ownership and
-report an unknown outcome. Timeout never permits replay or overlapping repair.
+report an unknown outcome, blocking replay and overlapping repair.
 Invalid saved phases and caller tables remain blocked.
 
 Install matching DLL/PEX files and upgrade while idle. Keep `.ess` and `.skse`

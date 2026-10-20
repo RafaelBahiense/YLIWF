@@ -196,7 +196,8 @@ namespace {
     void RenderFollowerCommands(const mod::debug::Follower& row, const mod::debug::Snapshot& state) {
         const bool canDirect = CanRequest(state, mod::debug::Action::Follow) && !row.dead;
         const auto allowed = [&](std::uint32_t command) {
-            return row.adapterName.empty() || (row.adapterCommands & (1u << command));
+            return (row.questCommands & (1u << command)) &&
+                   (row.adapterName.empty() || (row.adapterCommands & (1u << command)));
         };
         const bool canFollow = canDirect && allowed(0), canWait = canDirect && allowed(1);
         BeginDisabled(!canFollow);
@@ -366,6 +367,8 @@ namespace {
         RenderFollowerCommands(row, state);
         RenderFollowerDistance(row, state);
         RenderCombatRole(row, state);
+        if (!row.questRestriction.empty())
+            ImGuiMCP::TextWrapped("%s", row.questRestriction.c_str());
         if (!row.adapterName.empty()) {
             ImGuiMCP::Text("Controller: %s", row.adapterName.c_str());
             if (!row.adapterReason.empty())

@@ -37,9 +37,8 @@ Invoke-ModTools @('inspect', 'build/plugin/You Lead, I Will Follow.esp')
 ./lint.ps1 -NativeAnalysis         # Also run MSVC static analysis
 ```
 
-C# uses SDK analyzers and `dotnet format` with `.editorconfig`, including
-unused imports, initializers and generated-regex suggestions. Unfixable findings
-need a manual change. Compiler/analyzer warnings fail lint; unavailable NuGet
+C# uses SDK analyzers and `dotnet format` with `.editorconfig`.
+Compiler/analyzer warnings fail lint; unavailable NuGet
 vulnerability data (`NU1900`) remains a warning.
 
 C++ formatting uses `.clang-format` and Visual Studio's existing Clang-Format;
@@ -49,6 +48,4 @@ tests, and treats findings as errors. Its separate objects leave release flags
 and DLLs untouched; dependency code is excluded from analysis diagnostics.
 Use `-Configuration Debug` to analyze an existing Debug build.
 
-VS Code has **Lint C# and C++**; Windows CI also runs native analysis. Checks
-never rewrite source unless `-Fix` is specified. Review fixes and run relevant
-tests afterward. No additional tool installation is performed.
+VS Code provides **Lint C# and C++**. Review `-Fix` changes and run relevant tests.

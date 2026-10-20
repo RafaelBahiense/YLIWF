@@ -1,11 +1,13 @@
 # Native follower add-ons
 
-An add-on is a separate SKSE DLL implementing
-[FollowerAdapter.h](../include/FollowerAdapter.h). It delegates commands to
-a follower's existing controller and reports completion.
+Add-ons integrate quest-managed followers through either an external controller
+([FollowerAdapter.h](../include/FollowerAdapter.h)) or restrictions on a core-owned
+follower ([FollowerPolicy.h](../include/FollowerPolicy.h)). The external API
+delegates commands to the follower's controller and reports completion;
+[core-owned policies](#policies-for-core-owned-followers) only restrict core actions.
 See the [available add-ons](../README.md#add-ons).
 
-## Ownership and scope
+## External ownership and scope
 
 Active followers appear in Followers and participate in party commands when
 allowed. They retain their owner's state, aliases and recruitment.
@@ -50,15 +52,11 @@ Only fixed-width values, pointers and caller-owned buffers cross the x64 ABI.
 No STL/engine objects, allocation ownership or exceptions cross it.
 Invalid versions, tables, IDs, states and capabilities are rejected.
 
-The mandatory table prefixes are `BaseAPISize` and `BaseAdapterSize`.
-Optional callbacks are `stateChanged`, `setFollowDistance`, `canRecruitThroughDialogue`
-and `canReceiveCombatProtection`, plus the paired travel callbacks and `setStandDownPackage`.
-Use `CanNotifyState`, `HasFollowDistance`, `HasRecruitmentEligibility` and `HasCombatProtection` before
-accessing optional callbacks.
-Use `HasTravelFormation` before accessing either travel callback. Older v1 tables
-remain valid and retain ordinary movement.
-Use `HasStandDown` before accessing the stand-down callback; unsupported adapters
-remain under their own controller and are reported as unavailable for that order.
+The mandatory table prefixes are `BaseAPISize` and `BaseAdapterSize`. Check optional
+callbacks with `CanNotifyState`, `HasFollowDistance`, `HasRecruitmentEligibility`,
+`HasCombatProtection`, `HasTravelFormation` and `HasStandDown` before access.
+Travel requires both callbacks. Older v1 tables remain valid; unsupported features
+stay under the owner's controller and Stand down reports them as unavailable.
 
 Call `stateChanged(registration)` after external state changes. It is thread-safe;
 the host coalesces notifications and checks state/counts on the main thread.
@@ -141,7 +139,6 @@ metadata, applies shared configuration and adds DLLs to
 `native_plugins`. ModTools records hashes and packages separate ZIPs with notices.
 Add-on `*_test.cpp` files become separate CTest executables in `native_tests`.
 Generic host/API tests live under the root `tests/` folder.
-No per-add-on build-script edits are needed.
 Full builds require all declared DLLs; repackaging includes only supplied DLLs
 with matching source-manifest hashes.
 
@@ -152,3 +149,21 @@ host APIs are rejected at runtime. Binary and source ZIPs use the add-on's name
 and version, independent of the core ZIP filename.
 
 External authors may use their own SKSE project with the SDK header.
+`PapyrusController.h` supplies optional bound-controller helpers.
+
+## Policies for core-owned followers
+
+Compatibility patches that replace a follower's scripts may route recruitment
+into the core instead of registering an external owner. `FollowerPolicy.h`
+exposes `YLIWF_GetFollowerPolicyAPI(1)` independently of the adapter ABI. Register
+one stable provider at SKSE PostLoad; its read-only inspection runs on the main
+thread and returns a blocked-action mask, a stable owner quest FormID and a reason.
+It must neither execute Papyrus nor modify game state. Duplicate claims and invalid
+results block control. Providers remain loaded for the session.
+
+The core checks policies at command execution and before taking movement/combat
+control. Quest release validates the registered owner and uses a distinct saved
+operation, preserving existing operation IDs. It bypasses user-command locks only
+for the owner's explicit release and never authorizes recruitment or alias repair.
+Use `YLIWF_SKSE.HasQuestPolicy(actor, owner)` before a replacement script delegates
+control. These policies do not add external followers or consume adapter slots.

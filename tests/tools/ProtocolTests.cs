@@ -34,7 +34,8 @@ public sealed partial class ProtocolTests : TestWorkspace
         "DialogueFollow",
         "DialogueWait",
         "DialogueDismiss",
-        "PromotePrimary"
+        "PromotePrimary",
+        "QuestRelease"
     ];
 
     private static readonly string[] ExpectedEffects =

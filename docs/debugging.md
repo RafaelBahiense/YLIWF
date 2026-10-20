@@ -9,7 +9,7 @@ Open **SKSE Menu Framework → You Lead, I Will Follow**.
 **Log mod flow** is independent; both settings default to off.
 
 **Stand down (everyone)** keeps followers following at their selected distance without fighting.
-Healers can heal themselves and other followers, excluding the player and area spells.
+See [combat roles](combat-roles.md#healer-behavior) for healing during Stand down.
 Nearby hostiles trigger movement toward safer navmesh positions;
 followers may temporarily widen their distance to avoid the fight. Explicit Wait orders
 stay in effect. Uncheck it for normal behavior. It resets on save load and does not change
@@ -26,8 +26,8 @@ Follow All/Wait All target unique living humanoids. Dismiss All includes dead
 registrations and requires confirmation. Location distance is straight-line;
 it may be unavailable for unloaded actors or different interiors/worldspaces.
 
-Snapshots refresh on opening Followers/Debug, after state changes and once per
-second while visible. Closed menus, Settings and other mods' pages do not poll.
+Snapshots refresh when Followers/Debug opens, after state changes and once per
+second while visible.
 
 Dismiss, clear, recruit and release require confirmation. Close paused menus
 to allow execution. Feedback reports verified completion, not queue acceptance.
@@ -84,6 +84,10 @@ Repairs do not reset quests, change stages or resurrect actors.
 Original essential/protected flags can be restored only while their unsaved
 native cache exists.
 
+For persistent circling with formations disabled, use **Followers → Diagnostics
+and repairs → Clear movement offset**. It clears that actor's offset constraint,
+including one assigned by another mod, and logs completion even with flow logging off.
+
 ## Repair missing bindings
 
 For missing or incorrect `pFollowerAlias`/`pPlayerFollowerCount` properties:
@@ -133,3 +137,8 @@ Run `build.ps1 -Target Test`, then check in game:
 
 Keep matching `.ess`/`.skse` pairs. Test under VM load: delayed work must complete
 without replay, and repairs must leave unrelated aliases and quest stages intact.
+
+For Stand down, enable flow logging. `CombatOrder.SuppressedUpdates` confirms
+the combat hook ran; `CombatOrder.ReenteredCombat` records remaining failures.
+The UI retains observed re-entry failures until the order is reapplied or a
+save is loaded. Counters cannot prove that no attack occurred between samples.

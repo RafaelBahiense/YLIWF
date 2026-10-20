@@ -81,6 +81,8 @@ namespace mod::debug {
         std::string location = "Unknown", distanceUnavailable;
         std::string adapterName, adapterStatus, adapterReason;
         std::uint32_t adapterCommands = 0;
+        std::uint32_t questCommands = 7;
+        std::string questRestriction;
         std::int32_t followDistance = 1;
         bool individualDistance = false, distanceAvailable = true;
         combat_roles::Snapshot combatRole;

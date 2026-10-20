@@ -1,3 +1,4 @@
+#include "followers/QuestPolicies.h"
 #include "formations/Formation.h"
 #include "combat/CombatOrders.h"
 #include "formations/FormationRules.h"
@@ -111,6 +112,8 @@ namespace mod::formation {
         }
 
         bool Eligible(RE::Actor* actor, RE::Actor* player) {
+            if (!quest_policies::Allows(actor, quest_policies::Action::Movement))
+                return false;
             const auto& context = controller::detail::GetContext();
             const auto* package = actor ? actor->GetCurrentPackage() : nullptr;
             const bool external = actor && adapters::Owns(actor->GetFormID());

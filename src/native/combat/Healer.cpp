@@ -1,3 +1,4 @@
+#include "followers/QuestPolicies.h"
 #include "combat/Healer.h"
 #include "combat/CombatOrders.h"
 #include "combat/HealingRules.h"
@@ -66,6 +67,8 @@ namespace mod::healer {
         }
 
         bool CanControl(RE::Actor* actor) {
+            if (!quest_policies::Allows(actor, quest_policies::Action::Combat))
+                return false;
             auto* currentFaction = controller::detail::GetContext().currentFaction;
             auto* ui = RE::UI::GetSingleton();
             if (!Available(actor) || !actor->IsPlayerTeammate() || actor->GetCurrentScene() || actor->IsOnMount() ||

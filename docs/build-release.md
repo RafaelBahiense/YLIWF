@@ -29,12 +29,7 @@ Build also accepts `-Flags` and `-ImportDirectories`.
 ```powershell
 .\build.ps1
 .\build.ps1 -Target Native -Configuration Debug
-.\build.ps1 -Target Plugin
-.\build.ps1 -Target Scripts
-.\build.ps1 -Target Test
-.\build.ps1 -Target Verify
 .\lint.ps1
-.\build.ps1 -Target Package
 .\build.ps1 -Clean
 ```
 
@@ -59,11 +54,6 @@ add-on `tests/native/*_test.cpp` files are discovered automatically.
 `-Clean` resets native outputs while keeping binary caches.
 Failed Papyrus stages remain in `build/papyrus/.staging-*`.
 
-Add-ons are discovered from `src/addons/**/addon.json` and packaged separately
-as `YouLeadIWillFollow-<addon>-<addon-version>.zip`, with matching `-source.zip`
-archives and dependency notices. Supplied-DLL repackaging includes declared add-ons beside the core
-DLL only when their hashes match the source manifest.
-
 VS Code provides build/test tasks. Generate the matching compile database,
 select Release or Debug x64, install the Debug DLL, then use
 **Attach to Skyrim (native)** to select the game process.
@@ -82,9 +72,9 @@ and required adapter API version. Release versions have three or four numeric
 components within SKSE's packed limits (`255.255.4095.15`).
 
 Core outputs are `YouLeadIWillFollow-<version>.zip` and its `-source.zip`.
-Each add-on gets independently named binary and source ZIPs. Source archives
-contain the full build snapshot; add-on source copies preserve a stable download
-for each add-on release even when the core version stays unchanged.
+Manifests in `src/addons/**/addon.json` produce separate
+`YouLeadIWillFollow-<addon>-<addon-version>.zip` and `-source.zip` archives.
+Each source archive contains the full build snapshot and dependency notices.
 
 An add-on's optional `papyrus/` directory is discovered with its manifest. Full
 script builds compile it against the staged core bridge and configured imports;
@@ -96,6 +86,9 @@ To repackage an external DLL:
 ```powershell
 .\build.ps1 -Target Repackage -Dll 'C:\path\YouLeadIWillFollow.dll' -SourceArchive 'C:\path\matching-source.zip'
 ```
+
+Repackaging includes declared add-on DLLs beside the core DLL only when their
+hashes match the source manifest.
 
 Sources include the actual CommonLib checkout and vcpkg dependency sources.
 Restore missing sources before packaging cached binaries. Extracted source

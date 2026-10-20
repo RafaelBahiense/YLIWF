@@ -52,7 +52,7 @@ namespace mod::controller::storage {
     inline bool ValidCheckpoint(const wire_v1::Checkpoint& s) {
         using namespace wire_v1;
         using namespace mod::command_rules;
-        constexpr auto maximumOperation = static_cast<std::int32_t>(Operation::PromotePrimary);
+        constexpr auto maximumOperation = static_cast<std::int32_t>(Operation::QuestRelease);
         if (s.followerCount < 0 || s.followerCount > 8 || s.ticket < 0 || s.sequence < 0 || s.request < 0 ||
             s.debugTicket < 0 || s.operation < 0 || s.operation > maximumOperation || s.outcome < 0 || s.outcome > 5 ||
             !executor_rules::KnownPhase(static_cast<executor_rules::Phase>(s.phase)) ||
