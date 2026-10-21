@@ -100,6 +100,23 @@ For missing or incorrect `pFollowerAlias`/`pPlayerFollowerCount` properties:
 Repair validates quest structure and request identity. It cannot repair corrupt
 native co-save records or replay an unknown outcome.
 
+## Force package control
+
+Enable debug options, then use **Followers → Diagnostics and repairs → Force
+YLIWF packages (debug)** for a core-managed humanoid follower. It prioritizes
+that actor's YLIWF alias packages over other controllers and remembers displaced
+temporary packages. Diagnostics show the previous, requested and running packages.
+
+Scenes and quest restrictions suspend the override. Turning it off restores a
+displaced temporary package only if it still exists, its conditions hold and no
+new interrupt occupies the actor; otherwise Skyrim reevaluates the unchanged
+package lists. It does not restore an interrupted procedure's exact progress.
+Dismissal, loading a save and disabling debug options clear the override.
+
+Other controllers can still change actor values or issue commands. Verify Follow,
+Wait, distance, formations and combat roles, then turn the override off and check
+that ordinary package selection resumes.
+
 ## Writing flow logs
 
 Native formatting checks the flag before running:

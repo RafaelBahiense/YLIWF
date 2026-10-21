@@ -111,6 +111,7 @@ namespace mod::debug {
             row.baseID = base ? base->GetFormID() : 0;
             row.cellID = cell ? cell->GetFormID() : 0;
             row.packageID = package ? package->GetFormID() : 0;
+            row.packageControl = package_control::Inspect(actor);
             row.dead = actor->IsDead();
             row.teammate = actor->IsPlayerTeammate();
             row.currentFaction = context.currentFaction && actor->IsInFaction(context.currentFaction);
@@ -139,6 +140,10 @@ namespace mod::debug {
                 << " protectionSpell=" << row.crossfire << '\n'
                 << "    cell=" << Form(actor->GetParentCell()) << " package=" << Form(actor->GetCurrentPackage())
                 << '\n';
+            if (row.packageControl.enabled)
+                out << fmt::format("    packageOverride={} requested={:08X} previous={:08X} savedInterrupt={:08X}\n",
+                                   row.packageControl.status, row.packageControl.requestedPackage,
+                                   row.packageControl.previousPackage, row.packageControl.savedInterrupt);
             if (const auto* process = actor->GetActorRuntimeData().currentProcess) {
                 out << "    processIgnoringCombat=" << process->ignoringCombat;
                 if (const auto* state = process->middleHigh)

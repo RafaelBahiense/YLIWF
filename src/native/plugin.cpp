@@ -13,6 +13,7 @@
 #include "followers/ControllerStorage.h"
 #include "adapters/Adapters.h"
 #include "followers/FollowDistance.h"
+#include "followers/PackageControl.h"
 #include "combat/CombatRoles.h"
 #include "formations/Formation.h"
 #include "combat/Healer.h"
@@ -83,6 +84,7 @@ namespace {
             ResolveForm<RE::TESFaction>(0x996, kRequiredPluginName, mod::record_names::CombatRole));
         mod::healer::Configure();
         mod::combat_orders::Configure();
+        mod::package_control::Install();
         g_friendlyFireSpell =
             ResolveForm<RE::SpellItem>(0x800, kRequiredPluginName, mod::record_names::ProtectionSpell);
         mod::adapters::ConfigureCombatProtection(g_friendlyFireSpell);
@@ -518,6 +520,8 @@ namespace {
         RE::BSEventNotifyControl ProcessEvent(const RE::TESObjectLoadedEvent* event,
                                               RE::BSTEventSource<RE::TESObjectLoadedEvent>*) override {
             if (event) {
+                if (!event->loaded)
+                    mod::package_control::Withdraw(event->formID);
                 auto* actor = RE::TESForm::LookupByID<RE::Actor>(event->formID);
                 mod::formation::Observe(actor);
                 if (event->loaded && actor) {

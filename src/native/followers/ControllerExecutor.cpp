@@ -14,6 +14,7 @@
 #include "adapters/Adapters.h"
 #include "followers/FollowDistance.h"
 #include "followers/QuestPolicies.h"
+#include "followers/PackageControl.h"
 #include "formations/Formation.h"
 #include "combat/Healer.h"
 #include "combat/ShieldDefender.h"
@@ -253,6 +254,7 @@ namespace mod::controller::executor {
                     return true;
                 }
                 case Effect::Release:
+                    package_control::Release(actor);
                     if (ContextData().restoreProtection)
                         ContextData().restoreProtection(actor);
                     if (ContextData().currentFaction)
@@ -293,14 +295,20 @@ namespace mod::controller::executor {
                 case Effect::StartTimer:
                     return Timer(id, true);
                 case Effect::SwapPrimary:
+                    package_control::Suspend(actor);
+                    package_control::Suspend(storage::Actor(step.otherActor));
                     return Bridge(object, Phase::Engine, "SwapPrimary", Alias(ContextData().quest, 0), slot,
                                   static_cast<RE::TESObjectREFR*>(actor),
                                   static_cast<RE::TESObjectREFR*>(storage::Actor(step.otherActor)));
                 case Effect::Clear:
                 case Effect::HomeClear:
+                    if (effect == Effect::Clear && slot)
+                        package_control::Suspend(slot->GetActorReference());
                     return Bridge(object, Phase::Engine, "Clear", slot);
                 case Effect::Assign:
                 case Effect::HomeAssign:
+                    if (effect == Effect::Assign && slot)
+                        package_control::Suspend(slot->GetActorReference());
                     return Bridge(object, Phase::Engine, "Assign", slot, static_cast<RE::TESObjectREFR*>(actor));
                 case Effect::Teammate:
                     return Bridge(object, Phase::Engine, "Teammate", actor, argument == 1, true);
@@ -409,6 +417,7 @@ namespace mod::controller::executor {
 
             auto object = Object();
             if (!loaded || !object) {
+                package_control::Invalidate();
                 formation::Tick();
                 DeadlineScheduler().Set(formation::HasWork(), false, formation::HasWork());
                 return;
@@ -427,6 +436,8 @@ namespace mod::controller::executor {
                     : 0;
             RefreshClock();
             ReturnWaiters(object, 0, false);
+            if (!paused)
+                package_control::Tick();
             if (!paused) {
                 adapters::Tick(elapsed);
                 TimedOut();
@@ -475,12 +486,13 @@ namespace mod::controller::executor {
             if (!paused && combat_orders::Enabled)
                 combat_orders::Tick();
             const bool delay = storage::Get().active && storage::Active().phase == Phase::Delay;
-            const bool work = combat_orders::Enabled || formation::HasWork() || adapters::HasWork() ||
-                              adapters::NeedsObservation() || healer::NeedsObservation() ||
+            const bool work = package_control::HasWork() || combat_orders::Enabled || formation::HasWork() ||
+                              adapters::HasWork() || adapters::NeedsObservation() || healer::NeedsObservation() ||
                               shield_defender::NeedsObservation() || delay || countsDirty ||
                               !storage::Get().queue.empty() || !storage::Get().callers.empty() ||
                               std::ranges::any_of(storage::Get().deadlines, [](float time) { return time > 0; });
-            DeadlineScheduler().Set(work, delay && !paused, formation::HasWork() && !paused);
+            DeadlineScheduler().Set(work, delay && !paused,
+                                    (formation::HasWork() || package_control::HasWork()) && !paused);
         }
 
         RE::BSScript::LatentStatus Run(RE::BSScript::Internal::VirtualMachine*, RE::VMStackID stack,
@@ -731,6 +743,7 @@ namespace mod::controller::executor {
     }
 
     void Invalidate() {
+        package_control::Invalidate();
         combat_orders::Invalidate();
         formation::Invalidate();
         healer::Invalidate();

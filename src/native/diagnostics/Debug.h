@@ -2,6 +2,7 @@
 
 #include <fmt/format.h>
 #include "combat/CombatRoles.h"
+#include "followers/PackageControl.h"
 
 #include <atomic>
 #include <cstdint>
@@ -86,6 +87,7 @@ namespace mod::debug {
         std::int32_t followDistance = 1;
         bool individualDistance = false, distanceAvailable = true;
         combat_roles::Snapshot combatRole;
+        package_control::Snapshot packageControl;
         std::optional<double> distanceMeters;
         bool dead = false, teammate = false, currentFaction = false, potentialFaction = false;
         bool loaded = false, essential = false, protectedActor = false, crossfire = false;

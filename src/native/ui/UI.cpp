@@ -332,6 +332,24 @@ namespace {
             return;
         ImGuiMCP::Text("Slot %s (alias %u)", row.aliasName.c_str(), row.aliasID);
         ActorDiagnostics(row);
+        if (row.aliasID != 1) {
+            bool enabled = row.packageControl.enabled;
+            const bool disabled = !enabled && (!CanRequest(state, mod::debug::Action::Repair) || row.dead);
+            BeginDisabled(disabled);
+            if (ImGuiMCP::Checkbox("Force YLIWF packages (debug)", &enabled))
+                mod::package_control::Request(row.formID, row.aliasID, enabled, state.generation);
+            EndDisabled(disabled);
+            HelpMarker(
+                "Prioritizes this follower's YLIWF packages over other controllers and remembers displaced "
+                "temporary packages for restoration. Scenes and quest restrictions retain control. "
+                "Resets on dismissal, save load or disabling debug options.");
+            if (enabled) {
+                ImGuiMCP::TextWrapped("%s", row.packageControl.status.c_str());
+                ImGuiMCP::Text("Requested: %08X | Running: %08X | Previous: %08X | Saved interrupt: %08X",
+                               row.packageControl.requestedPackage, row.packageID, row.packageControl.previousPackage,
+                               row.packageControl.savedInterrupt);
+            }
+        }
         const bool canRepair = CanRequest(state, mod::debug::Action::Repair) && !row.dead;
         BeginDisabled(!canRepair);
         if (ImGuiMCP::Button("Repair flags / duplicates"))
