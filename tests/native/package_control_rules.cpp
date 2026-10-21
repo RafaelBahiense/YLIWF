@@ -56,3 +56,17 @@ TEST_CASE("Forced selection preserves alias package priority and stops evaluatin
     CHECK(Select(packages, [](auto) { return false; }) == 0);
     CHECK(Select(std::array<std::uint32_t, 0>{}, [](auto) { return true; }) == 0);
 }
+
+TEST_CASE("A specific policy package must resolve and pass its conditions without falling back to alias packages") {
+    yliwf::policy::State request;
+    request.blocked = 0;
+    request.packagePreference = yliwf::policy::PackagePreference::Requested;
+    request.package = 30;
+    const std::array<unsigned, 2> aliases{10, 20};
+    CHECK(SelectPolicy(request, aliases, [](auto id) { return id; }, [](auto id) { return id == 30; }) == 30);
+    CHECK(SelectPolicy(request, aliases, [](auto) { return 0u; }, [](auto) { return true; }) == 0);
+    CHECK(SelectPolicy(request, aliases, [](auto id) { return id; }, [](auto id) { return id == 10; }) == 0);
+    request.packagePreference = yliwf::policy::PackagePreference::Follower;
+    request.package = 0;
+    CHECK(SelectPolicy(request, aliases, [](auto) { return 0u; }, [](auto) { return true; }) == 10);
+}

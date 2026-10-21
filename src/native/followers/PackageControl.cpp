@@ -117,10 +117,26 @@ namespace mod::package_control {
         // This inherited TESObjectREFR virtual has the same index in SE/AE/VR.
         REL::Relocation<std::uintptr_t> table{RE::VTABLE_Character[0]};
         original = table.write_vfunc(0x49, Select);
-        logger::info("Debug per-actor alias-package selection hook installed");
+        logger::info("Per-actor alias-package selection hook installed");
     }
 
     void Tick() {
+
+        if (auto* quest = controller::detail::GetContext().quest; quest && quest_policies::NeedsObservation()) {
+            for (auto* entry : quest->aliases) {
+                auto* alias = entry && HumanSlot(entry->aliasID) ? skyrim_cast<RE::BGSRefAlias*>(entry) : nullptr;
+                auto* actor = alias ? alias->GetActorReference() : nullptr;
+                if (!actor || held.contains(actor->GetFormID()) || !Registration(actor) ||
+                    !yliwf::policy::HasPackageRequest(quest_policies::Inspect(actor)))
+                    continue;
+                Snapshot state;
+                state.cooperative = true;
+                if (auto* package = actor->GetCurrentPackage())
+                    state.previousPackage = package->GetFormID();
+                held.emplace(actor->GetFormID(), Held{actor->GetHandle(), std::move(state)});
+            }
+        }
+        
         for (auto it = held.begin(); it != held.end();) {
             auto actor = it->second.actor.get();
             if (!actor) {
@@ -129,11 +145,17 @@ namespace mod::package_control {
                 continue;
             }
             auto& state = it->second.snapshot;
+            if (state.enabled && !debug::OptionsEnabled.load()) {
+                Restore(actor.get(), state);
+                state.enabled = false;
+            }
+            const auto policy = quest_policies::Inspect(actor.get());
+            state.cooperative = yliwf::policy::HasPackageRequest(policy);
             auto* alias = Registration(actor.get());
             const auto decision = package_control_rules::Decide(
-                {debug::OptionsEnabled.load(), alias != nullptr, !actor->IsDead(),
+                {state.enabled || state.cooperative, alias != nullptr, !actor->IsDead(),
                  actor->Is3DLoaded() && !actor->IsDisabled(), actor->GetCurrentScene() != nullptr,
-                 quest_policies::Allows(actor.get(), quest_policies::Action::Movement),
+                 !(policy.blocked & yliwf::policy::Bit(quest_policies::Action::Movement)),
                  controller::storage::Available() && controller::storage::Get().active.has_value()});
             if (decision == package_control_rules::Decision::Release) {
                 Restore(actor.get(), state);
@@ -148,13 +170,15 @@ namespace mod::package_control {
                 continue;
             }
             const auto packages = Packages(actor.get(), alias);
-            auto* selected = package_control_rules::Select(packages, [&actor](auto* package) {
-                return package->packConditions.IsTrue(actor.get(), RE::PlayerCharacter::GetSingleton());
-            });
+            auto* selected = package_control_rules::SelectPolicy(
+                policy, packages, [](auto id) { return RE::TESForm::LookupByID<RE::TESPackage>(id); },
+                [&actor](auto* package) {
+                    return package->packConditions.IsTrue(actor.get(), RE::PlayerCharacter::GetSingleton());
+                });
             if (!selected) {
                 if (state.active)
                     Suspend(actor.get());
-                state.status = "No eligible YLIWF alias package.";
+                state.status = "No eligible follower-policy or YLIWF alias package.";
                 continue;
             }
             bool changed = !state.active || state.requestedPackage != selected->GetFormID();
@@ -162,7 +186,7 @@ namespace mod::package_control {
             state.requestedPackage = selected->GetFormID();
             changed = Publish(actor->GetFormID(), selected) || changed;
             if (auto* interrupt = Interrupt(actor.get());
-                interrupt && std::ranges::find(packages, interrupt) == packages.end()) {
+                state.enabled && interrupt && std::ranges::find(packages, interrupt) == packages.end()) {
                 // Remember FormIDs, never copy ActorPackage's owned procedure data.
                 state.savedInterrupt = interrupt->GetFormID();
                 actor->EndInterruptPackage(true);
@@ -173,8 +197,8 @@ namespace mod::package_control {
                 debug::Trace("PackageControl.Select", actor.get(), "requested={:08X} previous={:08X} saved={:08X}",
                              state.requestedPackage, state.previousPackage, state.savedInterrupt);
             }
-            state.status = actor->GetCurrentPackage() == selected ? "YLIWF package running."
-                                                                  : "Requested YLIWF package is not running.";
+            state.status = actor->GetCurrentPackage() == selected ? "Requested follower package running."
+                                                                  : "Requested follower package is not running.";
         }
     }
 
@@ -236,11 +260,24 @@ namespace mod::package_control {
                 return;
             auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorID);
             if (!enabled) {
-                Release(actor);
+                if (auto found = held.find(actorID); found != held.end()) {
+                    if (actor)
+                        Restore(actor, found->second.snapshot);
+                    found->second.snapshot.enabled = false;
+                    if (!found->second.snapshot.cooperative)
+                        held.erase(found);
+                }
             } else {
                 const auto* alias = Registration(actor);
-                if (!actor || !alias || alias->aliasID != aliasID || actor->IsDead() || held.contains(actorID))
+                if (!actor || !alias || alias->aliasID != aliasID || actor->IsDead())
                     return;
+                if (auto found = held.find(actorID); found != held.end()) {
+                    found->second.snapshot.enabled = true;
+                    Tick();
+                    controller::executor::Kick();
+                    debug::NotifyStateChanged();
+                    return;
+                }
                 Snapshot state;
                 state.enabled = true;
                 if (auto* package = actor->GetCurrentPackage())

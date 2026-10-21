@@ -486,8 +486,9 @@ namespace mod::controller::executor {
             if (!paused && combat_orders::Enabled)
                 combat_orders::Tick();
             const bool delay = storage::Get().active && storage::Active().phase == Phase::Delay;
-            const bool work = package_control::HasWork() || combat_orders::Enabled || formation::HasWork() ||
-                              adapters::HasWork() || adapters::NeedsObservation() || healer::NeedsObservation() ||
+            const bool work = quest_policies::NeedsObservation() || package_control::HasWork() ||
+                              combat_orders::Enabled || formation::HasWork() || adapters::HasWork() ||
+                              adapters::NeedsObservation() || healer::NeedsObservation() ||
                               shield_defender::NeedsObservation() || delay || countsDirty ||
                               !storage::Get().queue.empty() || !storage::Get().callers.empty() ||
                               std::ranges::any_of(storage::Get().deadlines, [](float time) { return time > 0; });

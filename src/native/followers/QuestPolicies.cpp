@@ -1,4 +1,5 @@
 #include "followers/QuestPolicies.h"
+#include "followers/PolicyRules.h"
 #include "settings/Settings.h"
 #include <vector>
 #include <string>
@@ -26,28 +27,25 @@ namespace mod::quest_policies {
             providers.push_back({provider->id, *provider});
             return static_cast<std::uint32_t>(providers.size());
         }
+
     }
 
     yliwf::policy::State Inspect(RE::Actor* actor) {
-        yliwf::policy::State result;
-        result.blocked = 0;
+        policy_rules::Aggregate result;
         if (!actor)
-            return result;
-        bool found = false;
+            return result.Result();
         for (const auto& entry : providers) {
             yliwf::policy::State value;
             if (!entry.provider.inspect(entry.provider.context, actor->GetFormID(), &value))
                 continue;
             value.reason[sizeof(value.reason) - 1] = 0;
-            if (found || !yliwf::policy::Valid(value)) {
-                result = {};
-                std::strcpy(result.reason, "Quest restriction providers conflict or returned invalid data.");
-                return result;
-            }
-            found = true;
-            result = value;
+            result.Add(value);
         }
-        return result;
+        return result.Result();
+    }
+
+    bool NeedsObservation() {
+        return !providers.empty();
     }
 
     bool Allows(RE::Actor* actor, Action action) {

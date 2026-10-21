@@ -135,10 +135,11 @@ Binding repair validates the canonical quest and repairs vanilla primary/count
 properties without replacing registrations or deadlines.
 See [repair instructions](debugging.md#repair-missing-bindings).
 
-## Debug package priority
+## Package priority
 
 `followers/PackageControl` overrides `Character::CheckForCurrentAliasPackage`
-(virtual `0x49`) only for explicitly selected core humanoid followers. Main-thread
+(virtual `0x49`) for core humanoid followers selected through debug controls or
+an active follower-policy package request. Main-thread
 tasks copy the core alias's instanced package list under its read lock, release
 the lock, evaluate conditions in priority order and publish the selected package.
 The hook reads that synchronized selection; it evaluates no conditions or policies.
@@ -146,10 +147,13 @@ Scenes use the previous hook. Shared package records and quest priorities stay u
 Selections are withdrawn before alias mutations and suspended while controller
 commands are pending, then rebuilt from the live registration.
 
-Displaced interrupt FormIDs are retained for conditional restoration through
-`PutCreatedPackage`; owned procedure data is never copied. The override is transient
-and clears before load, on release or when debug options turn off. The controller
-scheduler observes enabled overrides independently of menu visibility.
+Debug controls retain displaced interrupt FormIDs for conditional restoration through
+`PutCreatedPackage`; owned procedure data is never copied. Debug requests clear
+before load, on release or when debug options turn off. The controller scheduler
+observes enabled overrides independently of menu visibility.
+Policy requests are rediscovered from live aliases after load and leave interrupt
+packages intact. Restrictions from all providers combine; package requests use
+explicit priorities. See the [policy contract](follower-adapters.md#policies-for-core-owned-followers).
 See [usage and restoration limits](debugging.md#force-package-control).
 
 ## Validation

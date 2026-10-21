@@ -1,5 +1,7 @@
 #pragma once
 
+#include "FollowerPolicy.h"
+
 namespace mod::package_control_rules {
     enum class Decision { Release, Suspend, Override };
 
@@ -27,5 +29,16 @@ namespace mod::package_control_rules {
             if (eligible(package))
                 return package;
         return {};
+    }
+
+    template <class Packages, class Resolve, class Eligible>
+    typename Packages::value_type SelectPolicy(const yliwf::policy::State& policy, const Packages& packages,
+                                               Resolve resolve, Eligible eligible) {
+        if (yliwf::policy::HasPackageRequest(policy) &&
+            policy.packagePreference == yliwf::policy::PackagePreference::Requested) {
+            auto package = resolve(policy.package);
+            return package && eligible(package) ? package : typename Packages::value_type{};
+        }
+        return Select(packages, eligible);
     }
 }

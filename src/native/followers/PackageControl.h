@@ -9,7 +9,7 @@ namespace RE {
 
 namespace mod::package_control {
     struct Snapshot {
-        bool enabled = false, active = false;
+        bool enabled = false, active = false, cooperative = false;
         std::uint32_t previousPackage = 0, savedInterrupt = 0, requestedPackage = 0;
         std::string status;
     };
@@ -19,7 +19,6 @@ namespace mod::package_control {
     bool HasWork();
     void Release(RE::Actor* actor);
     void Suspend(RE::Actor* actor);
-    void Withdraw(std::uint32_t actorID);
     void Withdraw(std::uint32_t actorID);
     void Invalidate();
     Snapshot Inspect(RE::Actor* actor);

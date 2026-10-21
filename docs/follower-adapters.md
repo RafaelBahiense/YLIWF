@@ -5,6 +5,8 @@ Add-ons integrate quest-managed followers through either an external controller
 follower ([FollowerPolicy.h](../include/FollowerPolicy.h)). The external API
 delegates commands to the follower's controller and reports completion;
 [core-owned policies](#policies-for-core-owned-followers) only restrict core actions.
+Supplementary controllers can use [policies for core-owned followers](#policies-for-core-owned-followers)
+without claiming the follower or replacing the quest owner's policy.
 See the [available add-ons](../README.md#add-ons).
 
 ## External ownership and scope
@@ -157,9 +159,14 @@ Compatibility patches that replace a follower's scripts may route recruitment
 into the core instead of registering an external owner. `FollowerPolicy.h`
 exposes `YLIWF_GetFollowerPolicyAPI(1)` independently of the adapter ABI. Register
 one stable provider at SKSE PostLoad; its read-only inspection runs on the main
-thread and returns a blocked-action mask, a stable owner quest FormID and a reason.
-It must neither execute Papyrus nor modify game state. Duplicate claims and invalid
-results block control. Providers remain loaded for the session.
+thread and returns action restrictions, an optional owner quest FormID, a package
+preference and a reason. It must neither execute Papyrus nor modify game state.
+Providers remain loaded for the session.
+
+Several providers may apply to one actor. Restrictions accumulate; one provider
+cannot undo another's restriction. Supplementary providers leave `ownerQuest` zero.
+Only the designated owner can authorize quest release. Different nonzero owner
+claims or invalid results suspend control and release authority.
 
 The core checks policies at command execution and before taking movement/combat
 control. Quest release validates the registered owner and uses a distinct saved
@@ -167,3 +174,22 @@ operation, preserving existing operation IDs. It bypasses user-command locks onl
 for the owner's explicit release and never authorizes recruitment or alias repair.
 Use `YLIWF_SKSE.HasQuestPolicy(actor, owner)` before a replacement script delegates
 control. These policies do not add external followers or consume adapter slots.
+
+### Package requests
+
+`packagePreference` supports `Default` (no request), `Follower` (eligible YLIWF
+alias packages) and `Requested` (the runtime package FormID in `package`).
+The highest `packagePriority` wins. Equal-priority requests for the same selection
+combine; incompatible requests at the highest priority return package selection
+to Skyrim while retaining action restrictions and quest ownership.
+
+For example, a quest can block dismissal and request a travel package at priority
+10, then return `Default` when the journey ends. Its package must supply valid
+conditions and targets; this API does not fill aliases or bind package data.
+
+Requests apply only to core-managed humanoid aliases. The core resolves a requested
+FormID as a package and checks its conditions. A missing or ineligible package
+withdraws selection instead of falling back to a different forced package.
+Scenes, pending commands and movement restrictions suspend selection. Explicit
+interrupt packages remain intact. Preferences are rediscovered after load and
+withdrawn on dismissal; no package or controller state is serialized by this API.

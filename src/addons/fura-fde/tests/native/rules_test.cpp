@@ -25,9 +25,10 @@ namespace {
         }
     }
 
-    TEST_CASE("Quest policy validation rejects missing owners and unsupported action flags") {
+    TEST_CASE("Policies accept supplementary restrictions without granting release authority") {
         State state;
-        CHECK_FALSE(Valid(state));
+        CHECK(Valid(state));
+        CHECK_FALSE(CanRelease(state));
         state.ownerQuest = 0x123;
         CHECK(Valid(state));
         state.blocked = All + 1;
