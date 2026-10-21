@@ -6,11 +6,11 @@
 
 using namespace mod::package_control_rules;
 
-TEST_CASE("Package priority is scoped to live registered debug followers") {
+TEST_CASE("Package priority is scoped to live registered followers with package requests") {
     const State ready{true, true, true, true, false, true};
     CHECK(Decide(ready) == Decision::Override);
     auto state = ready;
-    state.debug = false;
+    state.requested = false;
     CHECK(Decide(state) == Decision::Release);
     state = ready;
     state.registered = false;

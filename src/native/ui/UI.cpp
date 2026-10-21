@@ -343,8 +343,8 @@ namespace {
                 "Prioritizes this follower's YLIWF packages over other controllers and remembers displaced "
                 "temporary packages for restoration. Scenes and quest restrictions retain control. "
                 "Resets on dismissal, save load or disabling debug options.");
-            if (enabled || row.packageControl.cooperative) {
-                if (row.packageControl.cooperative)
+            if (enabled || row.packageControl.policyRequested) {
+                if (row.packageControl.policyRequested)
                     ImGuiMCP::TextWrapped("A follower policy is requesting package control.");
                 ImGuiMCP::TextWrapped("%s", row.packageControl.status.c_str());
                 ImGuiMCP::Text("Requested: %08X | Running: %08X | Previous: %08X | Saved interrupt: %08X",

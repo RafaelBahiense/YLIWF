@@ -6,13 +6,13 @@ namespace mod::package_control_rules {
     enum class Decision { Release, Suspend, Override };
 
     struct State {
-        bool debug = false, registered = false, alive = false, loaded = false;
+        bool requested = false, registered = false, alive = false, loaded = false;
         bool scene = false, questAllows = false;
         bool commandPending = false;
     };
 
     constexpr Decision Decide(const State& state) {
-        if (!state.debug || !state.registered || !state.alive)
+        if (!state.requested || !state.registered || !state.alive)
             return Decision::Release;
         if (!state.loaded || state.scene || !state.questAllows || state.commandPending)
             return Decision::Suspend;

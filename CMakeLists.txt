@@ -72,7 +72,6 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_
 configure_file(cmake/SettingsDefaults.h.in generated/SettingsDefaults.h @ONLY)
 # configure_file preserves the timestamp when plugin metadata is unchanged.
 # CommonLib's add_commonlibsse_plugin rewrites its generated .cpp every configure.
-set(PLUGIN_BINARY_NAME "${MOD_BINARY_NAME}")
 configure_file(cmake/plugin_info.cpp.in plugin_info.cpp @ONLY)
 # Keep discovery scoped to the core; add-ons and tests own separate targets.
 file(GLOB_RECURSE MOD_SOURCES CONFIGURE_DEPENDS

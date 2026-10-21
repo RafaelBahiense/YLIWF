@@ -9,7 +9,7 @@ namespace RE {
 
 namespace mod::package_control {
     struct Snapshot {
-        bool enabled = false, active = false, cooperative = false;
+        bool enabled = false, active = false, policyRequested = false;
         std::uint32_t previousPackage = 0, savedInterrupt = 0, requestedPackage = 0;
         std::string status;
     };

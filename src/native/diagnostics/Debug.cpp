@@ -140,7 +140,7 @@ namespace mod::debug {
                 << " protectionSpell=" << row.crossfire << '\n'
                 << "    cell=" << Form(actor->GetParentCell()) << " package=" << Form(actor->GetCurrentPackage())
                 << '\n';
-            if (row.packageControl.enabled || row.packageControl.cooperative)
+            if (row.packageControl.enabled || row.packageControl.policyRequested)
                 out << fmt::format("    packageOverride={} requested={:08X} previous={:08X} savedInterrupt={:08X}\n",
                                    row.packageControl.status, row.packageControl.requestedPackage,
                                    row.packageControl.previousPackage, row.packageControl.savedInterrupt);

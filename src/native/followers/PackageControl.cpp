@@ -121,7 +121,6 @@ namespace mod::package_control {
     }
 
     void Tick() {
-
         if (auto* quest = controller::detail::GetContext().quest; quest && quest_policies::NeedsObservation()) {
             for (auto* entry : quest->aliases) {
                 auto* alias = entry && HumanSlot(entry->aliasID) ? skyrim_cast<RE::BGSRefAlias*>(entry) : nullptr;
@@ -130,13 +129,13 @@ namespace mod::package_control {
                     !yliwf::policy::HasPackageRequest(quest_policies::Inspect(actor)))
                     continue;
                 Snapshot state;
-                state.cooperative = true;
+                state.policyRequested = true;
                 if (auto* package = actor->GetCurrentPackage())
                     state.previousPackage = package->GetFormID();
                 held.emplace(actor->GetFormID(), Held{actor->GetHandle(), std::move(state)});
             }
         }
-        
+
         for (auto it = held.begin(); it != held.end();) {
             auto actor = it->second.actor.get();
             if (!actor) {
@@ -150,10 +149,10 @@ namespace mod::package_control {
                 state.enabled = false;
             }
             const auto policy = quest_policies::Inspect(actor.get());
-            state.cooperative = yliwf::policy::HasPackageRequest(policy);
+            state.policyRequested = yliwf::policy::HasPackageRequest(policy);
             auto* alias = Registration(actor.get());
             const auto decision = package_control_rules::Decide(
-                {state.enabled || state.cooperative, alias != nullptr, !actor->IsDead(),
+                {state.enabled || state.policyRequested, alias != nullptr, !actor->IsDead(),
                  actor->Is3DLoaded() && !actor->IsDisabled(), actor->GetCurrentScene() != nullptr,
                  !(policy.blocked & yliwf::policy::Bit(quest_policies::Action::Movement)),
                  controller::storage::Available() && controller::storage::Get().active.has_value()});
@@ -264,7 +263,7 @@ namespace mod::package_control {
                     if (actor)
                         Restore(actor, found->second.snapshot);
                     found->second.snapshot.enabled = false;
-                    if (!found->second.snapshot.cooperative)
+                    if (!found->second.snapshot.policyRequested)
                         held.erase(found);
                 }
             } else {
