@@ -470,7 +470,7 @@ internal static partial class FollowerPlugin
         var followerAlias = new QuestAlias
         {
             Name = RecordNames.Aliases.Follower,
-            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
+            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
         followerAlias.Factions.Add(new FormLink<IFactionGetter>(CurrentFollowerFactionForm));
@@ -486,7 +486,7 @@ internal static partial class FollowerPlugin
         {
             ID = 2,
             Name = RecordNames.Aliases.Extra(1),
-            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
+            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
         extraFollower01Alias.Factions.Add(new FormLink<IFactionGetter>(CurrentFollowerFactionForm));
@@ -502,7 +502,7 @@ internal static partial class FollowerPlugin
         {
             ID = 3,
             Name = RecordNames.Aliases.Extra(2),
-            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
+            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
         extraFollower02Alias.Factions.Add(new FormLink<IFactionGetter>(CurrentFollowerFactionForm));
@@ -518,7 +518,7 @@ internal static partial class FollowerPlugin
         {
             ID = 4,
             Name = RecordNames.Aliases.Extra(3),
-            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
+            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
         extraFollower03Alias.Factions.Add(new FormLink<IFactionGetter>(CurrentFollowerFactionForm));
@@ -534,7 +534,7 @@ internal static partial class FollowerPlugin
         {
             ID = 5,
             Name = RecordNames.Aliases.Extra(4),
-            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
+            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
         extraFollower04Alias.Factions.Add(new FormLink<IFactionGetter>(CurrentFollowerFactionForm));
@@ -550,7 +550,7 @@ internal static partial class FollowerPlugin
         {
             ID = 6,
             Name = RecordNames.Aliases.Extra(5),
-            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
+            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
         extraFollower05Alias.Factions.Add(new FormLink<IFactionGetter>(CurrentFollowerFactionForm));
@@ -566,7 +566,7 @@ internal static partial class FollowerPlugin
         {
             ID = 7,
             Name = RecordNames.Aliases.Extra(6),
-            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
+            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
         extraFollower06Alias.Factions.Add(new FormLink<IFactionGetter>(CurrentFollowerFactionForm));
@@ -582,7 +582,7 @@ internal static partial class FollowerPlugin
         {
             ID = 8,
             Name = RecordNames.Aliases.Extra(7),
-            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected,
+            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText,
             CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(SkyrimForm(0x05C852))
         };
         extraFollower07Alias.Factions.Add(new FormLink<IFactionGetter>(CurrentFollowerFactionForm));
@@ -598,7 +598,7 @@ internal static partial class FollowerPlugin
         {
             ID = 1,
             Name = RecordNames.Aliases.Animal,
-            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText | QuestAlias.Flag.Protected
+            Flags = QuestAlias.Flag.Optional | QuestAlias.Flag.StoresText
         };
         animalAlias.Factions.Add(new FormLink<IFactionGetter>(CurrentFollowerFactionForm));
         animalAlias.Factions.Add(new FormLink<IFactionGetter>(SkyrimForm(0x084D1B)));
