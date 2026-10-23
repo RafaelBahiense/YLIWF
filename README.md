@@ -72,6 +72,9 @@ README for requirements and installation.
 - **[Inigo](src/addons/inigo/README.md)** (`-Inigo-<version>.zip`):
   Connects Inigo's follower controls, Stand down, on-foot distance presets and travel formations to YLIWF while
   retaining his own recruitment and quests. Requires **INIGO SE 2.4C**.
+- **[M'rissi](src/addons/mrissi/README.md)** (`-Mrissi-<version>.zip`):
+  Connects her follower commands, distance, formations and Stand down while
+  respecting her story and mount controller. Requires **M'rissi's Tails of Troubles SE 1.7**.
 - **[Fura FDE](src/addons/fura-fde/README.md)** (`-FuraFDE-<version>.zip`):
   Routes FDE Fura's recruitment and dialogue into the core follower controller,
   with normal slots, distance and combat roles while respecting her quests.
