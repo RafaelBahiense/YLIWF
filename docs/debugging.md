@@ -4,11 +4,13 @@ Open **SKSE Menu Framework → You Lead, I Will Follow**.
 
 ## Menu and command feedback
 
-**Followers** shows state, location, approximate distance and ordinary commands.
-**Debug options** adds IDs, empty slots, repairs and inspection/recruitment.
+**Followers** lists the party in a selectable roster. Select a follower to view
+their location, distance, commands and preferences. Details appear beside the
+roster, or below it in narrow windows.
+**Debug → Enable diagnostics and repairs** adds IDs, empty slots, repairs and inspection/recruitment.
 **Log mod flow** is independent; both settings default to off.
 
-**Stand down (everyone)** keeps followers following at their selected distance without fighting.
+**Stand down** keeps followers following at their selected distance without fighting.
 See [combat roles](combat-roles.md#healer-behavior) for healing during Stand down.
 Nearby hostiles trigger movement toward safer navmesh positions;
 followers may temporarily widen their distance to avoid the fight. Explicit Wait orders
@@ -16,13 +18,13 @@ stay in effect. Uncheck it for normal behavior. It resets on save load and does 
 recruitment or waiting state. The count shows affected and unavailable actors;
 quest-controlled followers require add-on support and permission from their controller.
 
-Global Close/Normal/Far or **Apply to all followers** replaces the current
-party's distance choices. Row controls change one actor. Choices persist in
+Global Close/Normal/Far or **Apply distance to party** replaces the current
+party's distance choices. The selected follower's controls change one actor. Choices persist in
 game saves and through primary promotion; Settings **Save** retains the default
 for new followers. Animals are excluded. Paths, combat and sandboxing affect
 actual spacing.
 
-Follow All/Wait All target unique living humanoids. Dismiss All includes dead
+Follow All/Wait All target unique living humanoids. **More → Dismiss everyone** includes dead
 registrations and requires confirmation. Location distance is straight-line;
 it may be unavailable for unloaded actors or different interiors/worldspaces.
 
@@ -41,7 +43,7 @@ See [controller contracts](native-controller.md#delays-timers-and-loading).
 2. Use **Dump full context**; inspect the relevant actor first if needed.
 3. Copy the newest log and dump from
    `Documents/My Games/Skyrim Special Edition/SKSE`.
-4. Disable logging afterward. **Save debug settings** persists both switches.
+4. Disable logging afterward. **Save settings** persists both switches.
 
 `YouLeadIWillFollow.log` rotates at 10 MiB with five backups.
 Saving settings, dumping and disabling logging flush it.

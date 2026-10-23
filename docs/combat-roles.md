@@ -1,6 +1,6 @@
 # Combat roles
 
-Choose a role under **Followers → Combat role preference** in the SKSE menu.
+Select a follower under **Followers**, then choose a **Combat role** in their details.
 Roles are available for core-managed humanoid followers and add-on followers
 whose add-ons implement role support.
 

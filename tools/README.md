@@ -4,6 +4,9 @@
 Papyrus compilation, validation and packaging.
 See the [build guide](../docs/build-release.md).
 
+Use the [standalone UI preview](ui-preview/README.md) to edit and test menu layouts
+without starting Skyrim.
+
 | Directory | Responsibility |
 | --- | --- |
 | `Building/` | Targets, paths and compiler invocation |

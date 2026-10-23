@@ -1,4 +1,5 @@
 #include "settings/Settings.h"
+#include "settings/PreferenceState.h"
 #include "settings/SettingsRules.h"
 #include "settings/SettingsFile.h"
 #include "SettingsDefaults.h"
@@ -172,6 +173,7 @@ namespace mod::settings {
         }
         mod::debug::OptionsEnabled = ReadBoolean(ini::Debug, ini::DebugEnabled);
         mod::debug::SetLogging(ReadBoolean(ini::Debug, ini::FlowLogging));
+        preference_state::RememberSaved();
         mod::debug::Trace("Settings.Load", nullptr, force ? "forced" : "initial");
     }
 
@@ -214,8 +216,10 @@ namespace mod::settings {
                                  "Could not save all settings to {}. Failed keys: {}. Some values may have been "
                                  "written; see the log.",
                                  kIniPath, failedKeys);
-        if (saved)
+        if (saved) {
+            preference_state::RememberSaved();
             logger::info("{}", SaveStatus);
+        }
         spdlog::default_logger()->flush();
         return saved;
     }
