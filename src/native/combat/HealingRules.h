@@ -105,6 +105,10 @@ namespace mod::healing_rules {
                fraction && *fraction < (combat ? HealthThreshold : RecoveryHealthThreshold);
     }
 
+    inline bool NeedsHealingEvaluation(const Target& target, std::uint32_t healer, bool combat) {
+        return SelfEligible(target, healer, combat) || Seekable(target, healer, combat);
+    }
+
     inline bool Eligible(const Target& target, std::uint32_t healer, float range, bool combat = true) {
         return Seekable(target, healer, combat) && target.visible && std::isfinite(range) && range > 0 &&
                target.distance <= std::min(range, MaximumRange);

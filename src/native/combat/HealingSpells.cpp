@@ -55,12 +55,25 @@ namespace mod::healing_spells {
 
     std::vector<healing_rules::SpellOption> ReadOptions(RE::Actor* actor, RE::MagicCaster* caster,
                                                         std::span<RE::Actor* const> targets,
-                                                        std::span<const combat_roles::HealingSpell> spells,
+                                                        std::span<const healing_rules::Target> snapshots,
+                                                        std::span<const combat_roles::HealingSpell> spells, bool combat,
                                                         bool trace) {
         std::vector<healing_rules::SpellOption> result;
+        if (targets.size() != snapshots.size())
+            return result;
         result.reserve(spells.size());
         for (const auto& spell : spells) {
             healing_rules::SpellOption option;
+            const auto candidate = [&](const healing_rules::Target& target) {
+                return spell.self ? healing_rules::SelfEligible(target, actor->GetFormID(), combat)
+                                  : healing_rules::Seekable(target, actor->GetFormID(), combat);
+            };
+            // Preserve spell indexes while skipping engine cast/effect checks
+            // when this delivery type cannot heal any current candidate.
+            if (!std::ranges::any_of(snapshots, candidate)) {
+                result.push_back(std::move(option));
+                continue;
+            }
             option.cost = spell.cost;
             option.charge = spell.spell->GetChargeTime();
             option.range = Range(spell.spell);
@@ -72,8 +85,8 @@ namespace mod::healing_spells {
             if (option.castable) {
                 for (std::size_t i = 0; i < targets.size(); ++i) {
                     auto* target = targets[i];
-                    if (!target || target->IsDead() || target->IsDisabled() || !target->Is3DLoaded() ||
-                        (spell.self && target != actor) || (!spell.self && target == actor))
+                    if (!target || !candidate(snapshots[i]) || target->IsDead() || target->IsDisabled() ||
+                        !target->Is3DLoaded())
                         continue;
                     option.targetEffects[i] = ReadEffects(spell.spell, actor, target, strength);
                     if (trace)

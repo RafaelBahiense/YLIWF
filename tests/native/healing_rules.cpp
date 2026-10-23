@@ -53,8 +53,77 @@ namespace {
         return {id, health, 100, distance, true, true, true, true, true, false};
     }
 
+    TEST_CASE("Healing evaluation starts at the existing combat and recovery thresholds") {
+        auto target = InjuredAlly(2, 100);
+        CHECK_FALSE(NeedsHealingEvaluation(target, 1, true));
+        CHECK_FALSE(NeedsHealingEvaluation(target, 1, false));
+        target.health = 70;
+        CHECK_FALSE(NeedsHealingEvaluation(target, 1, true));
+        CHECK(NeedsHealingEvaluation(target, 1, false));
+        target.health = 69;
+        CHECK(NeedsHealingEvaluation(target, 1, true));
+        target.health = 99.95f;
+        CHECK_FALSE(NeedsHealingEvaluation(target, 1, false));
+        target.health = 99.8f;
+        CHECK(NeedsHealingEvaluation(target, 1, false));
+    }
+
+    TEST_CASE("Healing evaluation excludes unavailable and reserved allies before engine work") {
+        for (const auto field : {&Target::alive, &Target::loaded, &Target::friendly, &Target::sameArea}) {
+            auto target = InjuredAlly(2);
+            target.*field = false;
+            CHECK_FALSE(NeedsHealingEvaluation(target, 1, true));
+        }
+        auto target = InjuredAlly(2);
+        target.reserved = true;
+        CHECK_FALSE(NeedsHealingEvaluation(target, 1, true));
+        target.reserved = false;
+        target.distance = SearchRange + 1;
+        CHECK_FALSE(NeedsHealingEvaluation(target, 1, true));
+        target = InjuredAlly(2);
+        target.maximumHealth = std::numeric_limits<float>::quiet_NaN();
+        CHECK_FALSE(NeedsHealingEvaluation(target, 1, false));
+    }
+
+    TEST_CASE("Healing evaluation preserves occluded allies, self healing and ally bleedout") {
+        auto target = InjuredAlly(2);
+        target.visible = false;
+        CHECK(NeedsHealingEvaluation(target, 1, true));
+        target.health = 0;
+        CHECK_FALSE(NeedsHealingEvaluation(target, 1, true));
+        target.bleedingOut = true;
+        CHECK(NeedsHealingEvaluation(target, 1, true));
+        target = InjuredAlly(1);
+        target.visible = target.friendly = target.sameArea = false;
+        target.reserved = true;
+        CHECK(NeedsHealingEvaluation(target, 1, true));
+        target.bleedingOut = true;
+        CHECK_FALSE(NeedsHealingEvaluation(target, 1, true));
+    }
+
     SpellOption HealingOption(std::size_t targets, float magnitude, float cost = 10, bool self = false) {
         return {cost, 1, MaximumRange, self, true, std::vector<std::vector<HealingEffect>>(targets, {{magnitude, 0}})};
+    }
+
+    TEST_CASE("Skipping effect checks for noncandidates preserves healing selection and input indexes") {
+        for (const bool combat : {false, true}) {
+            const std::array targets{InjuredAlly(2, 100), InjuredAlly(3, 85), InjuredAlly(4, 20), InjuredAlly(1, 50),
+                                     InjuredAlly(5, 10, SearchRange + 1)};
+            const std::array original{HealingOption(targets.size(), 20), HealingOption(targets.size(), 30, 10, true)};
+            auto filtered = original;
+            for (auto& spell : filtered)
+                for (std::size_t i = 0; i < targets.size(); ++i)
+                    if (!NeedsHealingEvaluation(targets[i], 1, combat) || (spell.self != (targets[i].id == 1)))
+                        spell.targetEffects[i].clear();
+            const HealingBudget budget{100, 100, 0, 0};
+            const auto before = SelectHealing(original, targets, 1, combat, budget, 0.5f);
+            const auto after = SelectHealing(filtered, targets, 1, combat, budget, 0.5f);
+            REQUIRE(before);
+            REQUIRE(after);
+            CHECK(after->target == before->target);
+            CHECK(after->spell == before->spell);
+            CHECK(after->throughput == doctest::Approx(before->throughput));
+        }
     }
 
     HealingChoice RequireSelection(std::span<const SpellOption> spells, std::span<const Target> targets,

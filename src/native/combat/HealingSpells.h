@@ -12,5 +12,7 @@ namespace mod::healing_spells {
     float Range(RE::SpellItem* spell);
     std::vector<healing_rules::SpellOption> ReadOptions(RE::Actor* actor, RE::MagicCaster* caster,
                                                         std::span<RE::Actor* const> targets,
-                                                        std::span<const combat_roles::HealingSpell> spells, bool trace);
+                                                        std::span<const healing_rules::Target> snapshots,
+                                                        std::span<const combat_roles::HealingSpell> spells, bool combat,
+                                                        bool trace);
 }

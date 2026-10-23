@@ -141,16 +141,19 @@ namespace mod::healer {
                 result.id != caster->GetFormID()) {
                 result.friendly = (target->IsPlayerRef() || target->IsPlayerTeammate()) &&
                                   !caster->IsHostileToActor(target) && !target->IsHostileToActor(caster);
-                bool unused = false;
-                if (result.friendly) {
-                    const auto sight = healing_geometry::Check(caster, target);
-                    result.actorSight = caster->HasLineOfSight(target, unused);
-                    result.geometryAvailable = sight.available;
-                    result.visible = sight.available && sight.clear;
-                    result.obstruction = sight.blocker;
-                }
             }
             return result;
+        }
+
+        void ReadVisibility(RE::Actor* caster, RE::Actor* target, healing_rules::Target& snapshot, bool trace) {
+            const auto sight = healing_geometry::Check(caster, target);
+            snapshot.geometryAvailable = sight.available;
+            snapshot.visible = sight.available && sight.clear;
+            snapshot.obstruction = sight.blocker;
+            if (trace) {
+                bool unused = false;
+                snapshot.actorSight = caster->HasLineOfSight(target, unused);
+            }
         }
 
         using healing_spells::Range;
@@ -166,13 +169,14 @@ namespace mod::healer {
                 return false;
             observation.diagnosticCooldown = 5;
             for (const auto& target : targets)
-                debug::Trace(
-                    "Healer.Target", actor,
-                    "target={:08X} alive={} loaded={} friendly={} sameArea={} visible={} health={} maximum={} "
-                    "bleedingOut={} distance={} reserved={} actorSight={} geometryAvailable={} obstruction={:08X}",
-                    target.id, target.alive, target.loaded, target.friendly, target.sameArea, target.visible,
-                    target.health, target.maximumHealth, target.bleedingOut, target.distance, target.reserved,
-                    target.actorSight, target.geometryAvailable, target.obstruction);
+                debug::Trace("Healer.Target", actor,
+                             "target={:08X} alive={} loaded={} friendly={} sameArea={} visible={} health={} maximum={} "
+                             "bleedingOut={} distance={} reserved={} actorSight={} geometryAvailable={} "
+                             "obstruction={:08X} candidate={}",
+                             target.id, target.alive, target.loaded, target.friendly, target.sameArea, target.visible,
+                             target.health, target.maximumHealth, target.bleedingOut, target.distance, target.reserved,
+                             target.actorSight, target.geometryAvailable, target.obstruction,
+                             healing_rules::NeedsHealingEvaluation(target, actor->GetFormID(), observation.combat));
             for (const auto& spell : spells) {
                 debug::Trace("Healer.Spell", actor,
                              "spell={:08X} name={} cost={} rangeUnits={} authoredRangeFeet={} delivery={}",
@@ -188,7 +192,8 @@ namespace mod::healer {
                                          const std::vector<combat_roles::HealingSpell>& spells,
                                          Observation& observation, bool traceTargets) {
             const auto budget = healing_spells::ReadBudget(actor);
-            const auto options = healing_spells::ReadOptions(actor, caster, allies, spells, traceTargets);
+            const auto options =
+                healing_spells::ReadOptions(actor, caster, allies, targets, spells, observation.combat, traceTargets);
             const auto selected = healing_rules::SelectHealing(options, targets, actor->GetFormID(), observation.combat,
                                                                budget, observation.recoveryEstimate);
             if (!selected) {
@@ -396,6 +401,18 @@ namespace mod::healer {
         void Heal(RE::Actor* actor, const std::vector<RE::Actor*>& allies, Observation& observation, float elapsed) {
             if (MaintainCast(actor, observation))
                 return;
+            std::vector<healing_rules::Target> targets;
+            targets.reserve(allies.size());
+            for (auto* ally : allies)
+                targets.push_back(DescribeTarget(actor, ally));
+            const auto candidate = [&](const healing_rules::Target& target) {
+                return healing_rules::NeedsHealingEvaluation(target, actor->GetFormID(), observation.combat);
+            };
+            if (!std::ranges::any_of(targets, candidate)) {
+                ResumeCombat(actor, observation);
+                observation.status = "No injured ally in range needing healing";
+                return;
+            }
             auto spells = combat_roles::HealingSpells(actor);
             if (combat_orders::Enabled)
                 // Area healing could also heal the player during a duel.
@@ -414,9 +431,10 @@ namespace mod::healer {
                 observation.status = "Spell caster unavailable";
                 return;
             }
-            std::vector<healing_rules::Target> targets;
-            for (auto* ally : allies)
-                targets.push_back(DescribeTarget(actor, ally));
+            const bool diagnosticsDue = debug::Logging.load() && observation.diagnosticCooldown <= 0;
+            for (std::size_t i = 0; i < targets.size(); ++i)
+                if (targets[i].id != actor->GetFormID() && candidate(targets[i]))
+                    ReadVisibility(actor, allies[i], targets[i], diagnosticsDue);
             const bool traceTargets = TraceTargets(actor, targets, spells, observation);
             const auto choice = ChooseCast(actor, caster, allies, targets, spells, observation, traceTargets);
             if (!choice) {
