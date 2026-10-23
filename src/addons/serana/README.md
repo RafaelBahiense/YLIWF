@@ -24,8 +24,9 @@ Makes Serana available to YLIWF features when her Dawnguard quests allow them.
 
 ## Installation
 
-Install `YouLeadIWillFollow-Serana-<version>.zip` alongside a compatible
-[YLIWF core](../../../README.md). Recruit Serana through her own dialogue;
+Install `YouLeadIWillFollow-Serana-<version>.zip` alongside the
+[YLIWF core](../../../README.md) with core-managed external movement (adapter API v1).
+Recruit Serana through her own dialogue;
 other recruited followers do not block recruitment when her quest permits it.
 
 Dawnguard retains her recruitment, aliases, saved state and quest behavior.

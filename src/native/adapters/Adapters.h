@@ -18,6 +18,7 @@ namespace mod::adapters {
         std::string name;
         yliwf::sdk::FollowerState state;
         bool supportsDistance = false;
+        bool conflictingOwnership = false;
     };
 
     std::vector<Follower> Followers(bool annotatePending = true);  // Main thread; quest-backed, never saved as aliases.
@@ -43,6 +44,7 @@ namespace mod::adapters {
     void Tick(float elapsed);
     bool NeedsObservation();
     bool HasWork();
+    bool HasMovement();
     void Invalidate();
     void GameLoaded();
 }

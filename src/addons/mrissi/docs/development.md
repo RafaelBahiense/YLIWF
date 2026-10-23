@@ -35,12 +35,11 @@ combat and waiting. The base package is checked independently of the interrupt,
 and permission is checked again after reevaluation. No authored package record,
 faction, alias, quest stage, inventory or actor protection flag is rewritten.
 
-A bounded 250 ms observer schedules main-thread checks; the worker reads no
-engine objects. Commands release temporary movement before invoking the owner
-through Papyrus. Completion is reported only after the VM callback and a fresh
-state inspection. Save loads invalidate callbacks and clear transient movement;
-commands are never replayed. The core persists actor distance preferences. The
-adapter adds no serialization format.
+The adapter reports movement permission to the core's shared update; it needs no
+worker thread or package application code. `PapyrusCommands.h` handles owner
+method dispatch, pending work and session invalidation. The core persists actor
+distance preferences; the adapter adds no serialization format. See the
+[shared movement contract](../../../../docs/follower-adapters.md#core-managed-external-movement).
 
 ## Validation
 

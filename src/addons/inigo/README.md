@@ -4,7 +4,7 @@ Connects Inigo's follower controller to YLIWF without replacing his scripts or p
 
 ## Requirements
 
-- [YLIWF core](../../../README.md) with follower adapter API v1.
+- [YLIWF core](../../../README.md) with core-managed external movement (adapter API v1).
 - INIGO SE 2.4C (`Inigo.esp`).
 
 Install `YouLeadIWillFollow-Inigo-<version>.zip` alongside both mods. Recruit Inigo

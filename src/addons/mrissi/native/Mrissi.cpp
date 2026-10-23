@@ -5,14 +5,9 @@
 #include "AddonInfo.h"
 #include "PapyrusController.h"
 #include "Rules.h"
-#include "Movement.h"
+#include "PapyrusCommands.h"
 #include <array>
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
 #include <cstdio>
-#include <mutex>
-#include <thread>
 
 namespace {
     using namespace yliwf::sdk;
@@ -33,10 +28,7 @@ namespace {
     RE::TESFaction* mountHandling = nullptr;
     RE::BGSListForm* restrictedLocations = nullptr;
     std::array<RE::TESPackage*, OrdinaryPackages.size()> ordinaryPackages{};
-    std::uint64_t generation = 0;
-    bool commandPending = false;
-    std::atomic_bool observeMovement{false};
-    std::atomic_bool observationQueued{false};
+    papyrus::Commands commands;
 
     void Reason(char* output, std::uint32_t capacity, const char* text) {
         if (output && capacity)
@@ -102,7 +94,7 @@ namespace {
         const auto* package = process ? process->currentPackage.package : mrissi->GetCurrentPackage();
         const auto* interrupt = process && process->middleHigh ? process->middleHigh->runOncePackage.package : nullptr;
         const bool ordinary = package && std::ranges::find(ordinaryPackages, package) != ordinaryPackages.end() &&
-                              (!interrupt || mod::mrissi_movement::Owns(interrupt));
+                              (!interrupt || (host && host->isMovementPackage(interrupt->GetFormID()) == 1));
         *output = mod::mrissi_rules::Describe(
             {.initialized = true,
              .dead = false,
@@ -118,85 +110,28 @@ namespace {
              .incapacitated = mrissi->IsDisabled() || mrissi->AsActorState()->IsBleedingOut() ||
                               mrissi->AsActorState()->IsUnconscious(),
              .mounting = mrissi->GetFactionRank(mountHandling, false) > 0,
-             .pending = commandPending});
+             .pending = commands.Pending(actor)});
         return 1;
     }
 
-    mod::mrissi_movement_rules::Snapshot MovementState() {
-        auto snapshot = mod::mrissi_movement::Read(mrissi);
+    bool VerifyCommand(ActorID actor, Command command) {
         FollowerState state;
-        if (mrissi && Inspect(nullptr, mrissi->GetFormID(), &state)) {
-            snapshot.following = state.state == State::Following;
-            snapshot.waiting = state.state == State::Waiting;
-            snapshot.controllerAllows = Supports(state, Command::Follow) && !RestrictedLocation();
-        }
-        snapshot.pending = commandPending;
-        snapshot.ridingRequested = !mrissi || !mountHandling || mrissi->GetFactionRank(mountHandling, false) > 0;
-        return snapshot;
+        return Inspect(nullptr, actor, &state) && Reached(state, command);
     }
 
-    void RefreshMovement() {
-        auto* ui = RE::UI::GetSingleton();
-        const auto* main = RE::Main::GetSingleton();
-        if (!observeMovement || !ui || ui->GameIsPaused() || !main || main->freezeTime)
-            return;
-        mod::mrissi_movement::Refresh(mrissi, MovementState());
+    std::uint32_t MovementPermissions(void*, ActorID actor, std::uint32_t ownerPackage, const FollowerState* state) {
+        if (!mrissi || actor != mrissi->GetFormID() || !state || !Supports(*state, Command::Follow) ||
+            commands.Pending(actor))
+            return 0;
+        if (RestrictedLocation())
+            return 0;
+        if (ordinaryPackages[0] && ordinaryPackages[0]->GetFormID() == ownerPackage)
+            return AllMovement;
+        for (std::size_t i = 1; i < 3; ++i)
+            if (ordinaryPackages[i] && ordinaryPackages[i]->GetFormID() == ownerPackage)
+                return MovementBit(Movement::StandDown);
+        return 0;
     }
-
-    void StartMovementObservation() {
-        // The worker only schedules a bounded main-thread task. Engine and VM
-        // snapshots, package writes and session state stay on the game thread.
-        static std::jthread worker([](std::stop_token stop) {
-            auto* tasks = SKSE::GetTaskInterface();
-            if (!tasks)
-                return;
-            std::mutex mutex;
-            std::condition_variable_any changed;
-            std::unique_lock lock(mutex);
-            while (!stop.stop_requested()) {
-                changed.wait_for(lock, stop, std::chrono::milliseconds(250), [] { return false; });
-                if (stop.stop_requested())
-                    break;
-                if (observeMovement && !observationQueued.exchange(true))
-                    tasks->AddTask([] {
-                        observationQueued = false;
-                        RefreshMovement();
-                    });
-            }
-        });
-    }
-
-    class Completion final : public RE::BSScript::IStackCallbackFunctor {
-    public:
-        Completion(RequestID request, ActorID actor, Command command)
-            : request(request), actor(actor), command(command), epoch(generation) {}
-
-        void operator()(RE::BSScript::Variable) override {
-            if (auto* tasks = SKSE::GetTaskInterface())
-                tasks->AddTask([request = request, actor = actor, command = command, epoch = epoch] {
-                    if (epoch != generation)
-                        return;
-                    commandPending = false;
-                    FollowerState state;
-                    const bool verified = Inspect(nullptr, actor, &state) && Reached(state, command);
-                    if (host)
-                        host->complete(registration, request, verified ? 1 : 0,
-                                       verified ? "M'rissi's method returned and follower state matches."
-                                                : "M'rissi's method returned without reaching the requested state.");
-                });
-        }
-
-        void SetObject(const papyrus::Object& value) override {
-            object = value;
-        }
-
-    private:
-        RequestID request;
-        ActorID actor;
-        Command command;
-        std::uint64_t epoch;
-        papyrus::Object object;
-    };
 
     StartResult Start(void*, ActorID actor, Command command, RequestID request, char* reason, std::uint32_t capacity) {
         FollowerState state;
@@ -206,20 +141,8 @@ namespace {
         }
         if (Reached(state, command))
             return StartResult::Completed;
-        auto object = papyrus::Bound(dialogue, Script);
-        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-        if (!vm || !object)
-            return StartResult::Rejected;
-        mod::mrissi_movement::SetFormation(mrissi, 0);
-        mod::mrissi_movement::SetStandDown(mrissi, 0);
-        mod::mrissi_movement::Release(mrissi);
-        commandPending = true;
-        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> completion{new Completion(request, actor, command)};
-        if (vm->DispatchMethodCall(object, Methods[static_cast<std::size_t>(command)], RE::MakeFunctionArguments(),
-                                   completion))
-            return StartResult::Pending;
-        commandPending = false;
-        return StartResult::Rejected;
+        return commands.Dispatch(papyrus::Bound(dialogue, Script), Methods[static_cast<std::size_t>(command)], host,
+                                 registration, actor, command, request, VerifyCommand);
     }
 
     void NotifyState() {
@@ -227,52 +150,9 @@ namespace {
             host->stateChanged(registration);
     }
 
-    std::uint32_t SetFollowDistance(void*, ActorID actor, FollowDistance distance) {
-        FollowerState state;
-        if (!Inspect(nullptr, actor, &state) || !Supports(state, Command::Follow) || !mod::mrissi_movement::Ready() ||
-            !mod::mrissi_movement::SetDistance(distance))
-            return 0;
-        mod::mrissi_movement::Refresh(mrissi, MovementState());
-        return 1;
-    }
-
-    std::uint32_t CanTravelInFormation(void*, ActorID actor) {
-        return mrissi && actor == mrissi->GetFormID() && mod::mrissi_movement::Ready() &&
-                       mod::mrissi_movement_rules::Permitted(MovementState())
-                   ? 1u
-                   : 0u;
-    }
-
-    std::uint32_t SetFormationPackage(void*, ActorID actor, std::uint32_t package) {
-        if (!mrissi || actor != mrissi->GetFormID() || (package && !CanTravelInFormation(nullptr, actor)))
-            return 0;
-        if (!mod::mrissi_movement::SetFormation(mrissi, package))
-            return 0;
-        mod::mrissi_movement::Refresh(mrissi, MovementState());
-        if (package && !mod::mrissi_movement::FormationActive(mrissi, package)) {
-            mod::mrissi_movement::SetFormation(mrissi, 0);
-            return 0;
-        }
-        return 1;
-    }
-
     std::uint32_t CanReceiveCombatProtection(void*, ActorID actor) {
         FollowerState state;
         return Inspect(nullptr, actor, &state) && Supports(state, Command::Follow) ? 1u : 0u;
-    }
-
-    std::uint32_t SetStandDownPackage(void*, ActorID actor, std::uint32_t package) {
-        if (!mrissi || actor != mrissi->GetFormID() ||
-            (package && !mod::mrissi_movement_rules::StandDownPermitted(MovementState())))
-            return 0;
-        if (!mod::mrissi_movement::SetStandDown(mrissi, package))
-            return 0;
-        mod::mrissi_movement::Refresh(mrissi, MovementState());
-        if (package && !mod::mrissi_movement::StandDownActive(mrissi, package)) {
-            mod::mrissi_movement::SetStandDown(mrissi, 0);
-            return 0;
-        }
-        return 1;
     }
 
     void OnMessage(SKSE::MessagingInterface::Message* message) {
@@ -281,7 +161,7 @@ namespace {
             const auto query = module ? reinterpret_cast<QueryAPI>(GetProcAddress(module, QueryExport)) : nullptr;
             host = query ? query(mod::addon::RequiredAdapterAPIVersion) : nullptr;
             if (!host || host->size < BaseAPISize || host->version != InterfaceVersion || !host->registerAdapter ||
-                !host->complete) {
+                !host->complete || !HasCoreMovement(host)) {
                 SKSE::log::warn("Mrissi adapter: compatible YLIWF host API is unavailable");
                 return;
             }
@@ -293,12 +173,14 @@ namespace {
                                   Enumerate,
                                   Inspect,
                                   Start,
-                                  SetFollowDistance,
+                                  nullptr,
                                   nullptr,
                                   CanReceiveCombatProtection,
-                                  CanTravelInFormation,
-                                  SetFormationPackage,
-                                  SetStandDownPackage};
+                                  nullptr,
+                                  nullptr,
+                                  nullptr,
+                                  MovementPermissions,
+                                  AllMovement};
             registration = host->registerAdapter(&adapter);
             if (!registration)
                 SKSE::log::warn("Mrissi adapter registration rejected");
@@ -316,23 +198,12 @@ namespace {
                 for (std::size_t i = 0; i < ordinaryPackages.size(); ++i)
                     ordinaryPackages[i] = data->LookupForm<RE::TESPackage>(OrdinaryPackages[i], Plugin);
             }
-            mod::mrissi_movement::Configure(ordinaryPackages[0], ordinaryPackages[1], ordinaryPackages[2]);
-            if (mrissi)
-                StartMovementObservation();
             if (!mrissi || !dialogue || !noFollower || !broken || !dismissed || !mountHandling || !restrictedLocations)
                 SKSE::log::warn("Mrissi adapter: required MrissiTailOfTroubles.esp records are unavailable");
         } else if (message->type == SKSE::MessagingInterface::kPreLoadGame ||
                    message->type == SKSE::MessagingInterface::kNewGame) {
-            ++generation;
-            observeMovement = false;
-            commandPending = false;
-            mod::mrissi_movement::Reset(mrissi);
-            if (message->type == SKSE::MessagingInterface::kNewGame)
-                observeMovement = mrissi != nullptr;
+            commands.Invalidate();
         } else if (message->type == SKSE::MessagingInterface::kPostLoadGame) {
-            mod::mrissi_movement::SetFormation(mrissi, 0);
-            mod::mrissi_movement::Release(mrissi);
-            observeMovement = mrissi != nullptr;
             NotifyState();
         }
     }

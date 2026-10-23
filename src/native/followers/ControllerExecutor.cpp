@@ -492,8 +492,9 @@ namespace mod::controller::executor {
                               shield_defender::NeedsObservation() || delay || countsDirty ||
                               !storage::Get().queue.empty() || !storage::Get().callers.empty() ||
                               std::ranges::any_of(storage::Get().deadlines, [](float time) { return time > 0; });
-            DeadlineScheduler().Set(work, delay && !paused,
-                                    (formation::HasWork() || package_control::HasWork()) && !paused);
+            DeadlineScheduler().Set(
+                work, delay && !paused,
+                (formation::HasWork() || package_control::HasWork() || adapters::HasMovement()) && !paused);
         }
 
         RE::BSScript::LatentStatus Run(RE::BSScript::Internal::VirtualMachine*, RE::VMStackID stack,

@@ -22,9 +22,11 @@ Distance sets exactly one of `FollowDistanceClose`, `FollowDistanceMedium` or
 eligible. Combat protection requires following or waiting, `CanFollow` and no
 `LockedIn` restriction.
 
-[TravelFormation.cpp](../native/TravelFormation.cpp) applies temporary host packages
-during ordinary following or sandboxing, without overriding Dawnguard records,
-scripts or aliases. Quest packages, foreign interrupts, scenes, waiting and combat
-take priority over formations. Stand down permits existing combat but retains
-the quest and scene restrictions. Controller commands release these movement
-overrides before dispatch.
+`MovementPermissions` opts into core-managed formation and Stand-down packages
+during ordinary following or sandboxing. Quest packages and controller locks
+withdraw permission. The core handles interrupts and common movement guards;
+Serana retains native distance handling. See the
+[shared movement contract](../../../../docs/follower-adapters.md#core-managed-external-movement).
+
+Owner method dispatch uses `PapyrusCommands.h`, including session invalidation
+and Serana's additional dismissal verification.

@@ -1,5 +1,6 @@
 #include "adapters/Adapters.h"
 #include "adapters/AdapterRules.h"
+#include "adapters/Movement.h"
 #include "followers/ControllerRuntime.h"
 #include "followers/ControllerExecutor.h"
 #include "diagnostics/Debug.h"
@@ -35,6 +36,8 @@ namespace mod::adapters {
         Observations observed;
         std::unordered_set<AdapterID> queuedChanges;
         float observationSeconds = 0;
+        float movementSeconds = 0;
+        std::unordered_set<ActorID> savedMovement;
 
         bool MainThread() {
             auto* main = RE::Main::GetSingleton();
@@ -87,6 +90,7 @@ namespace mod::adapters {
                     std::strcpy(state.reason, "Adapter returned an invalid state");
                 }
                 if (result) {
+                    result->conflictingOwnership = true;
                     result->state = {};
                     std::strcpy(result->state.reason, "Multiple add-ons claim this actor; commands are disabled");
                     knownOwners.insert(actor);
@@ -102,6 +106,7 @@ namespace mod::adapters {
                         const auto* ref = skyrim_cast<RE::BGSRefAlias*>(alias);
                         const auto* occupant = ref ? ref->GetActorReference() : nullptr;
                         if (occupant && occupant->GetFormID() == actor) {
+                            result->conflictingOwnership = true;
                             result->state.commands = 0;
                             result->state.state = State::Unavailable;
                             std::strcpy(result->state.reason,
@@ -126,6 +131,61 @@ namespace mod::adapters {
                 knownOwners.erase(actor);
             }
             return result;
+        }
+
+        adapter_movement_rules::Snapshot MovementState(ActorID actor, std::uint32_t ownerPackage) {
+            adapter_movement_rules::Snapshot result;
+            const auto follower = loaded ? Inspect(actor, false) : std::nullopt;
+            if (!follower)
+                return result;
+            result.state = follower->state.state;
+            result.pending =
+                std::ranges::any_of(requests.items, [actor](const auto& item) { return item.actor == actor; });
+            const auto& adapter = providers[follower->adapter - 1].api;
+            if (UsesCoreMovement(adapter, Movement::Distance) || UsesCoreMovement(adapter, Movement::Formation) ||
+                UsesCoreMovement(adapter, Movement::StandDown)) {
+                const auto permissions =
+                    adapter.movementPermissions(adapter.context, actor, ownerPackage, &follower->state);
+                // Unknown or unadvertised bits reject the complete decision.
+                if (!(permissions & ~adapter.coreMovementFeatures))
+                    result.permissions = permissions;
+            }
+            return result;
+        }
+
+        bool ApplyDistance(const Follower& follower, FollowDistance distance) {
+            const auto& adapter = providers[follower.adapter - 1].api;
+            if (adapter.setFollowDistance && !adapter.setFollowDistance(adapter.context, follower.actor, distance))
+                return false;
+            return UsesCoreMovement(adapter, Movement::Distance)
+                       ? adapter_movement::SetDistance(follower.actor, static_cast<int>(distance), MovementState)
+                       : adapter.setFollowDistance != nullptr;
+        }
+
+        void RefreshMovement(float elapsed) {
+            const auto* main = RE::Main::GetSingleton();
+            if (!main || main->freezeTime)
+                return;
+            if (!adapter_movement_rules::RefreshDue(movementSeconds, elapsed))
+                return;
+            std::erase_if(savedMovement, [](ActorID actor) {
+                auto* reference = RE::TESForm::LookupByID<RE::Actor>(actor);
+                if (!reference)
+                    return true;
+                if (!reference->Is3DLoaded())
+                    return false;
+                const auto follower = Inspect(actor, false);
+                if (!follower || follower->conflictingOwnership || NativeOwned(actor))
+                    return true;
+                return adapter_movement::ClearSaved(actor);
+            });
+            for (const auto actor : adapter_movement::Actors()) {
+                const auto follower = Inspect(actor, false);
+                if (!follower || follower->state.state == State::Inactive)
+                    adapter_movement::Forget(actor);
+                else
+                    adapter_movement::Refresh(actor, MovementState);
+            }
         }
 
         void Finish(AdapterID adapter, RequestID id, bool success, std::string reason, bool remove = true) {
@@ -241,8 +301,8 @@ namespace mod::adapters {
     }
 
     const yliwf::sdk::API* Query(std::uint32_t version) {
-        static const yliwf::sdk::API api{sizeof(api), yliwf::sdk::InterfaceVersion, Register, Acknowledge,
-                                         StateChanged};
+        static const yliwf::sdk::API api{sizeof(api),  yliwf::sdk::InterfaceVersion, Register, Acknowledge,
+                                         StateChanged, adapter_movement::IsPackage};
         return version == yliwf::sdk::InterfaceVersion ? &api : nullptr;
     }
 
@@ -274,10 +334,14 @@ namespace mod::adapters {
             !Supports(follower->state, Command::Follow))
             return false;
         const auto& adapter = providers[follower->adapter - 1].api;
+        if (UsesCoreMovement(adapter, Movement::Formation))
+            return adapter_movement::Permitted(actor, Movement::Formation, MovementState);
         return HasTravelFormation(adapter) && adapter.canTravelInFormation(adapter.context, actor) == 1;
     }
 
     bool SetFormationPackage(yliwf::sdk::ActorID actor, std::uint32_t package) {
+        if (!package && adapter_movement::Tracks(actor))
+            return adapter_movement::SetPackage(actor, Movement::Formation, 0, MovementState);
         // Release also works for dismissed, locked or pending actors. Their
         // movement must be restored before the owner's command can proceed.
         const auto follower = Inspect(actor, false);
@@ -286,10 +350,14 @@ namespace mod::adapters {
         if (package && !CanTravelInFormation(actor))
             return false;
         const auto& adapter = providers[follower->adapter - 1].api;
+        if (UsesCoreMovement(adapter, Movement::Formation))
+            return adapter_movement::SetPackage(actor, Movement::Formation, package, MovementState);
         return adapter.setFormationPackage(adapter.context, actor, package) == 1;
     }
 
     bool SetStandDownPackage(yliwf::sdk::ActorID actor, std::uint32_t package) {
+        if (!package && adapter_movement::Tracks(actor))
+            return adapter_movement::SetPackage(actor, Movement::StandDown, 0, MovementState);
         if (package &&
             std::ranges::any_of(requests.items, [actor](const auto& request) { return request.actor == actor; }))
             return false;
@@ -297,6 +365,8 @@ namespace mod::adapters {
         if (!follower)
             return false;
         const auto& adapter = providers[follower->adapter - 1].api;
+        if (UsesCoreMovement(adapter, Movement::StandDown))
+            return adapter_movement::SetPackage(actor, Movement::StandDown, package, MovementState);
         return yliwf::sdk::HasStandDown(adapter) && adapter.setStandDownPackage(adapter.context, actor, package) == 1;
     }
 
@@ -375,7 +445,6 @@ namespace mod::adapters {
         if (!loaded || !MainThread())
             return;
         for (const auto& follower : Followers(false)) {
-            auto& provider = providers[follower.adapter - 1];
             if (!follower.supportsDistance)
                 continue;
             auto* actor = RE::TESForm::LookupByID<RE::Actor>(follower.actor);
@@ -386,8 +455,7 @@ namespace mod::adapters {
             const auto choice = follow_distance::Read(actor);
             follow_distance::Remember(actor, choice.preset, choice.individual);
             if (Supports(follower.state, Command::Follow))
-                provider.api.setFollowDistance(provider.api.context, follower.actor,
-                                               static_cast<FollowDistance>(choice.preset));
+                ApplyDistance(follower, static_cast<FollowDistance>(choice.preset));
         }
     }
 
@@ -398,8 +466,7 @@ namespace mod::adapters {
             !follow_distance::ValidPreset(preset) || !follower || !follower->supportsDistance ||
             !Supports(follower->state, Command::Follow))
             return false;
-        auto& provider = providers[follower->adapter - 1];
-        if (!provider.api.setFollowDistance(provider.api.context, actorID, static_cast<FollowDistance>(preset)))
+        if (!ApplyDistance(*follower, static_cast<FollowDistance>(preset)))
             return false;
         return follow_distance::Remember(actor, preset, true);
     }
@@ -444,6 +511,7 @@ namespace mod::adapters {
     }
 
     void Tick(float elapsed) {
+        RefreshMovement(elapsed);
         // Vanilla dialogue methods can change properties without quest/location events.
         // Observe on the main thread even while diagnostic pages are closed.
         if (adapter_rules::ObservationDue(observationSeconds, elapsed)) {
@@ -479,6 +547,7 @@ namespace mod::adapters {
             Finish(request.adapter, request.id, false, "Quest state changed before command dispatch.");
             return;
         }
+        adapter_movement::Suspend(request.actor);
         next->started = true;
         char reason[192]{};
         const auto started = provider.api.start(provider.api.context, request.actor, request.command, request.id,
@@ -496,6 +565,10 @@ namespace mod::adapters {
         return std::ranges::any_of(requests.items, [](const auto& item) { return !item.quarantined; });
     }
 
+    bool HasMovement() {
+        return loaded && adapter_movement::HasWork();
+    }
+
     bool NeedsObservation() {
         return loaded && !providers.empty();
     }
@@ -511,10 +584,39 @@ namespace mod::adapters {
         queuedChanges.clear();
         protectedActors.clear();
         observationSeconds = 0;
+        movementSeconds = 0;
+        savedMovement.clear();
+        adapter_movement::Invalidate();
     }
 
     void GameLoaded() {
+        std::scoped_lock lock(settings::Mutex);
+        if (!MainThread()) {
+            if (auto* tasks = SKSE::GetTaskInterface()) {
+                const auto generation = debug::Generation();
+                tasks->AddTask([generation] {
+                    if (debug::IsCurrentGame(generation))
+                        GameLoaded();
+                });
+            }
+            return;
+        }
+        if (loaded)
+            return;
         loaded = true;
+        adapter_movement::Configure();
+        // Only unique external owners opting into core movement can have saved
+        // temporary packages cleaned up. Never touch native/duplicate ownership.
+        for (const auto actor : EnumeratedActors()) {
+            const auto follower = Inspect(actor, false);
+            if (!follower || NativeOwned(actor) || follower->conflictingOwnership)
+                continue;
+            const auto& adapter = providers[follower->adapter - 1].api;
+            if (UsesCoreMovement(adapter, Movement::Distance) || UsesCoreMovement(adapter, Movement::Formation) ||
+                UsesCoreMovement(adapter, Movement::StandDown))
+                if (!adapter_movement::ClearSaved(actor))
+                    savedMovement.insert(actor);
+        }
         ApplyCombatProtection();
         ApplyFollowDistance();
         observed = Observe();

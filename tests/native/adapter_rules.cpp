@@ -1,6 +1,9 @@
 #include <doctest/doctest.h>
 
 #include "adapters/AdapterRules.h"
+#include "adapters/MovementRules.h"
+#include "AdapterCommandState.h"
+#include "common/MovementRecords.h"
 
 namespace {
     TEST_CASE("Adapter observations do not require a visible menu") {
@@ -21,8 +24,8 @@ namespace {
     static_assert(sizeof(void*) == 8 && sizeof(FollowerState) == 204 && BaseAdapterSize == 56 &&
                   offsetof(Adapter, canRecruitThroughDialogue) == 64 &&
                   offsetof(Adapter, canReceiveCombatProtection) == 72 &&
-                  offsetof(Adapter, canTravelInFormation) == 80 && sizeof(Adapter) == 104 && BaseAPISize == 24 &&
-                  sizeof(API) == 32);
+                  offsetof(Adapter, canTravelInFormation) == 80 && sizeof(Adapter) == 120 && BaseAPISize == 24 &&
+                  sizeof(API) == 40);
 
     Adapter ValidAdapter() {
         Adapter adapter;
@@ -37,6 +40,143 @@ namespace {
         adapter.canTravelInFormation = [](void*, ActorID) { return 1u; };
         adapter.setFormationPackage = [](void*, ActorID, std::uint32_t) { return 1u; };
         return adapter;
+    }
+
+    TEST_CASE("Core movement is an optional v1 extension with explicit feature support") {
+        auto adapter = ValidAdapter();
+        adapter.setFollowDistance = nullptr;
+        adapter.canTravelInFormation = nullptr;
+        adapter.setFormationPackage = nullptr;
+        adapter.movementPermissions = [](void*, ActorID, std::uint32_t, const FollowerState*) { return AllMovement; };
+        adapter.coreMovementFeatures = AllMovement;
+        CHECK(Valid(adapter));
+        CHECK(HasFollowDistance(adapter));
+        CHECK(HasTravelFormation(adapter));
+        CHECK(HasStandDown(adapter));
+        adapter.size = 104;
+        CHECK(Valid(adapter));
+        CHECK_FALSE(HasFollowDistance(adapter));
+        CHECK_FALSE(HasTravelFormation(adapter));
+        CHECK_FALSE(HasStandDown(adapter));
+        adapter.size = sizeof(Adapter);
+        adapter.coreMovementFeatures = 8;
+        CHECK_FALSE(Valid(adapter));
+        adapter.coreMovementFeatures = AllMovement;
+        adapter.movementPermissions = nullptr;
+        CHECK_FALSE(Valid(adapter));
+    }
+
+    TEST_CASE("A previous v1 host still exposes state notification without core movement") {
+        API host;
+        host.stateChanged = [](AdapterID) {};
+        host.isMovementPackage = [](std::uint32_t) { return 1u; };
+        CHECK(HasCoreMovement(&host));
+        host.size = 32;
+        CHECK(CanNotifyState(&host));
+        CHECK_FALSE(HasCoreMovement(&host));
+    }
+
+    TEST_CASE("Shared movement resolves existing record ranges without accepting overflow indexes") {
+        using namespace mod::movement_records;
+        CHECK(Distance(0) == 0x990);
+        CHECK(Distance(2) == 0x992);
+        CHECK(Distance(Distances) == 0);
+        CHECK(Formation(0) == 0x9A0);
+        CHECK(Formation(7) == 0x9A7);
+        CHECK(Formation(8) == 0x9C0);
+        CHECK(Formation(15) == 0x9C7);
+        CHECK(Formation(Formations) == 0);
+        CHECK(PassiveOrAvoidance(0) == 0xA11);
+        CHECK(PassiveOrAvoidance(3) == 0xA14);
+        CHECK(PassiveOrAvoidance(4) == 0xA20);
+        CHECK(PassiveOrAvoidance(35) == 0xA3F);
+        CHECK(PassiveOrAvoidance(StandDown) == 0);
+    }
+
+    mod::adapter_movement_rules::Snapshot Walking() {
+        return {.state = State::Following, .permissions = AllMovement, .available = true, .normalMovement = true};
+    }
+
+    TEST_CASE("Shared movement preserves requested priority without unauthorized fallback") {
+        using namespace mod::adapter_movement_rules;
+        auto value = Walking();
+        CHECK(Select(value, false, false, false) == 0);
+        CHECK(Select(value, true, false, false) == MovementBit(Movement::Distance));
+        CHECK(Select(value, true, true, false) == MovementBit(Movement::Formation));
+        CHECK(Select(value, true, true, true) == MovementBit(Movement::StandDown));
+        value.permissions = MovementBit(Movement::Distance);
+        CHECK(Select(value, true, true, false) == 0);
+        CHECK(Select(value, true, false, true) == 0);
+        value.permissions = 0;
+        CHECK(Select(value, true, false, false) == 0);
+        value.permissions = 8;
+        CHECK(Select(value, true, true, true) == 0);
+    }
+
+    TEST_CASE("Shared movement preserves waiting and permits Stand down during combat") {
+        using namespace mod::adapter_movement_rules;
+        auto value = Walking();
+        value.combat = true;
+        CHECK_FALSE(Permitted(value, Movement::Distance));
+        CHECK_FALSE(Permitted(value, Movement::Formation));
+        CHECK(Permitted(value, Movement::StandDown));
+        value.combat = false;
+        value.state = State::Waiting;
+        CHECK_FALSE(Permitted(value, Movement::Distance));
+        CHECK_FALSE(Permitted(value, Movement::Formation));
+        CHECK(Permitted(value, Movement::StandDown));
+        for (const auto state : {State::Inactive, State::Unavailable}) {
+            value.state = state;
+            CHECK(Select(value, true, true, true) == 0);
+        }
+    }
+
+    TEST_CASE("Shared movement yields to pending owners, scenes and foreign interrupts") {
+        using namespace mod::adapter_movement_rules;
+        for (const auto field : {&Snapshot::pending, &Snapshot::scene, &Snapshot::foreignInterrupt}) {
+            auto value = Walking();
+            value.*field = true;
+            CHECK(Select(value, true, false, false) == 0);
+            CHECK(Select(value, true, true, true) == 0);
+        }
+        for (const auto field : {&Snapshot::available, &Snapshot::normalMovement}) {
+            auto value = Walking();
+            value.*field = false;
+            CHECK(Select(value, true, true, true) == 0);
+        }
+    }
+
+    TEST_CASE("Shared movement refresh is bounded and ignores inactive time") {
+        float seconds = 0;
+        CHECK_FALSE(mod::adapter_movement_rules::RefreshDue(seconds, -1));
+        CHECK_FALSE(mod::adapter_movement_rules::RefreshDue(seconds, 0));
+        CHECK_FALSE(mod::adapter_movement_rules::RefreshDue(seconds, 0.1f));
+        CHECK(mod::adapter_movement_rules::RefreshDue(seconds, 0.1f));
+        CHECK(seconds == 0);
+        CHECK(mod::adapter_movement_rules::RefreshDue(seconds, 5));
+        CHECK_FALSE(mod::adapter_movement_rules::RefreshDue(seconds, 0));
+    }
+
+    TEST_CASE("Owner command callbacks cannot complete twice or clear a newer request") {
+        papyrus::CommandState calls;
+        CHECK_FALSE(calls.Begin(0, 1));
+        CHECK_FALSE(calls.Begin(1, 0));
+        CHECK(calls.Begin(1, 10));
+        CHECK_FALSE(calls.Begin(1, 11));
+        const auto epoch = calls.Generation();
+        CHECK_FALSE(calls.Finish(1, 11, epoch));
+        CHECK(calls.Pending(1));
+        CHECK(calls.Finish(1, 10, epoch));
+        CHECK_FALSE(calls.Finish(1, 10, epoch));
+        CHECK(calls.Begin(1, 11));
+        CHECK_FALSE(calls.Finish(1, 10, epoch));
+        CHECK(calls.Pending(1));
+        calls.Invalidate();
+        CHECK_FALSE(calls.Pending(1));
+        CHECK(calls.Begin(1, 12));
+        CHECK_FALSE(calls.Finish(1, 12, epoch));
+        CHECK(calls.Pending(1));
+        CHECK(calls.Finish(1, 12, calls.Generation()));
     }
 
     TEST_CASE("Stand-down is optional and never reads beyond an older adapter table") {

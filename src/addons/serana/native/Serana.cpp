@@ -4,7 +4,7 @@
 #include "ModInfo.h"
 #include "AddonInfo.h"
 #include "Rules.h"
-#include "TravelFormation.h"
+#include "PapyrusCommands.h"
 #include "PapyrusController.h"
 #include <array>
 #include <cstdio>
@@ -15,6 +15,7 @@ namespace {
                   "addon.json must declare the adapter API implemented by this add-on");
     const API* host = nullptr;
     AdapterID registration = 0;
+    papyrus::Commands commands;
     RE::TESQuest* mentalModel = nullptr;
     RE::Actor* serana = nullptr;
     constexpr char Script[] = "DLC1_NPCMentalModelScript";
@@ -119,10 +120,14 @@ namespace {
                    : 0u;
     }
 
-    std::uint32_t CanTravelInFormation(void*, ActorID actor) {
-        FollowerState state;
-        if (!Inspect(nullptr, actor, &state) || state.state != State::Following || !Supports(state, Command::Follow) ||
-            !mod::serana_formation::PermittedPackage(serana))
+    constexpr std::array<RE::FormID, 4> OrdinaryForms{0x2BB9, 0x2BBA, 0x2BBB, 0x3BC1};
+    std::array<RE::TESPackage*, 4> ordinaryPackages{};
+
+    std::uint32_t MovementPermissions(void*, ActorID actor, std::uint32_t ownerPackage, const FollowerState* state) {
+        if (!serana || actor != serana->GetFormID() || !state || !Supports(*state, Command::Follow) ||
+            commands.Pending(actor) || !std::ranges::any_of(ordinaryPackages, [ownerPackage](const auto* package) {
+                return package && package->GetFormID() == ownerPackage;
+            }))
             return 0;
         const auto object = papyrus::Bound(mentalModel, Script);
         const auto following = papyrus::Boolean(object, "IsFollowing");
@@ -130,62 +135,28 @@ namespace {
         const auto dismissed = papyrus::Boolean(object, "IsDismissed");
         const auto locked = papyrus::Boolean(object, "LockedIn");
         const auto canFollow = papyrus::Boolean(object, "CanFollow");
-        return following && waiting && dismissed && locked && canFollow &&
-                       mod::serana_rules::CanTravelInFormation({.following = *following,
-                                                                .waiting = *waiting,
-                                                                .dismissed = *dismissed,
-                                                                .locked = *locked,
-                                                                .canFollow = *canFollow})
-                   ? 1u
-                   : 0u;
+        if (!following || !waiting || !dismissed || !locked || !canFollow)
+            return 0;
+        const mod::serana_rules::ControllerState snapshot{.following = *following,
+                                                          .waiting = *waiting,
+                                                          .dismissed = *dismissed,
+                                                          .locked = *locked,
+                                                          .canFollow = *canFollow};
+        std::uint32_t permissions = 0;
+        if (mod::serana_rules::CanTravelInFormation(snapshot))
+            permissions |= MovementBit(Movement::Formation);
+        if (mod::serana_rules::CanReceiveCombatProtection(snapshot))
+            permissions |= MovementBit(Movement::StandDown);
+        return permissions;
     }
 
-    std::uint32_t SetFormationPackage(void*, ActorID actor, std::uint32_t package) {
-        if (!serana || serana->GetFormID() != actor || (package && !CanTravelInFormation(nullptr, actor)))
-            return 0;
-        return mod::serana_formation::Apply(serana, package) ? 1u : 0u;
+    bool VerifyCommand(ActorID actor, Command command) {
+        FollowerState state;
+        return Inspect(nullptr, actor, &state) && Reached(state, command) &&
+               (command != Command::Dismiss ||
+                (!serana->IsPlayerTeammate() &&
+                 papyrus::Boolean(papyrus::Bound(mentalModel, Script), "IsDismissed").value_or(false)));
     }
-
-    std::uint32_t SetStandDownPackage(void*, ActorID actor, std::uint32_t package) {
-        if (!serana || serana->GetFormID() != actor)
-            return 0;
-        if (package && !CanReceiveCombatProtection(nullptr, actor))
-            return 0;
-        return mod::serana_formation::ApplyStandDown(serana, package) ? 1u : 0u;
-    }
-
-    class Completion final : public RE::BSScript::IStackCallbackFunctor {
-    public:
-        Completion(RequestID request, ActorID actor, Command command)
-            : request(request), actor(actor), command(command) {}
-
-        void operator()(RE::BSScript::Variable) override {
-            // VM callbacks may run on a worker. Observe engine state on the main thread.
-            if (auto* tasks = SKSE::GetTaskInterface())
-                tasks->AddTask([request = request, actor = actor, command = command] {
-                    FollowerState state;
-                    const bool verified =
-                        Inspect(nullptr, actor, &state) && Reached(state, command) &&
-                        (command != Command::Dismiss ||
-                         (!serana->IsPlayerTeammate() &&
-                          papyrus::Boolean(papyrus::Bound(mentalModel, Script), "IsDismissed").value_or(false)));
-                    if (host)
-                        host->complete(registration, request, verified ? 1 : 0,
-                                       verified ? "Dawnguard method returned and follower state matches."
-                                                : "Dawnguard method returned without reaching the requested state.");
-                });
-        }
-
-        void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>& value) override {
-            object = value;
-        }
-
-    private:
-        RequestID request;
-        ActorID actor;
-        Command command;
-        papyrus::Object object;
-    };
 
     StartResult Start(void*, ActorID actor, Command command, RequestID request, char* reason, std::uint32_t capacity) {
         FollowerState state;
@@ -195,17 +166,8 @@ namespace {
         }
         if (Reached(state, command))
             return StartResult::Completed;
-        mod::serana_formation::Release(serana);
-        mod::serana_formation::ApplyStandDown(serana, 0);
-        auto object = papyrus::Bound(mentalModel, Script);
-        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-        if (!vm || !object)
-            return StartResult::Rejected;
-        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> completion{new Completion(request, actor, command)};
-        return vm->DispatchMethodCall(object, Methods[static_cast<std::size_t>(command)], RE::MakeFunctionArguments(),
-                                      completion)
-                   ? StartResult::Pending
-                   : StartResult::Rejected;
+        return commands.Dispatch(papyrus::Bound(mentalModel, Script), Methods[static_cast<std::size_t>(command)], host,
+                                 registration, actor, command, request, VerifyCommand);
     }
 
     void NotifyState() {
@@ -293,7 +255,7 @@ namespace {
             const auto query = module ? reinterpret_cast<QueryAPI>(GetProcAddress(module, QueryExport)) : nullptr;
             host = query ? query(mod::addon::RequiredAdapterAPIVersion) : nullptr;
             if (!host || host->size < BaseAPISize || host->version != InterfaceVersion || !host->registerAdapter ||
-                !host->complete) {
+                !host->complete || !HasCoreMovement(host)) {
                 SKSE::log::warn("Serana adapter: compatible YLIWF host API is unavailable");
                 host = nullptr;
                 return;
@@ -309,17 +271,20 @@ namespace {
                                   SetFollowDistance,
                                   CanRecruitThroughDialogue,
                                   CanReceiveCombatProtection,
-                                  CanTravelInFormation,
-                                  SetFormationPackage,
-                                  SetStandDownPackage};
+                                  nullptr,
+                                  nullptr,
+                                  nullptr,
+                                  MovementPermissions,
+                                  MovementBit(Movement::Formation) | MovementBit(Movement::StandDown)};
             registration = host->registerAdapter(&adapter);
             if (!registration)
                 SKSE::log::warn("Serana adapter registration rejected");
         } else if (message->type == SKSE::MessagingInterface::kDataLoaded) {
-            mod::serana_formation::Configure();
             if (auto* data = RE::TESDataHandler::GetSingleton()) {
                 mentalModel = data->LookupForm<RE::TESQuest>(0x2B6E, "Dawnguard.esm");
                 serana = data->LookupForm<RE::Actor>(0x2B74, "Dawnguard.esm");
+                for (std::size_t i = 0; i < ordinaryPackages.size(); ++i)
+                    ordinaryPackages[i] = data->LookupForm<RE::TESPackage>(OrdinaryForms[i], "Dawnguard.esm");
             }
             if (!mentalModel || !serana)
                 SKSE::log::warn("Serana adapter: Dawnguard forms unavailable");
@@ -331,6 +296,9 @@ namespace {
                 events->AddEventSink<RE::TESCombatEvent>(&stateEvents);
                 events->AddEventSink<RE::TESDeathEvent>(&stateEvents);
             }
+        } else if (message->type == SKSE::MessagingInterface::kPreLoadGame ||
+                   message->type == SKSE::MessagingInterface::kNewGame) {
+            commands.Invalidate();
         }
     }
 }

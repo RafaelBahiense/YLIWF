@@ -34,7 +34,8 @@ radii. The adapter also mirrors the native near/far preference in faction `04EA5
 for owner-controlled movement, including horses. Waiting values and recruitment
 state are preserved.
 
-The formation callbacks accept only the core's sixteen formation packages.
+The adapter opts into core distance, formation and Stand-down movement.
+The core accepts only its own movement packages.
 Formation movement takes precedence over the selected distance; releasing a
 formation returns to distance following when eligible. Both use reversible
 interrupt packages. Only recognized core follow/formation/stand-down interrupts on Inigo are
@@ -47,7 +48,7 @@ underlying package is checked independently of the temporary interrupt, so quest
 movement can revoke eligibility. Replacing an interrupt rechecks permission after
 reevaluation.
 
-Stand-down callbacks accept only the core's four passive and thirty-two avoidance
+Core Stand-down movement accepts only the four passive and thirty-two avoidance
 packages (`000A11`–`000A14`, `000A20`–`000A3F`). They take priority over travel
 preferences and allow combat while retaining controller, scene, locomotion,
 horse and foreign-interrupt restrictions. Ordinary waiting and relaxing packages
@@ -56,12 +57,11 @@ core owns combat suppression, stopping combat and avoidance destinations. The
 adapter owns the reversible package interrupt and releases it when eligibility
 is revoked or a controller command starts.
 
-A 250 ms worker wake schedules at most one main-thread observation. The worker
-does not read engine or VM objects. Main-thread refresh pauses with frozen/paused
-game time, releases revoked movement and reapplies eligible preferences. Loading
-clears transient selections and releases recognized saved movement; the host
-rediscovers its saved distance and formation choices. This add-on does not register
-an additional SKSE serialization format.
+The core's shared movement update replaces add-on polling. It releases revoked
+movement and reapplies eligible preferences; no add-on thread or serialization
+format is needed. `PapyrusCommands.h` handles method dispatch, pending work and
+session invalidation. See the
+[shared movement contract](../../../../docs/follower-adapters.md#core-managed-external-movement).
 
 ## Validation
 

@@ -1,6 +1,5 @@
 #include <doctest/doctest.h>
 #include "Rules.h"
-#include "MovementRules.h"
 #include <limits>
 #include <initializer_list>
 
@@ -8,21 +7,9 @@ namespace {
     using namespace yliwf::sdk;
     using mod::mrissi_rules::Describe;
     using mod::mrissi_rules::Snapshot;
-    using Movement = mod::mrissi_movement_rules::Snapshot;
-    using mod::mrissi_movement_rules::Select;
-    using mod::mrissi_movement_rules::Selection;
 
     Snapshot Following() {
         return {.initialized = true, .recruited = true, .teammate = true, .ordinaryPackage = true};
-    }
-
-    Movement Travelling() {
-        return {.following = true,
-                .controllerAllows = true,
-                .loaded = true,
-                .ordinaryOnFoot = true,
-                .ordinaryPassive = true,
-                .normalMovement = true};
     }
 
     TEST_CASE("M'rissi commands use recruitment alias and authored waiting state") {
@@ -93,43 +80,4 @@ namespace {
         }
     }
 
-    TEST_CASE("M'rissi movement prioritizes Stand down then formation then distance") {
-        auto movement = Travelling();
-        CHECK(Select(movement, false, false) == Selection::Owner);
-        CHECK(Select(movement, true, false) == Selection::Distance);
-        CHECK(Select(movement, true, true) == Selection::Formation);
-        CHECK(Select(movement, true, true, true) == Selection::StandDown);
-        movement.combat = true;
-        CHECK(Select(movement, true, true) == Selection::Owner);
-        CHECK(Select(movement, true, true, true) == Selection::StandDown);
-    }
-
-    TEST_CASE("M'rissi never resumes waiting for distance or formation preferences") {
-        auto movement = Travelling();
-        movement.following = false;
-        movement.waiting = true;
-        CHECK(Select(movement, true, true) == Selection::Owner);
-        CHECK(Select(movement, true, true, true) == Selection::StandDown);
-        movement.waiting = false;
-        CHECK(Select(movement, true, true, true) == Selection::Owner);
-    }
-
-    TEST_CASE("M'rissi movement releases for foreign owners, missing 3D and controller restrictions") {
-        for (const auto field :
-             {&Movement::pending, &Movement::scene, &Movement::ridingRequested, &Movement::foreignInterrupt}) {
-            auto movement = Travelling();
-            movement.*field = true;
-            CHECK(Select(movement, true, true) == Selection::Owner);
-            CHECK(Select(movement, true, true, true) == Selection::Owner);
-        }
-        for (const auto field :
-             {&Movement::controllerAllows, &Movement::loaded, &Movement::normalMovement, &Movement::ordinaryPassive}) {
-            auto movement = Travelling();
-            movement.*field = false;
-            CHECK(Select(movement, true, true, true) == Selection::Owner);
-        }
-        auto movement = Travelling();
-        movement.ordinaryOnFoot = false;
-        CHECK(Select(movement, true, true) == Selection::Owner);
-    }
 }

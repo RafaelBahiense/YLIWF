@@ -1,13 +1,11 @@
 #include <doctest/doctest.h>
 #include "Rules.h"
-#include "MovementRules.h"
 #include <limits>
 
 namespace {
     using namespace yliwf::sdk;
     using mod::inigo_rules::Describe;
     using mod::inigo_rules::Snapshot;
-    using MovementSnapshot = mod::inigo_movement_rules::Snapshot;
 
     Snapshot Following() {
         return {.initialized = true, .teammate = true, .waiting = 0.0f, .ordinaryPackage = true};
@@ -85,86 +83,4 @@ namespace {
         CHECK_FALSE(DistanceRank(static_cast<FollowDistance>(3)));
     }
 
-    mod::inigo_movement_rules::Snapshot Walking() {
-        return {.following = true,
-                .controllerAllows = true,
-                .loaded = true,
-                .ordinaryOnFoot = true,
-                .ordinaryPassive = true,
-                .normalMovement = true};
-    }
-
-    TEST_CASE("Inigo formation release returns to the selected distance") {
-        using namespace mod::inigo_movement_rules;
-        const auto walking = Walking();
-        CHECK(Select(walking, true, false) == Selection::Distance);
-        CHECK(Select(walking, true, true) == Selection::Formation);
-        CHECK(Select(walking, true, false) == Selection::Distance);
-        CHECK(Select(walking, false, false) == Selection::Owner);
-    }
-
-    TEST_CASE("Inigo movement yields to combat scenes horses and foreign interrupts") {
-        using namespace mod::inigo_movement_rules;
-        for (const auto field : {&MovementSnapshot::pending, &MovementSnapshot::combat, &MovementSnapshot::scene,
-                                 &MovementSnapshot::ridingRequested, &MovementSnapshot::foreignInterrupt}) {
-            auto walking = Walking();
-            walking.*field = true;
-            CHECK(Select(walking, true, false) == Selection::Owner);
-            CHECK(Select(walking, true, true) == Selection::Owner);
-            walking.*field = false;
-            CHECK(Select(walking, true, false) == Selection::Distance);
-        }
-    }
-
-    TEST_CASE("Inigo movement requires ordinary loaded following and controller permission") {
-        using namespace mod::inigo_movement_rules;
-        for (const auto field :
-             {&MovementSnapshot::following, &MovementSnapshot::controllerAllows, &MovementSnapshot::loaded,
-              &MovementSnapshot::ordinaryOnFoot, &MovementSnapshot::normalMovement}) {
-            auto walking = Walking();
-            walking.*field = false;
-            CHECK_FALSE(Permitted(walking));
-            CHECK(Select(walking, true, true) == Selection::Owner);
-        }
-    }
-
-    TEST_CASE("Inigo stand down overrides travel and remains available in combat") {
-        using namespace mod::inigo_movement_rules;
-        auto snapshot = Walking();
-        snapshot.combat = true;
-        CHECK(Select(snapshot, true, true) == Selection::Owner);
-        CHECK(Select(snapshot, true, true, true) == Selection::StandDown);
-        snapshot.combat = false;
-        CHECK(Select(snapshot, true, true, true) == Selection::StandDown);
-        CHECK(Select(snapshot, true, true, false) == Selection::Formation);
-        CHECK(Select(snapshot, true, false, false) == Selection::Distance);
-    }
-
-    TEST_CASE("Inigo stand down preserves waiting without resuming travel") {
-        using namespace mod::inigo_movement_rules;
-        auto snapshot = Walking();
-        snapshot.following = false;
-        snapshot.waiting = true;
-        snapshot.ordinaryOnFoot = false;
-        CHECK(Select(snapshot, true, true, true) == Selection::StandDown);
-        CHECK(Select(snapshot, true, true, false) == Selection::Owner);
-        snapshot.waiting = false;
-        CHECK(Select(snapshot, true, true, true) == Selection::Owner);
-    }
-
-    TEST_CASE("Inigo stand down yields to controller restrictions and foreign activities") {
-        using namespace mod::inigo_movement_rules;
-        for (const auto field : {&MovementSnapshot::pending, &MovementSnapshot::scene,
-                                 &MovementSnapshot::ridingRequested, &MovementSnapshot::foreignInterrupt}) {
-            auto snapshot = Walking();
-            snapshot.*field = true;
-            CHECK(Select(snapshot, true, true, true) == Selection::Owner);
-        }
-        for (const auto field : {&MovementSnapshot::controllerAllows, &MovementSnapshot::loaded,
-                                 &MovementSnapshot::ordinaryPassive, &MovementSnapshot::normalMovement}) {
-            auto snapshot = Walking();
-            snapshot.*field = false;
-            CHECK(Select(snapshot, true, true, true) == Selection::Owner);
-        }
-    }
 }

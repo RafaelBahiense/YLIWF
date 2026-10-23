@@ -5,7 +5,7 @@ story, dialogue, outfits and mount behavior.
 
 ## Requirements and installation
 
-- [YLIWF core](../../../README.md) with follower adapter API v1.
+- [YLIWF core](../../../README.md) with core-managed external movement (adapter API v1).
 - M'rissi's Tails of Troubles SE 1.7 (`MrissiTailOfTroubles.esp`).
 
 Install `YouLeadIWillFollow-Mrissi-<version>.zip` alongside both mods. Recruit

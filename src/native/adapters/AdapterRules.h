@@ -22,8 +22,12 @@ namespace mod::adapter_rules {
     }
 
     inline bool Valid(const Adapter& adapter) {
-        return adapter.size >= BaseAdapterSize && adapter.version == InterfaceVersion && adapter.id && *adapter.id &&
-               adapter.name && *adapter.name && adapter.enumerate && adapter.inspect && adapter.start;
+        const bool hasMovement =
+            adapter.size >= offsetof(Adapter, coreMovementFeatures) + sizeof(adapter.coreMovementFeatures);
+        const bool validMovement = !hasMovement || (!(adapter.coreMovementFeatures & ~AllMovement) &&
+                                                    (!adapter.coreMovementFeatures || adapter.movementPermissions));
+        return validMovement && adapter.size >= BaseAdapterSize && adapter.version == InterfaceVersion && adapter.id &&
+               *adapter.id && adapter.name && *adapter.name && adapter.enumerate && adapter.inspect && adapter.start;
     }
 
     inline bool CombatProtection(bool enabled, State state, bool eligible, bool dead, bool nativeOwned) {

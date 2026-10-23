@@ -1,5 +1,6 @@
 #include "followers/QuestPolicies.h"
 #include "formations/Formation.h"
+#include "common/MovementRecords.h"
 #include "combat/CombatOrders.h"
 #include "formations/FormationRules.h"
 #include "formations/FormationPath.h"
@@ -419,7 +420,7 @@ namespace mod::formation {
         if (data)
             for (std::size_t i = 0; i < followPackages.size(); ++i)
                 followPackages[i] =
-                    data->LookupForm<RE::TESPackage>(static_cast<RE::FormID>(0x990 + i), mod::info::PluginFile);
+                    data->LookupForm<RE::TESPackage>(movement_records::Distance(i), mod::info::PluginFile);
         if (data)
             for (std::size_t i = 0; i < targets.size(); ++i) {
                 targets[i] =
@@ -427,9 +428,8 @@ namespace mod::formation {
             }
         if (data)
             for (std::size_t i = 0; i < travelPackages.size(); ++i) {
-                const auto start = i < formation_rules::Slots ? 0x9A0 : 0x9C0;
-                travelPackages[i] = data->LookupForm<RE::TESPackage>(
-                    static_cast<RE::FormID>(start + i % formation_rules::Slots), mod::info::PluginFile);
+                travelPackages[i] =
+                    data->LookupForm<RE::TESPackage>(movement_records::Formation(i), mod::info::PluginFile);
             }
     }
 

@@ -16,6 +16,13 @@ namespace yliwf::sdk {
     enum class State : std::uint32_t { Inactive, Following, Waiting, Unavailable };
     enum class StartResult : std::uint32_t { Rejected, Pending, Completed };
     enum class FollowDistance : std::uint32_t { Close, Normal, Far };
+    enum class Movement : std::uint32_t { Distance = 1, Formation = 2, StandDown = 4 };
+
+    constexpr std::uint32_t MovementBit(Movement feature) {
+        return static_cast<std::uint32_t>(feature);
+    }
+
+    inline constexpr std::uint32_t AllMovement = 7;
 
     constexpr std::uint32_t Capability(Command command) {
         return 1u << static_cast<std::uint32_t>(command);
@@ -81,23 +88,39 @@ namespace yliwf::sdk {
         // Zero releases only the adapter's stand-down override. Quest restrictions
         // retain priority; return 0 when taking control is not permitted.
         std::uint32_t (*setStandDownPackage)(void*, ActorID, std::uint32_t package) = nullptr;
+        // Optional v1 extension: opt into core-owned temporary movement. Read-only,
+        // main thread; return permitted Movement bits for the underlying owner
+        // package. Never infer permission from Follow alone. The core applies
+        // common safety checks and keeps foreign interrupts intact.
+        std::uint32_t (*movementPermissions)(void*, ActorID, std::uint32_t ownerPackage,
+                                             const FollowerState*) = nullptr;
+        std::uint32_t coreMovementFeatures = 0;
     };
 
     inline constexpr std::uint32_t BaseAdapterSize = offsetof(Adapter, setFollowDistance);
 
+    inline bool UsesCoreMovement(const Adapter& adapter, Movement feature) {
+        return adapter.size >= offsetof(Adapter, coreMovementFeatures) + sizeof(adapter.coreMovementFeatures) &&
+               adapter.movementPermissions && !(adapter.coreMovementFeatures & ~AllMovement) &&
+               (adapter.coreMovementFeatures & MovementBit(feature));
+    }
+
     inline bool HasStandDown(const Adapter& adapter) {
-        return adapter.size >= offsetof(Adapter, setStandDownPackage) + sizeof(adapter.setStandDownPackage) &&
-               adapter.setStandDownPackage;
+        return UsesCoreMovement(adapter, Movement::StandDown) ||
+               (adapter.size >= offsetof(Adapter, setStandDownPackage) + sizeof(adapter.setStandDownPackage) &&
+                adapter.setStandDownPackage);
     }
 
     inline bool HasTravelFormation(const Adapter& adapter) {
-        return adapter.size >= offsetof(Adapter, setFormationPackage) + sizeof(adapter.setFormationPackage) &&
-               adapter.canTravelInFormation && adapter.setFormationPackage;
+        return UsesCoreMovement(adapter, Movement::Formation) ||
+               (adapter.size >= offsetof(Adapter, setFormationPackage) + sizeof(adapter.setFormationPackage) &&
+                adapter.canTravelInFormation && adapter.setFormationPackage);
     }
 
     inline bool HasFollowDistance(const Adapter& adapter) {
-        return adapter.size >= offsetof(Adapter, setFollowDistance) + sizeof(adapter.setFollowDistance) &&
-               adapter.setFollowDistance;
+        return UsesCoreMovement(adapter, Movement::Distance) ||
+               (adapter.size >= offsetof(Adapter, setFollowDistance) + sizeof(adapter.setFollowDistance) &&
+                adapter.setFollowDistance);
     }
 
     inline bool HasRecruitmentEligibility(const Adapter& adapter) {
@@ -122,12 +145,22 @@ namespace yliwf::sdk {
         // Optional v1 extension. Thread-safe: notify after the owner's state may
         // have changed externally. Check the table size before reading this field.
         void (*stateChanged)(AdapterID) = nullptr;
+        // Main thread, read-only. Recognize the core's temporary movement
+        // packages when validating an owner's current interrupt. This does not
+        // grant permission to install or release one.
+        std::uint32_t (*isMovementPackage)(std::uint32_t package) = nullptr;
     };
 
     inline constexpr std::uint32_t BaseAPISize = offsetof(API, stateChanged);
 
     inline bool CanNotifyState(const API* api) {
-        return api && api->size >= sizeof(API) && api->version == InterfaceVersion && api->stateChanged;
+        return api && api->size >= offsetof(API, stateChanged) + sizeof(api->stateChanged) &&
+               api->version == InterfaceVersion && api->stateChanged;
+    }
+
+    inline bool HasCoreMovement(const API* api) {
+        return api && api->size >= offsetof(API, isMovementPackage) + sizeof(api->isMovementPackage) &&
+               api->version == InterfaceVersion && api->isMovementPackage;
     }
 
     using QueryAPI = const API* (*)(std::uint32_t version);
@@ -136,6 +169,8 @@ namespace yliwf::sdk {
                       offsetof(Adapter, canRecruitThroughDialogue) == 64 &&
                       offsetof(Adapter, canReceiveCombatProtection) == 72 &&
                       offsetof(Adapter, canTravelInFormation) == 80 && offsetof(Adapter, setStandDownPackage) == 96 &&
-                      sizeof(Adapter) == 104 && BaseAPISize == 24 && sizeof(API) == 32,
+                      offsetof(Adapter, movementPermissions) == 104 && offsetof(Adapter, coreMovementFeatures) == 112 &&
+                      sizeof(Adapter) == 120 && BaseAPISize == 24 && offsetof(API, isMovementPackage) == 32 &&
+                      sizeof(API) == 40,
                   "Follower adapter API v1 requires the standard x64 structure layout");
 }

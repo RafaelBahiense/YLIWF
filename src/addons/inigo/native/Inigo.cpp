@@ -5,14 +5,9 @@
 #include "AddonInfo.h"
 #include "PapyrusController.h"
 #include "Rules.h"
-#include "Movement.h"
+#include "PapyrusCommands.h"
 #include <array>
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
 #include <cstdio>
-#include <mutex>
-#include <thread>
 
 namespace {
     using namespace yliwf::sdk;
@@ -36,10 +31,7 @@ namespace {
     RE::TESFaction* horseFollowing = nullptr;
     RE::TESFaction* rideWithoutPlayer = nullptr;
     std::array<RE::TESPackage*, OrdinaryPackages.size()> ordinaryPackages{};
-    std::uint64_t generation = 0;
-    bool commandPending = false;
-    std::atomic_bool observeMovement{false};
-    std::atomic_bool observationQueued{false};
+    papyrus::Commands commands;
 
     void Reason(char* output, std::uint32_t capacity, const char* text) {
         if (output && capacity)
@@ -105,84 +97,26 @@ namespace {
         return 1;
     }
 
-    mod::inigo_movement_rules::Snapshot MovementState() {
-        auto snapshot = mod::inigo_movement::Read(inigo);
+    bool VerifyCommand(ActorID actor, Command command) {
         FollowerState state;
-        if (inigo && Inspect(nullptr, inigo->GetFormID(), &state)) {
-            snapshot.following = state.state == State::Following;
-            snapshot.waiting = state.state == State::Waiting;
-            snapshot.controllerAllows = Supports(state, Command::Follow);
-        }
-        snapshot.pending = commandPending;
+        return Inspect(nullptr, actor, &state) && Reached(state, command);
+    }
+
+    std::uint32_t MovementPermissions(void*, ActorID actor, std::uint32_t ownerPackage, const FollowerState* state) {
+        if (!inigo || actor != inigo->GetFormID() || !state || !Supports(*state, Command::Follow) ||
+            commands.Pending(actor))
+            return 0;
         const auto riding = papyrus::Boolean(papyrus::Bound(statusQuest, "InigoStatusQuestScript"), "preferRiding");
-        snapshot.ridingRequested = !inigo || !horseFollowing || !rideWithoutPlayer || !riding || *riding ||
-                                   inigo->GetFactionRank(horseFollowing, false) > 0 ||
-                                   inigo->GetFactionRank(rideWithoutPlayer, false) > 0;
-        return snapshot;
+        if (!horseFollowing || !rideWithoutPlayer || !riding || *riding ||
+            inigo->GetFactionRank(horseFollowing, false) > 0 || inigo->GetFactionRank(rideWithoutPlayer, false) > 0)
+            return 0;
+        if (ordinaryPackages[0] && ordinaryPackages[0]->GetFormID() == ownerPackage)
+            return AllMovement;
+        for (std::size_t i = 1; i < 3; ++i)
+            if (ordinaryPackages[i] && ordinaryPackages[i]->GetFormID() == ownerPackage)
+                return MovementBit(Movement::StandDown);
+        return 0;
     }
-
-    void RefreshMovement() {
-        auto* ui = RE::UI::GetSingleton();
-        const auto* main = RE::Main::GetSingleton();
-        if (!observeMovement || !ui || ui->GameIsPaused() || !main || main->freezeTime)
-            return;
-        mod::inigo_movement::Refresh(inigo, MovementState());
-    }
-
-    void StartMovementObservation() {
-        // The worker only schedules a bounded main-thread task. Engine and VM
-        // snapshots, package writes and session state stay on the game thread.
-        static std::jthread worker([](std::stop_token stop) {
-            auto* tasks = SKSE::GetTaskInterface();
-            if (!tasks)
-                return;
-            std::mutex mutex;
-            std::condition_variable_any changed;
-            std::unique_lock lock(mutex);
-            while (!stop.stop_requested()) {
-                changed.wait_for(lock, stop, std::chrono::milliseconds(250), [] { return false; });
-                if (stop.stop_requested())
-                    break;
-                if (observeMovement && !observationQueued.exchange(true))
-                    tasks->AddTask([] {
-                        observationQueued = false;
-                        RefreshMovement();
-                    });
-            }
-        });
-    }
-
-    class Completion final : public RE::BSScript::IStackCallbackFunctor {
-    public:
-        Completion(RequestID request, ActorID actor, Command command)
-            : request(request), actor(actor), command(command), epoch(generation) {}
-
-        void operator()(RE::BSScript::Variable) override {
-            if (auto* tasks = SKSE::GetTaskInterface())
-                tasks->AddTask([request = request, actor = actor, command = command, epoch = epoch] {
-                    if (epoch != generation)
-                        return;
-                    commandPending = false;
-                    FollowerState state;
-                    const bool verified = Inspect(nullptr, actor, &state) && Reached(state, command);
-                    if (host)
-                        host->complete(registration, request, verified ? 1 : 0,
-                                       verified ? "Inigo's method returned and follower state matches."
-                                                : "Inigo's method returned without reaching the requested state.");
-                });
-        }
-
-        void SetObject(const papyrus::Object& value) override {
-            object = value;
-        }
-
-    private:
-        RequestID request;
-        ActorID actor;
-        Command command;
-        std::uint64_t epoch;
-        papyrus::Object object;
-    };
 
     StartResult Start(void*, ActorID actor, Command command, RequestID request, char* reason, std::uint32_t capacity) {
         FollowerState state;
@@ -192,20 +126,8 @@ namespace {
         }
         if (Reached(state, command))
             return StartResult::Completed;
-        auto object = papyrus::Bound(dialogue, Script);
-        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-        if (!vm || !object)
-            return StartResult::Rejected;
-        mod::inigo_movement::SetFormation(inigo, 0);
-        mod::inigo_movement::SetStandDown(inigo, 0);
-        mod::inigo_movement::Release(inigo);
-        commandPending = true;
-        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> completion{new Completion(request, actor, command)};
-        if (vm->DispatchMethodCall(object, Methods[static_cast<std::size_t>(command)], RE::MakeFunctionArguments(),
-                                   completion))
-            return StartResult::Pending;
-        commandPending = false;
-        return StartResult::Rejected;
+        return commands.Dispatch(papyrus::Bound(dialogue, Script), Methods[static_cast<std::size_t>(command)], host,
+                                 registration, actor, command, request, VerifyCommand);
     }
 
     void NotifyState() {
@@ -216,8 +138,7 @@ namespace {
     std::uint32_t SetFollowDistance(void*, ActorID actor, FollowDistance distance) {
         FollowerState state;
         const auto rank = mod::inigo_rules::DistanceRank(distance);
-        if (!rank || !Inspect(nullptr, actor, &state) || !Supports(state, Command::Follow) ||
-            !mod::inigo_movement::Ready() || !mod::inigo_movement::SetDistance(distance))
+        if (!rank || !Inspect(nullptr, actor, &state) || !Supports(state, Command::Follow))
             return 0;
         // Inigo's SetFollowDistance(Int) performs exactly this faction write.
         // The host callback is synchronous; no Papyrus call is queued here.
@@ -225,27 +146,6 @@ namespace {
             inigo->AddToFaction(distanceFaction, *rank);
             inigo->EvaluatePackage();
             NotifyState();
-        }
-        mod::inigo_movement::Refresh(inigo, MovementState());
-        return 1;
-    }
-
-    std::uint32_t CanTravelInFormation(void*, ActorID actor) {
-        return inigo && actor == inigo->GetFormID() && mod::inigo_movement::Ready() &&
-                       mod::inigo_movement_rules::Permitted(MovementState())
-                   ? 1u
-                   : 0u;
-    }
-
-    std::uint32_t SetFormationPackage(void*, ActorID actor, std::uint32_t package) {
-        if (!inigo || actor != inigo->GetFormID() || (package && !CanTravelInFormation(nullptr, actor)))
-            return 0;
-        if (!mod::inigo_movement::SetFormation(inigo, package))
-            return 0;
-        mod::inigo_movement::Refresh(inigo, MovementState());
-        if (package && !mod::inigo_movement::FormationActive(inigo, package)) {
-            mod::inigo_movement::SetFormation(inigo, 0);
-            return 0;
         }
         return 1;
     }
@@ -255,27 +155,13 @@ namespace {
         return Inspect(nullptr, actor, &state) && Supports(state, Command::Follow) ? 1u : 0u;
     }
 
-    std::uint32_t SetStandDownPackage(void*, ActorID actor, std::uint32_t package) {
-        if (!inigo || actor != inigo->GetFormID() ||
-            (package && !mod::inigo_movement_rules::StandDownPermitted(MovementState())))
-            return 0;
-        if (!mod::inigo_movement::SetStandDown(inigo, package))
-            return 0;
-        mod::inigo_movement::Refresh(inigo, MovementState());
-        if (package && !mod::inigo_movement::StandDownActive(inigo, package)) {
-            mod::inigo_movement::SetStandDown(inigo, 0);
-            return 0;
-        }
-        return 1;
-    }
-
     void OnMessage(SKSE::MessagingInterface::Message* message) {
         if (message->type == SKSE::MessagingInterface::kPostLoad) {
             const auto module = GetModuleHandleA(mod::info::DllFile);
             const auto query = module ? reinterpret_cast<QueryAPI>(GetProcAddress(module, QueryExport)) : nullptr;
             host = query ? query(mod::addon::RequiredAdapterAPIVersion) : nullptr;
             if (!host || host->size < BaseAPISize || host->version != InterfaceVersion || !host->registerAdapter ||
-                !host->complete) {
+                !host->complete || !HasCoreMovement(host)) {
                 SKSE::log::warn("Inigo adapter: compatible YLIWF host API is unavailable");
                 return;
             }
@@ -290,9 +176,11 @@ namespace {
                                   SetFollowDistance,
                                   nullptr,
                                   CanReceiveCombatProtection,
-                                  CanTravelInFormation,
-                                  SetFormationPackage,
-                                  SetStandDownPackage};
+                                  nullptr,
+                                  nullptr,
+                                  nullptr,
+                                  MovementPermissions,
+                                  AllMovement};
             registration = host->registerAdapter(&adapter);
             if (!registration)
                 SKSE::log::warn("Inigo adapter registration rejected");
@@ -310,23 +198,12 @@ namespace {
                 for (std::size_t i = 0; i < ordinaryPackages.size(); ++i)
                     ordinaryPackages[i] = data->LookupForm<RE::TESPackage>(OrdinaryPackages[i], Plugin);
             }
-            mod::inigo_movement::Configure(ordinaryPackages[0], ordinaryPackages[1], ordinaryPackages[2]);
-            if (inigo)
-                StartMovementObservation();
             if (!inigo || !dialogue || !statusQuest || !badVibrations || !distanceFaction)
                 SKSE::log::warn("Inigo adapter: required Inigo.esp records are unavailable");
         } else if (message->type == SKSE::MessagingInterface::kPreLoadGame ||
                    message->type == SKSE::MessagingInterface::kNewGame) {
-            ++generation;
-            observeMovement = false;
-            commandPending = false;
-            mod::inigo_movement::Reset(inigo);
-            if (message->type == SKSE::MessagingInterface::kNewGame)
-                observeMovement = inigo != nullptr;
+            commands.Invalidate();
         } else if (message->type == SKSE::MessagingInterface::kPostLoadGame) {
-            mod::inigo_movement::SetFormation(inigo, 0);
-            mod::inigo_movement::Release(inigo);
-            observeMovement = inigo != nullptr;
             NotifyState();
         }
     }

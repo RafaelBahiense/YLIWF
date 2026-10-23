@@ -2,6 +2,7 @@
 #include "CombatOrderRules.h"
 #include "HealerMovement.h"
 #include "ModInfo.h"
+#include "common/MovementRecords.h"
 #include "followers/FollowDistance.h"
 #include "diagnostics/Debug.h"
 #include <array>
@@ -44,9 +45,11 @@ namespace mod::stand_down_movement {
             return false;
         activity = data->LookupForm<RE::TESFaction>(0xA15, info::PluginFile);
         for (std::size_t index = 0; index < passive.size(); ++index)
-            passive[index] = data->LookupForm<RE::TESPackage>(static_cast<RE::FormID>(0xA11 + index), info::PluginFile);
+            passive[index] =
+                data->LookupForm<RE::TESPackage>(movement_records::PassiveOrAvoidance(index), info::PluginFile);
         for (std::size_t slot = 0; slot < avoidance.size(); ++slot)
-            avoidance[slot] = data->LookupForm<RE::TESPackage>(static_cast<RE::FormID>(0xA20 + slot), info::PluginFile);
+            avoidance[slot] = data->LookupForm<RE::TESPackage>(
+                movement_records::PassiveOrAvoidance(movement_records::Passive + slot), info::PluginFile);
         for (std::size_t slot = 0; slot < Slots; ++slot) {
             destinations[slot].marker =
                 data->LookupForm<RE::TESObjectREFR>(static_cast<RE::FormID>(0xA40 + slot), info::PluginFile);
