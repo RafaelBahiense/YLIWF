@@ -4,7 +4,7 @@ Add-ons integrate quest-managed followers through either an external controller
 ([FollowerAdapter.h](../include/FollowerAdapter.h)) or restrictions on a core-owned
 follower ([FollowerPolicy.h](../include/FollowerPolicy.h)). The external API
 delegates commands to the follower's controller and reports completion;
-[core-owned policies](#policies-for-core-owned-followers) only restrict core actions.
+[core-owned policies](#policies-for-core-owned-followers) restrict actions and request packages.
 Supplementary controllers can use [policies for core-owned followers](#policies-for-core-owned-followers)
 without claiming the follower or replacing the quest owner's policy.
 See the [available add-ons](../README.md#add-ons).

@@ -69,6 +69,9 @@ README for requirements and installation.
 
 - **[Serana](src/addons/serana/README.md)** (`-Serana-<version>.zip`):
   Makes Serana available to YLIWF's follower controls, combat protection and travel formations when her Dawnguard quests allow them.
+- **[Inigo](src/addons/inigo/README.md)** (`-Inigo-<version>.zip`):
+  Connects Inigo's follower controls, Stand down, on-foot distance presets and travel formations to YLIWF while
+  retaining his own recruitment and quests. Requires **INIGO SE 2.4C**.
 - **[Fura FDE](src/addons/fura-fde/README.md)** (`-FuraFDE-<version>.zip`):
   Routes FDE Fura's recruitment and dialogue into the core follower controller,
   with normal slots, distance and combat roles while respecting her quests.
