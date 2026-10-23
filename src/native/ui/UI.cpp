@@ -133,6 +133,10 @@ namespace {
                 const auto label = confirmation.party ? mod::debug::PartyActionName(confirmation.action)
                                                       : mod::debug::ActionName(confirmation.action);
                 ImGuiMCP::TextWrapped("%s: %s?", label, confirmation.name.c_str());
+                if (confirmation.action == mod::debug::Action::RestoreRecruitment)
+                    ImGuiMCP::TextWrapped(
+                        "Adds potential-follower membership and reports the current relationship rank. "
+                        "If needed, suggests a console command to reach Friend. No party slot is assigned.");
                 if (!confirmation.party && mod::debug::OptionsEnabled.load())
                     ImGuiMCP::Text("Reference %08X", confirmation.actor);
                 const bool allowed = CanRequest(state, confirmation.action);
@@ -744,6 +748,15 @@ namespace {
             return;
         ImGuiMCP::TextUnformatted(state.inspected.name.c_str());
         ActorDiagnostics(state.inspected);
+        const bool canRestore =
+            CanRequest(state, mod::debug::Action::RestoreRecruitment) && state.inspected.recruitmentCompatible;
+        BeginDisabled(!canRestore);
+        if (ImGuiMCP::Button("Restore follower dialogue..."))
+            Confirm(mod::debug::Action::RestoreRecruitment, state.inspected, state, -1);
+        EndDisabled(!canRestore);
+        HelpMarker(
+            "For NPCs with authored follower membership or a standard follower voice. Recruitment restrictions, "
+            "scenes and external follower controllers must permit the actor.");
         ImGuiMCP::TextWrapped(
             "Test recruitment requires a living potential follower and a free slot. Release is only for actors without "
             "a party registration.");

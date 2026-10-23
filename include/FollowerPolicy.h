@@ -40,10 +40,13 @@ namespace yliwf::policy {
         std::uint32_t size = sizeof(API), version = Version;
         // Register once during SKSE PostLoad. Providers live until process exit.
         std::uint32_t (*registerProvider)(const Provider*) = nullptr;
+        // Main-thread notification after a provider's stored state changes.
+        // The core rechecks policy; this grants no permission by itself.
+        void (*stateChanged)(std::uint32_t provider, std::uint32_t actor) = nullptr;
     };
 
     using QueryAPI = const API* (*)(std::uint32_t);
-    static_assert(sizeof(State) == 216 && sizeof(Provider) == 32 && sizeof(API) == 16);
+    static_assert(sizeof(State) == 216 && sizeof(Provider) == 32 && sizeof(API) == 24);
 
     inline bool Valid(const State& state) {
         return state.size >= sizeof(State) && !(state.blocked & ~All) &&

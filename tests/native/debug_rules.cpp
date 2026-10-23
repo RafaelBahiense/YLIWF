@@ -386,7 +386,10 @@ namespace {
         REQUIRE((!healthy.Allows(-1)));
         REQUIRE((normalGameplay.Allows(8)));  // Primary selection is available without debug options.
         REQUIRE((!missingBindingsWithoutDebug.Allows(8)));
-        REQUIRE((!healthy.Allows(9)));
+        REQUIRE((healthy.Allows(9)));
+        REQUIRE((!normalGameplay.Allows(9)));
+        REQUIRE((!missingBindings.Allows(9)));
+        REQUIRE((!healthy.Allows(10)));
         REQUIRE((!missingBindingsWithoutDebug.Allows(0)));
     }
 

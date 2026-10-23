@@ -79,9 +79,15 @@ Check another framework's ownership before releasing orphan flags.
 | Dismiss | Release aliases and service state, verify removal and reconcile |
 | Clear this slot | Clear alias/timer; release service only if no registration remains; no hireling dismissal |
 | Recruit into party (debug) | Recruit an eligible living actor with capacity |
+| Restore follower dialogue | Restore potential-follower membership, report relationship rank and suggest a console command if below Friend; recruit normally afterward |
 | Release orphan service flags | Clear an unregistered actor's service/protection state; exclude animal alias |
 
 Ordinary commands and promotion need no debug setting.
+Dialogue restoration is under **Debug → Actor inspector**. It accepts NPCs with
+authored follower membership or a standard follower voice, respects recruitment
+policies and external controllers, and leaves party slots unchanged. Custom
+topics can still require their own quests; this action does not create voiced dialogue.
+Relationship rank is reported without changing it.
 Repairs do not reset quests, change stages or resurrect actors.
 Original essential/protected flags can be restored only while their unsaved
 native cache exists.

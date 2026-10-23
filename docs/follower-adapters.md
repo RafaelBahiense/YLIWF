@@ -47,6 +47,7 @@ const auto registration = api->registerAdapter(&adapter);
 | `canTravelInFormation` (optional) | Read-only: return 1 only during ordinary following; reject quest movement, scenes and foreign overrides |
 | `setFormationPackage` (optional) | Apply the supplied host Travel package FormID synchronously; zero releases only the adapter's formation movement, even when its controller is blocked |
 | `setStandDownPackage` (optional) | Apply the host combat-ignore package only when permitted; zero releases only the adapter's stand-down override, including while quest-blocked |
+| `coreMovementFeatures` and `movementPermissions` (optional) | Opt into core package handling and report independent Distance, Formation and StandDown permissions for the underlying owner package |
 
 Callbacks run on the main thread: keep them quick, nonblocking and exception-free.
 Pointers and context must remain valid until process exit; no hot unloading.
@@ -57,7 +58,9 @@ Invalid versions, tables, IDs, states and capabilities are rejected.
 The mandatory table prefixes are `BaseAPISize` and `BaseAdapterSize`. Check optional
 callbacks with `CanNotifyState`, `HasFollowDistance`, `HasRecruitmentEligibility`,
 `HasCombatProtection`, `HasTravelFormation` and `HasStandDown` before access.
-Travel requires both callbacks. Older v1 tables remain valid; unsupported features
+`UsesCoreMovement` identifies features handled by the core; `HasCoreMovement(host)`
+checks the required host extension. Custom travel requires both legacy callbacks.
+Older v1 tables remain valid; unsupported features
 stay under the owner's controller and Stand down reports them as unavailable.
 
 Call `stateChanged(registration)` after external state changes. It is thread-safe;
@@ -85,6 +88,50 @@ one actor. Unsupported adapters retain their own spacing.
 Choices apply on load and observed controller changes when Follow is allowed.
 Blocked followers retain a global choice for later; their individual controls
 are disabled. Callbacks must recheck eligibility before modifying state.
+
+## Core-managed external movement
+
+Set `coreMovementFeatures` to the supported `MovementBit` flags and provide
+`movementPermissions(context, actor, ownerPackage, state)`. It is a read-only main-thread
+callback returning the subset currently allowed by the owner's controller and
+underlying package. Unknown or unadvertised bits reject the decision. The core
+does not infer movement permission from command capabilities.
+`state` is the fresh owner inspection, valid only during the callback; adapters
+can reuse it instead of repeating their controller inspection.
+
+`Distance` uses YLIWF's ordinary follow packages. `Formation` and `StandDown` use
+the host's travel and passive/avoidance packages. Stand down takes priority over
+formation, then distance; a blocked higher-priority request does not fall back to
+another forced behavior. Custom callbacks remain available for features without
+core opt-in. Do not implement package application in both places for one feature.
+
+The optional distance callback can still mirror an owner's native preference.
+It runs before core distance selection and must preserve waiting/recruitment.
+An adapter using its owner's distance implementation, such as Serana, can opt
+into Formation and StandDown without opting into Distance.
+
+The core checks loaded state, scenes/dialogue, locomotion, combat, pending commands
+and foreign interrupts. Distance and formation require following outside combat;
+Stand down may operate during combat and waiting. Adapters retain additional
+story, sandbox, package and mount restrictions. Returning zero withdraws permission.
+
+Owned interrupts are tracked per actor. Only a package applied by this service is
+released during runtime; foreign replacements stay intact. Permission and the
+underlying package are rechecked after reevaluation. The shared main-thread
+movement update runs at a 200 ms cadence while selections exist, independently
+of menus; paused/frozen time suspends observation. No add-on worker is needed.
+
+Commands release transient movement before owner dispatch. Save loads clear
+transient selections and reconcile recognized saved packages only for unique
+external owners opting into this service. Conflicting/native ownership excludes
+cleanup. Preferences are rediscovered; no new serialization format is added.
+Cleanup for unloaded actors waits for their process/3D and rechecks ownership
+before touching the restored interrupt.
+
+`host->isMovementPackage(package)` recognizes the service's package records for
+owner validation. It is read-only, main-thread only, and grants no authority to
+install or release an interrupt. Add-ons using this service require a host for
+which `HasCoreMovement(host)` succeeds, even though the API remains v1.
 
 ## Commands and saves
 
@@ -150,8 +197,17 @@ registration. Validate this against the SDK at compile time. Unsupported
 host APIs are rejected at runtime. Binary and source ZIPs use the add-on's name
 and version, independent of the core ZIP filename.
 
-External authors may use their own SKSE project with the SDK header.
+External authors may use their own SKSE project with the SDK headers.
 `PapyrusController.h` supplies optional bound-controller helpers.
+`PapyrusCommands.h` provides `papyrus::Commands` for zero-argument owner methods:
+call `Dispatch` with the bound object, method, request identity and verification
+function. It retains the controller, schedules verification on the main thread,
+tracks per-actor pending work and reports one completion. Invalidate the
+process-lifetime helper on SKSE PreLoadGame and NewGame. Old callbacks cannot
+complete or clear a request from a different session. The helper never retries
+or times out a VM call; the host's acknowledgement/quarantine contract applies.
+
+See [shared implementation responsibilities](adapter-simplification.md).
 
 ## Policies for core-owned followers
 
@@ -162,6 +218,12 @@ one stable provider at SKSE PostLoad; its read-only inspection runs on the main
 thread and returns action restrictions, an optional owner quest FormID, a package
 preference and a reason. It must neither execute Papyrus nor modify game state.
 Providers remain loaded for the session.
+
+After a stored state transition, call `stateChanged(providerID, actorID)` on the
+main thread to refresh package and combat policy promptly. Queue and coalesce
+notifications originating in VM callbacks; do not call it from `inspect`.
+Periodic policy observation remains the fallback. The notification cannot grant
+permissions or authorize replaying a pending command.
 
 Several providers may apply to one actor. Restrictions accumulate; one provider
 cannot undo another's restriction. Supplementary providers leave `ownerQuest` zero.

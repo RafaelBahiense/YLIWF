@@ -1,5 +1,18 @@
 Scriptname YLIWF_Engine Hidden
 
+Function RestoreRecruitment(Actor target, Faction potential, Int ticket) Global
+	If YLIWF_SKSE.CanRestoreRecruitment(target, ticket)
+		If !target.IsInFaction(potential)
+			target.AddToFaction(potential)
+		EndIf
+	EndIf
+	Int relationshipRank = 0
+	If target
+		relationshipRank = target.GetRelationshipRank(Game.GetPlayer())
+	EndIf
+	YLIWF_SKSE.RecruitmentRestored(target, ticket, relationshipRank)
+EndFunction
+
 Function Formation(Actor target, Actor leader, Int ticket, Int sessionHigh, Int sessionLow, Bool enabled, Float behind) Global
 	Bool current = YLIWF_SKSE.SetNativeFormationCurrent(target, ticket, sessionHigh, sessionLow)
 	If current

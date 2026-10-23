@@ -40,7 +40,7 @@ namespace mod::debug_rules {
     }
 
     inline bool CanCommand(bool structure, bool script, bool bindings, std::int32_t action, bool debugEnabled) {
-        return action >= 0 && action <= 8 && (IsPartyAction(action) || action == 8 || debugEnabled) &&
+        return action >= 0 && action <= 9 && (IsPartyAction(action) || action == 8 || debugEnabled) &&
                CanRepair(structure, script, bindings, action == 0);
     }
 

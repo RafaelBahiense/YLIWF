@@ -1,5 +1,8 @@
 Scriptname YLIWF_SKSE Hidden
 
+Bool Function CanRestoreRecruitment(Actor target, Int ticket) Global Native
+Function RecruitmentRestored(Actor target, Int ticket, Int relationshipRank) Global Native
+
 ; Vanilla follower interface (latent: returns after verified completion).
 Bool Function SetFollower(ObjectReference follower) Global Native
 Bool Function SetAnimal(ObjectReference animal) Global Native

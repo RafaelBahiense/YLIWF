@@ -63,6 +63,55 @@ namespace mod::debug {
             return alias->aliasID == 0 || name.starts_with(mod::record_names::aliases::ExtraPrefix);
         }
 
+        bool RecruitmentCompatible(RE::Actor* actor) {
+            if (!actor || actor == RE::PlayerCharacter::GetSingleton() || actor->IsDead() || actor->IsDisabled() ||
+                actor->IsChild() || actor->IsInCombat() || actor->GetCurrentScene() ||
+                adapters::Owns(actor->GetFormID()))
+                return false;
+            auto* base = actor->GetActorBase();
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            if (!base || !player || actor->IsHostileToActor(player) ||
+                !quest_policies::Allows(actor, yliwf::policy::Action::Recruit))
+                return false;
+            const auto* race = actor->GetRace();
+            if (!race || !race->AllowsPCDialogue())
+                return false;
+            // Authored follower membership supports custom voice types. The
+            // vanilla voice list covers NPCs using the standard follower topics.
+            for (const auto& entry : base->factions)
+                if (entry.faction == context.potentialFaction && entry.rank >= 0)
+                    return true;
+            auto* data = RE::TESDataHandler::GetSingleton();
+            const auto* voices = data ? data->LookupForm<RE::BGSListForm>(0xC78E7, "Skyrim.esm") : nullptr;
+            return voices && base->GetObjectVoiceType() && voices->HasForm(base->GetObjectVoiceType());
+        }
+
+        bool CanRestoreRecruitment(RE::StaticFunctionTag*, RE::Actor* actor, std::int32_t ticket) {
+            return IsCommandCurrent(ticket) && OptionsEnabled.load() && context.potentialFaction &&
+                   RecruitmentCompatible(actor);
+        }
+
+        void RecruitmentRestored(RE::StaticFunctionTag*, RE::Actor* actor, std::int32_t ticket,
+                                 std::int32_t relationshipRank) {
+            if (!IsCommandCurrent(ticket))
+                return;
+            const bool success = actor && context.potentialFaction && actor->IsInFaction(context.potentialFaction);
+            std::string detail = "Follower eligibility was not restored; inspect the actor's current restrictions.";
+            if (success) {
+                detail =
+                    fmt::format("Potential-follower membership restored. Relationship rank: {}.", relationshipRank);
+                if (relationshipRank < 1)
+                    detail += fmt::format(
+                        " For Friend (1), you can use the Skyrim console:\nprid {:08X}\n"
+                        "setrelationshiprank player 1",
+                        actor->GetFormID());
+                else
+                    detail += " Speak to the NPC to recruit normally. Custom dialogue may require its own quests.";
+            }
+            CompleteCommand(ticket, success, std::move(detail));
+            NotifyStateChanged();
+        }
+
         mod::follower_view::Space ActorSpace(RE::Actor* actor) {
             auto* cell = actor ? actor->GetParentCell() : nullptr;
             auto* world = actor ? actor->GetWorldspace() : nullptr;
@@ -120,6 +169,7 @@ namespace mod::debug {
             row.essential = actor->IsEssential();
             row.protectedActor = actor->IsProtected();
             row.crossfire = context.protectionSpell && actor->HasSpell(context.protectionSpell);
+            row.recruitmentCompatible = RecruitmentCompatible(actor);
             row.waiting = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kWaitingForPlayer);
             const auto distance = follow_distance::Read(actor);
             row.followDistance = distance.preset;
@@ -853,6 +903,8 @@ namespace mod::debug {
     }
 
     void RegisterPapyrus(RE::BSScript::IVirtualMachine* vm) {
+        vm->RegisterFunction("CanRestoreRecruitment", mod::info::NativeScript, CanRestoreRecruitment);
+        vm->RegisterFunction("RecruitmentRestored", mod::info::NativeScript, RecruitmentRestored);
         // Logging returns on the tasklet when disabled and formats only after the
         // flag check.
         vm->RegisterFunction("IsDebugLoggingEnabled", mod::info::NativeScript, PapyrusLogging, true);
@@ -1115,7 +1167,16 @@ namespace mod::debug {
             logger::info("Debug command requested: action={} actor={:08X} expectedAlias={}", command, actorID,
                          expected);
             bool accepted = false;
-            if (actor && adapters::Owns(actorID)) {
+            if (action == Action::RestoreRecruitment) {
+                auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+                RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+                auto* faction = context.potentialFaction;
+                accepted =
+                    vm && CanRestoreRecruitment(nullptr, actor, ticket) &&
+                    vm->DispatchStaticCall(
+                        "YLIWF_Engine", "RestoreRecruitment",
+                        RE::MakeFunctionArguments(std::move(actor), std::move(faction), std::move(ticket)), callback);
+            } else if (actor && adapters::Owns(actorID)) {
                 if (action >= Action::Follow && action <= Action::Dismiss)
                     accepted = adapters::Request(
                         actorID, static_cast<yliwf::sdk::Command>(command - static_cast<int>(Action::Follow)),

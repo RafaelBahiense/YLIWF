@@ -61,6 +61,9 @@ namespace {
                 row.issues.clear();
                 row.teammate = row.currentFaction = true;
                 break;
+            case Action::RestoreRecruitment:
+                row.potentialFaction = true;
+                break;
             default:
                 break;
         }
@@ -74,6 +77,7 @@ namespace {
         row.aliasName = alias == 0 ? "Primary" : "Extra follower";
         row.name = std::move(name);
         row.loaded = row.teammate = row.currentFaction = row.potentialFaction = true;
+        row.recruitmentCompatible = true;
         row.essential = row.crossfire = true;
         row.location = "Whiterun";
         row.distanceMeters = 4.7;

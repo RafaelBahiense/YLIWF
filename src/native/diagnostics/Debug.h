@@ -35,7 +35,8 @@ namespace mod::debug {
         ClearSlot = 5,
         Adopt = 6,
         Release = 7,
-        PromotePrimary = 8
+        PromotePrimary = 8,
+        RestoreRecruitment = 9
     };
     enum class CommandState { Idle, Pending, Succeeded, Failed };
 
@@ -59,6 +60,8 @@ namespace mod::debug {
                 return "Release orphan flags";
             case Action::PromotePrimary:
                 return "Make primary";
+            case Action::RestoreRecruitment:
+                return "Restore follower dialogue";
         }
         return "Follower command";
     }
@@ -91,6 +94,7 @@ namespace mod::debug {
         std::optional<double> distanceMeters;
         bool dead = false, teammate = false, currentFaction = false, potentialFaction = false;
         bool loaded = false, essential = false, protectedActor = false, crossfire = false;
+        bool recruitmentCompatible = false;
         float waiting = 0;
     };
 

@@ -1,5 +1,9 @@
 #include "followers/QuestPolicies.h"
 #include "followers/PolicyRules.h"
+#include "followers/ControllerExecutor.h"
+#include "followers/PackageControl.h"
+#include "combat/CombatOrders.h"
+#include "diagnostics/Debug.h"
 #include "settings/Settings.h"
 #include <vector>
 #include <string>
@@ -26,6 +30,15 @@ namespace mod::quest_policies {
                     return 0;
             providers.push_back({provider->id, *provider});
             return static_cast<std::uint32_t>(providers.size());
+        }
+
+        void StateChanged(std::uint32_t provider, std::uint32_t actorID) {
+            if (!provider || provider > providers.size() || !RE::TESForm::LookupByID<RE::Actor>(actorID))
+                return;
+            package_control::Tick();
+            combat_orders::Tick();
+            controller::executor::Wake();
+            debug::NotifyStateChanged();
         }
 
     }
@@ -87,6 +100,6 @@ namespace mod::quest_policies {
 
 extern "C" __declspec(dllexport) const yliwf::policy::API* YLIWF_GetFollowerPolicyAPI(std::uint32_t version) {
     static const yliwf::policy::API api{sizeof(yliwf::policy::API), yliwf::policy::Version,
-                                        mod::quest_policies::Register};
+                                        mod::quest_policies::Register, mod::quest_policies::StateChanged};
     return version == yliwf::policy::Version ? &api : nullptr;
 }
