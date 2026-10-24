@@ -86,10 +86,13 @@ README for requirements and installation.
 Use Settings or edit `Data/SKSE/Plugins/YouLeadIWillFollow.ini`.
 Assign shortcuts in **Hotkeys**. All start unbound and work only
 during gameplay. Dismiss All remains menu-only.
-The mod creates the INI when missing; installing an update preserves your settings.
-Invalid values fall back to [defaults](assets/settings.ini).
-Click **Save** to persist menu settings. In MO2, keep the generated INI in a
-separate settings mod.
+Gameplay settings are stored with each game save in its SKSE co-save. The INI
+supplies defaults for new games and saves without stored settings. Invalid INI
+values fall back to [built-in defaults](assets/settings.ini).
+Hotkeys and diagnostic preferences remain global; use **Save global settings**
+to persist them. **Save current settings as INI defaults** also updates gameplay
+defaults for future games. **Use INI defaults** applies those defaults to the
+current game.
 
 | Setting | Purpose |
 | --- | --- |

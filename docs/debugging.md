@@ -20,7 +20,7 @@ quest-controlled followers require add-on support and permission from their cont
 
 Global Close/Normal/Far or **Apply distance to party** replaces the current
 party's distance choices. The selected follower's controls change one actor. Choices persist in
-game saves and through primary promotion; Settings **Save** retains the default
+game saves and through primary promotion; game saves also retain the default
 for new followers. Animals are excluded. Paths, combat and sandboxing affect
 actual spacing.
 
@@ -43,7 +43,7 @@ See [controller contracts](native-controller.md#delays-timers-and-loading).
 2. Use **Dump full context**; inspect the relevant actor first if needed.
 3. Copy the newest log and dump from
    `Documents/My Games/Skyrim Special Edition/SKSE`.
-4. Disable logging afterward. **Save settings** persists both switches.
+4. Disable logging afterward. **Save global settings** persists both switches.
 
 `YouLeadIWillFollow.log` rotates at 10 MiB with five backups.
 Saving settings, dumping and disabling logging flush it.

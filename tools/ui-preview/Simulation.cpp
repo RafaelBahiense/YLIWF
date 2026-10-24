@@ -320,6 +320,22 @@ namespace mod::settings {
         return true;
     }
 
+    bool SaveDefaults() {
+        return Save();
+    }
+
+    void LoadGameplayDefaults() {
+        const auto saved = preference_state::Saved;
+        const auto hotkeys = Hotkeys;
+        const auto enabled = mod::debug::OptionsEnabled.load();
+        const auto logging = mod::debug::Logging.load();
+        Load(true);
+        Hotkeys = hotkeys;
+        mod::debug::OptionsEnabled = enabled;
+        mod::debug::Logging = logging;
+        preference_state::Saved = saved;
+    }
+
     void ParsePerkListIntoSpecs(const std::string&) {
         SaveStatus = "Perk resolution requires Skyrim; this preview only edits the text.";
     }

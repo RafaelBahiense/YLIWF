@@ -105,7 +105,7 @@ namespace {
         preference_state::RememberSaved();
         const auto originalDistance = FollowDistance;
         FollowDistance = (FollowDistance + 1) % 3;
-        if (!preference_state::HasChanges())
+        if (preference_state::HasChanges())
             return 5;
         FollowDistance = originalDistance;
         if (preference_state::HasChanges())

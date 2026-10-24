@@ -3,6 +3,7 @@
 #include "followers/Controller.h"
 #include "followers/ControllerExecutor.h"
 #include "settings/Settings.h"
+#include "settings/SettingsStorage.h"
 
 #undef GetObject
 
@@ -64,6 +65,7 @@ namespace mod::controller::storage {
 
         void Save(SKSE::SerializationInterface* serialization) {
             std::scoped_lock lock(settings::Mutex);
+            settings::storage::Save(serialization);
             if (!loadFailure.empty()) {
                 for (const auto& record : original) {
                     auto bytes = record.bytes;
@@ -96,10 +98,16 @@ namespace mod::controller::storage {
         void Load(SKSE::SerializationInterface* serialization) {
             std::scoped_lock lock(settings::Mutex);
             Reset();
+            settings::Load(true);
+            settings::storage::Reset();
             std::uint32_t type, version, length;
             bool found = false;
             std::size_t retainedBytes = 0;
             while (serialization->GetNextRecordInfo(type, version, length)) {
+                if (type == settings::GameplayRecord) {
+                    settings::storage::Read(serialization, version, length);
+                    continue;
+                }
                 if (length > MaxSaveBytes + 8 || retainedBytes + length > MaxSaveBytes * 2 + 256 ||
                     original.size() >= 16) {
                     loadFailure = "Controller save records exceed the supported size; execution blocked.";
@@ -134,6 +142,7 @@ namespace mod::controller::storage {
                 if (!DecodeState(record.bytes, state))
                     loadFailure = "Invalid native controller save data; execution blocked.";
             }
+            settings::storage::Loaded();
             if (!loadFailure.empty()) {
                 logger::error("{}", loadFailure);
                 return;
@@ -155,6 +164,8 @@ namespace mod::controller::storage {
 
         void Revert(SKSE::SerializationInterface*) {
             controller::Invalidate();
+            settings::storage::Reset();
+            settings::Load(true);
         }
     }
 

@@ -7,15 +7,7 @@
 
 namespace mod::settings::preference_state {
     inline auto Current() {
-        return std::tuple{MaxExtraFollowers,
-                          FollowerPerkOption,
-                          SpeechLevelsPerSlot,
-                          FollowDistance,
-                          Formation,
-                          std::string(PerkListBuffer),
-                          Hotkeys,
-                          std::array{FollowerEssential, FriendlyFire, FollowerCrossfire, FollowerSandbox, FollowerHomes,
-                                     debug::OptionsEnabled.load(), debug::Logging.load()}};
+        return std::tuple{Hotkeys, std::array{debug::OptionsEnabled.load(), debug::Logging.load()}};
     }
 
     inline std::optional<decltype(Current())> Saved;

@@ -7,6 +7,7 @@
 #include "ModInfo.h"
 #include "formations/FormationStyle.h"
 #include "input/HotkeyRules.h"
+#include "GameplaySettings.h"
 
 namespace mod::settings {
     inline std::recursive_mutex Mutex;
@@ -35,6 +36,7 @@ namespace mod::settings {
     inline char PerkListBuffer[2048]{};
     inline bool Loaded = false;
     inline std::string SaveStatus;
+    inline std::string GameplayWarning;
     inline void (*ApplyGateCallback)() = nullptr;
     inline void (*FriendlyFireCallback)() = nullptr;
     inline void (*SandboxCallback)() = nullptr;
@@ -45,6 +47,10 @@ namespace mod::settings {
     inline void (*EssentialCallback)() = nullptr;
     void Load(bool force = false);
     bool Save();
+    bool SaveDefaults();
+    void LoadGameplayDefaults();
+    GameplaySettings CaptureGameplay();
+    void ApplyGameplay(const GameplaySettings& value);
     void ParsePerkListIntoSpecs(const std::string& raw);
     void BuildPerkListBuffer();
 }

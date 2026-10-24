@@ -913,7 +913,7 @@ void __stdcall mod::ui::RenderSettings() {
     bool changed = false;
     ImGuiMCP::ImVec2 available;
     ImGuiMCP::GetContentRegionAvail(&available);
-    ImGuiMCP::BeginChild("Settings body", {0, std::max(available.y - ImGuiMCP::GetFontSize() * 4.5f, 1.0f)});
+    ImGuiMCP::BeginChild("Settings body", {0, std::max(available.y - ImGuiMCP::GetFontSize() * 6.0f, 1.0f)});
     ImGuiMCP::SeparatorText("PARTY SIZE");
     constexpr std::array modes{"Fixed limit", "Unlocked by perks", "Scaled by Speech"};
     ImGuiMCP::SetNextItemWidth(std::min(ContentWidth(), ImGuiMCP::GetFontSize() * 18));
@@ -961,7 +961,7 @@ void __stdcall mod::ui::RenderSettings() {
     }
     if (ImGuiMCP::Button("Apply distance to party") && FollowDistanceCallback)
         FollowDistanceCallback();
-    ControlTooltip("Replaces individual distance choices. Save keeps this default for newly configured followers.");
+    ControlTooltip("Replaces individual distance choices. The game save retains this party default.");
     SectionGap();
     ImGuiMCP::TextUnformatted("Formation (experimental)");
     ImGuiMCP::SetNextItemWidth(std::min(ContentWidth(), ImGuiMCP::GetFontSize() * 18));
@@ -1008,6 +1008,12 @@ void __stdcall mod::ui::RenderSettings() {
            "Allow wandering, sitting and idle activities in homes and settlements.", SandboxCallback);
     option("Assign follower homes", FollowerHomes,
            "Enable home dialogue and send dismissed followers to their assigned homes.", HomesCallback);
+    ImGuiMCP::SeparatorText("NEW GAME DEFAULTS");
+    ImGuiMCP::TextWrapped(
+        "Existing saves keep their gameplay settings. The INI supplies defaults for new games and saves without stored "
+        "settings.");
+    if (ImGuiMCP::Button("Save current settings as INI defaults"))
+        SaveDefaults();
     ImGuiMCP::EndChild();
     PreferencesFooter();
     if (changed && ApplyGateCallback)

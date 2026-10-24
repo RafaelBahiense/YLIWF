@@ -138,15 +138,8 @@ namespace mod::settings {
         PerkListBuffer[length] = '\0';
     }
 
-    void Load(bool force) {
+    void LoadGameplayDefaults() {
         std::scoped_lock lock(Mutex);
-        if (Loaded && !force)
-            return;
-        Loaded = true;
-        if (force)
-            SaveStatus.clear();
-
-        CreateMissingIni();
         MaxExtraFollowers = ReadInteger(ini::General, ini::MaxFollowers, 1, 8) - 1;
         FollowerPerkOption = ReadInteger(ini::General, ini::LimitMode, 0, 2);
         SpeechLevelsPerSlot =
@@ -162,6 +155,50 @@ namespace mod::settings {
         FollowerHomes = ReadBoolean(ini::General, ini::Homes);
         FollowDistance = ReadInteger(ini::General, ini::FollowDistance, 0, 2);
         Formation = static_cast<formation_geometry::Style>(ReadInteger(ini::General, ini::Formation, 0, 3));
+    }
+
+    GameplaySettings CaptureGameplay() {
+        std::scoped_lock lock(Mutex);
+        return {MaxExtraFollowers,
+                FollowerPerkOption,
+                SpeechLevelsPerSlot,
+                FollowDistance,
+                static_cast<std::int32_t>(Formation),
+                FollowerEssential,
+                FriendlyFire,
+                FollowerSandbox,
+                FollowerCrossfire,
+                FollowerHomes,
+                PerkListBuffer};
+    }
+
+    void ApplyGameplay(const GameplaySettings& value) {
+        std::scoped_lock lock(Mutex);
+        if (!ValidGameplay(value))
+            return;
+        MaxExtraFollowers = value.extraFollowers;
+        FollowerPerkOption = value.limitMode;
+        SpeechLevelsPerSlot = value.speechLevels;
+        FollowDistance = value.distance;
+        Formation = static_cast<formation_geometry::Style>(value.formation);
+        FollowerEssential = value.essential;
+        FriendlyFire = value.friendlyFire;
+        FollowerSandbox = value.sandbox;
+        FollowerCrossfire = value.crossfire;
+        FollowerHomes = value.homes;
+        ParsePerkListIntoSpecs(value.perks);
+        std::copy(value.perks.begin(), value.perks.end(), PerkListBuffer);
+        PerkListBuffer[value.perks.size()] = '\0';
+    }
+
+    void Load(bool force) {
+        std::scoped_lock lock(Mutex);
+        if (Loaded && !force)
+            return;
+        Loaded = true;
+        SaveStatus.clear();
+        CreateMissingIni();
+        LoadGameplayDefaults();
         Hotkeys = {};
         for (std::size_t i = 0; i < Hotkeys.size(); ++i) {
             const auto binding = static_cast<std::uint32_t>(
@@ -177,50 +214,62 @@ namespace mod::settings {
         mod::debug::Trace("Settings.Load", nullptr, force ? "forced" : "initial");
     }
 
-    bool Save() {
-        std::scoped_lock lock(Mutex);
-        mod::debug::Trace("Settings.Save");
-        std::string failedKeys;
-        auto write = [&](const char* section, const char* key, const char* value) {
-            SetLastError(ERROR_SUCCESS);
-            if (WritePrivateProfileStringA(section, key, value, kIniPath))
-                return;
-            const auto error = GetLastError();
-            if (!failedKeys.empty())
-                failedKeys += ", ";
-            failedKeys += key;
-            logger::error("Could not save INI setting [{}] {} to {} (Windows error {})", section, key, kIniPath, error);
-        };
-        auto writeInt = [&](const char* key, int val) { write(ini::General, key, std::to_string(val).c_str()); };
+    namespace {
+        bool WriteSettings(bool defaults) {
+            std::scoped_lock lock(Mutex);
+            mod::debug::Trace("Settings.Save");
+            std::string failedKeys;
+            auto write = [&](const char* section, const char* key, const char* value) {
+                SetLastError(ERROR_SUCCESS);
+                if (WritePrivateProfileStringA(section, key, value, kIniPath))
+                    return;
+                const auto error = GetLastError();
+                if (!failedKeys.empty())
+                    failedKeys += ", ";
+                failedKeys += key;
+                logger::error("Could not save INI setting [{}] {} to {} (Windows error {})", section, key, kIniPath,
+                              error);
+            };
+            auto writeInt = [&](const char* key, int val) { write(ini::General, key, std::to_string(val).c_str()); };
 
-        writeInt(ini::MaxFollowers, MaxExtraFollowers + 1);
-        writeInt(ini::LimitMode, FollowerPerkOption);
-        writeInt(ini::SpeechLevelsPerSlot, SpeechLevelsPerSlot);
-        writeInt(ini::Essential, FollowerEssential ? 1 : 0);
-        writeInt(ini::FriendlyFire, FriendlyFire ? 1 : 0);
-        writeInt(ini::Sandbox, FollowerSandbox ? 1 : 0);
-        writeInt(ini::Crossfire, FollowerCrossfire ? 1 : 0);
-        writeInt(ini::Homes, FollowerHomes ? 1 : 0);
-        writeInt(ini::FollowDistance, FollowDistance);
-        writeInt(ini::Formation, static_cast<std::int32_t>(Formation));
-        for (std::size_t i = 0; i < Hotkeys.size(); ++i)
-            write(ini::Hotkeys, hotkey_rules::Definitions[i].iniKey, std::to_string(Hotkeys[i]).c_str());
-        ParsePerkListIntoSpecs(PerkListBuffer);
-        BuildPerkListBuffer();
-        write(ini::General, ini::Perks, PerkListBuffer);
-        write(ini::Debug, ini::FlowLogging, mod::debug::Logging.load() ? "1" : "0");
-        write(ini::Debug, ini::DebugEnabled, mod::debug::OptionsEnabled.load() ? "1" : "0");
-        const bool saved = failedKeys.empty();
-        SaveStatus = saved ? fmt::format("Settings saved to {}.", kIniPath)
-                           : fmt::format(
-                                 "Could not save all settings to {}. Failed keys: {}. Some values may have been "
-                                 "written; see the log.",
-                                 kIniPath, failedKeys);
-        if (saved) {
-            preference_state::RememberSaved();
-            logger::info("{}", SaveStatus);
+            if (defaults) {
+                writeInt(ini::MaxFollowers, MaxExtraFollowers + 1);
+                writeInt(ini::LimitMode, FollowerPerkOption);
+                writeInt(ini::SpeechLevelsPerSlot, SpeechLevelsPerSlot);
+                writeInt(ini::Essential, FollowerEssential ? 1 : 0);
+                writeInt(ini::FriendlyFire, FriendlyFire ? 1 : 0);
+                writeInt(ini::Sandbox, FollowerSandbox ? 1 : 0);
+                writeInt(ini::Crossfire, FollowerCrossfire ? 1 : 0);
+                writeInt(ini::Homes, FollowerHomes ? 1 : 0);
+                writeInt(ini::FollowDistance, FollowDistance);
+                writeInt(ini::Formation, static_cast<std::int32_t>(Formation));
+                write(ini::General, ini::Perks, PerkListBuffer);
+            }
+            for (std::size_t i = 0; i < Hotkeys.size(); ++i)
+                write(ini::Hotkeys, hotkey_rules::Definitions[i].iniKey, std::to_string(Hotkeys[i]).c_str());
+            write(ini::Debug, ini::FlowLogging, mod::debug::Logging.load() ? "1" : "0");
+            write(ini::Debug, ini::DebugEnabled, mod::debug::OptionsEnabled.load() ? "1" : "0");
+            const bool saved = failedKeys.empty();
+            SaveStatus = saved ? fmt::format("{} saved to {}.",
+                                             defaults ? "Defaults and global settings" : "Global settings", kIniPath)
+                               : fmt::format(
+                                     "Could not save all settings to {}. Failed keys: {}. Some values may have been "
+                                     "written; see the log.",
+                                     kIniPath, failedKeys);
+            if (saved) {
+                preference_state::RememberSaved();
+                logger::info("{}", SaveStatus);
+            }
+            spdlog::default_logger()->flush();
+            return saved;
         }
-        spdlog::default_logger()->flush();
-        return saved;
+    }
+
+    bool Save() {
+        return WriteSettings(false);
+    }
+
+    bool SaveDefaults() {
+        return WriteSettings(true);
     }
 }

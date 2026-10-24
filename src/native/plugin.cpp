@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "settings/Settings.h"
+#include "settings/SettingsStorage.h"
 #include "ui/UI.h"
 #include "diagnostics/Debug.h"
 #include "followers/Controller.h"
@@ -586,7 +587,8 @@ namespace {
     }
 
     void ApplyLoadedGameState() {
-        mod::settings::Load(true);
+        if (g_followDistance)
+            g_followDistance->value = static_cast<float>(mod::settings::FollowDistance);
         ApplyFollowerDialogueGate(nullptr);
         ApplyFriendlyFire();
         ApplySandbox();
@@ -612,8 +614,11 @@ namespace {
                 logger::warn("Save load failed; debug controls remain unavailable.");
                 return;
             }
-            if (msg->type == SKSE::MessagingInterface::kNewGame)
+            if (msg->type == SKSE::MessagingInterface::kNewGame) {
                 InvalidateGameState();
+                mod::settings::storage::Reset();
+                mod::settings::Load(true);
+            }
             ApplyLoadedGameState();
             mod::hotkeys::Reset();
         }
