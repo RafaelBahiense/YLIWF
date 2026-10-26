@@ -295,14 +295,20 @@ namespace mod::adapters {
                     return;
                 queuedChanges.erase(adapter);
                 ReconcileState();
+                debug::NotifyStateChanged();  // An action value can change without changing follower state.
                 debug::Trace("adapter-state-changed", nullptr, "Controller: {}", providers[adapter - 1].name);
             });
         }
     }
 
     const yliwf::sdk::API* Query(std::uint32_t version) {
-        static const yliwf::sdk::API api{sizeof(api),  yliwf::sdk::InterfaceVersion, Register, Acknowledge,
-                                         StateChanged, adapter_movement::IsPackage};
+        static const yliwf::sdk::API api{sizeof(api),
+                                         yliwf::sdk::InterfaceVersion,
+                                         Register,
+                                         Acknowledge,
+                                         StateChanged,
+                                         adapter_movement::IsPackage,
+                                         yliwf::sdk::AllActionKinds};
         return version == yliwf::sdk::InterfaceVersion ? &api : nullptr;
     }
 
@@ -314,6 +320,63 @@ namespace mod::adapters {
                 result.push_back(std::move(*follower));
         }
         return result;
+    }
+
+    std::vector<yliwf::sdk::FollowerAction> Actions(yliwf::sdk::ActorID actor) {
+        std::scoped_lock lock(settings::Mutex);
+        if (!loaded || !MainThread())
+            return {};
+        const auto follower = Inspect(actor, false);
+        if (!follower || follower->conflictingOwnership ||
+            (follower->state.state != State::Following && follower->state.state != State::Waiting))
+            return {};
+        const auto& provider = providers[follower->adapter - 1];
+        if (!HasActions(provider.api))
+            return {};
+        std::array<FollowerAction, MaxFollowerActions> buffer{};
+        const auto count =
+            provider.api.actions(provider.api.context, actor, buffer.data(), static_cast<std::uint32_t>(buffer.size()));
+        if (count > buffer.size())
+            return {};
+        std::vector<FollowerAction> result;
+        const bool pending =
+            std::ranges::any_of(requests.items, [actor](const auto& item) { return item.actor == actor; });
+        for (std::uint32_t i = 0; i < count; ++i) {
+            auto action = buffer[i];
+            if (!adapter_rules::ValidAction(action) ||
+                std::ranges::any_of(result, [&](const auto& other) { return other.id == action.id; }))
+                return {};
+            if (pending) {
+                action.enabled = 0;
+                std::strcpy(action.reason, "A follower command is awaiting completion");
+            }
+            result.push_back(action);
+        }
+        return result;
+    }
+
+    bool InvokeAction(yliwf::sdk::ActorID actorID, yliwf::sdk::AdapterID expectedAdapter, std::uint32_t actionID,
+                      std::uint32_t value, std::string& reason) {
+        std::scoped_lock lock(settings::Mutex);
+        if (!loaded || !MainThread())
+            return false;
+        const auto follower = Inspect(actorID);
+        auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorID);
+        if (!follower || follower->adapter != expectedAdapter || follower->conflictingOwnership || !actor ||
+            actor->IsDead())
+            return false;
+        const auto actions = Actions(actorID);
+        const auto action = std::ranges::find(actions, actionID, &FollowerAction::id);
+        if (action == actions.end() || !adapter_rules::ValidActionValue(*action, value))
+            return false;
+        const auto& provider = providers[expectedAdapter - 1];
+        char detail[192]{};
+        const bool success =
+            provider.api.invokeAction(provider.api.context, actorID, actionID, value, detail, sizeof(detail)) == 1;
+        detail[sizeof(detail) - 1] = 0;
+        reason = detail;
+        debug::NotifyStateChanged();
+        return success;
     }
 
     bool Owns(yliwf::sdk::ActorID actor) {

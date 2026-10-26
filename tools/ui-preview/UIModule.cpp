@@ -4,6 +4,7 @@
 #include "ui/UI.h"
 #include "input/Hotkeys.h"
 #include "settings/PreferenceState.h"
+#include <cstdio>
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx11.h>
 
@@ -145,6 +146,31 @@ namespace {
                             return 2;
                     }
                 }
+            }
+        }
+        preview::Reset(preview::Scenario::Party);
+        preview::Session actionFixture;
+        preview::SaveSession(actionFixture);
+        actionFixture.party.followers.clear();
+        std::erase_if(actionFixture.party.adaptedFollowers, [](const auto& row) { return row.adapterActions.empty(); });
+        if (actionFixture.party.adaptedFollowers.size() != 1)
+            return 9;
+        for (const bool enabled : {true, false}) {
+            auto& action = actionFixture.party.adaptedFollowers.front().adapterActions.front();
+            action.enabled = static_cast<std::uint32_t>(enabled);
+            if (!enabled)
+                std::snprintf(action.reason, sizeof(action.reason), "A quest currently controls this follower.");
+            preview::RestoreSession(actionFixture);
+            for (const float size : {640.0f, 960.0f}) {
+                io.DisplaySize = {size, 720};
+                ImGui::NewFrame();
+                ImGui::SetNextWindowSize(io.DisplaySize);
+                ImGui::Begin("Adapter actions smoke test");
+                mod::ui::RenderFollowers();
+                ImGui::End();
+                ImGui::Render();
+                if (!ImGui::GetDrawData()->Valid || ImGui::GetDrawData()->TotalVtxCount <= 0)
+                    return 10;
             }
         }
         preview::Reset(preview::Scenario::Party);

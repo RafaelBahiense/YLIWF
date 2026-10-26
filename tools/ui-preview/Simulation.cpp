@@ -8,6 +8,7 @@
 #include "input/Hotkeys.h"
 #include "settings/Settings.h"
 #include <chrono>
+#include <cstdio>
 #include <functional>
 #include <optional>
 
@@ -118,12 +119,21 @@ void preview::Reset(Scenario scenario) {
     state.followers[1].distanceUnavailable = "Actor is not loaded";
     state.adaptedFollowers = {SampleFollower(0x300, 99, "Inigo"), SampleFollower(0x400, 99, "Serana")};
     for (auto& row : state.adaptedFollowers) {
+        row.adapterID = row.formID;
         row.adapterName = row.name;
         row.adapterCommands = 7;
         row.adapterStatus = "Following";
         row.combatRole.available = false;
         row.combatRole.unavailable = "Combat roles are controlled by this follower.";
     }
+    yliwf::sdk::FollowerAction reanimation;
+    reanimation.id = 1;
+    reanimation.kind = yliwf::sdk::ActionKind::Toggle;
+    reanimation.enabled = reanimation.value = 1;
+    std::snprintf(reanimation.label, sizeof(reanimation.label), "Allow raising the dead");
+    std::snprintf(reanimation.description, sizeof(reanimation.description),
+                  "Allow combat AI to use reanimation spells.");
+    state.adaptedFollowers[1].adapterActions = {reanimation};
     state.liveCount = 2;
     state.modCount = 2;
     state.vanillaCount = 1;
@@ -284,6 +294,20 @@ namespace mod::debug {
                 const auto bit = 1u << (static_cast<unsigned int>(action) - 2);
                 if ((row.questCommands & bit) && (row.adapterName.empty() || (row.adapterCommands & bit)))
                     Apply(row, action);
+            });
+        });
+    }
+
+    void RequestAdapterAction(std::uint32_t id, yliwf::sdk::AdapterID adapter, std::uint32_t action,
+                              std::uint32_t value, std::uint64_t generation) {
+        if (!IsCurrentGame(generation))
+            return;
+        Queue("Adapter action", [=] {
+            Actor(id, [=](auto& row) {
+                if (row.adapterID == adapter)
+                    for (auto& option : row.adapterActions)
+                        if (option.id == action && option.enabled && value <= 1)
+                            option.value = value;
             });
         });
     }

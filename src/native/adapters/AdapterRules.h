@@ -12,6 +12,19 @@ namespace mod::adapter_rules {
     inline constexpr std::size_t Capacity = 16;
     inline constexpr float AcknowledgementSeconds = 30;
 
+    inline bool ValidAction(const FollowerAction& action) {
+        return action.size >= sizeof(FollowerAction) && action.id && action.enabled <= 1 &&
+               static_cast<std::uint32_t>(action.kind) <= 1 && action.value <= 1 &&
+               (action.kind == ActionKind::Toggle || action.value == 0) && action.label[0] &&
+               std::ranges::find(action.label, '\0') != std::end(action.label) &&
+               std::ranges::find(action.description, '\0') != std::end(action.description) &&
+               std::ranges::find(action.reason, '\0') != std::end(action.reason);
+    }
+
+    inline bool ValidActionValue(const FollowerAction& action, std::uint32_t value) {
+        return ValidAction(action) && action.enabled && (action.kind == ActionKind::Toggle ? value <= 1 : value == 0);
+    }
+
     inline bool ObservationDue(float& seconds, float elapsed) {
         if (std::isfinite(elapsed) && elapsed > 0)
             seconds += elapsed;
@@ -26,8 +39,11 @@ namespace mod::adapter_rules {
             adapter.size >= offsetof(Adapter, coreMovementFeatures) + sizeof(adapter.coreMovementFeatures);
         const bool validMovement = !hasMovement || (!(adapter.coreMovementFeatures & ~AllMovement) &&
                                                     (!adapter.coreMovementFeatures || adapter.movementPermissions));
-        return validMovement && adapter.size >= BaseAdapterSize && adapter.version == InterfaceVersion && adapter.id &&
-               *adapter.id && adapter.name && *adapter.name && adapter.enumerate && adapter.inspect && adapter.start;
+        const bool validActions = adapter.size < offsetof(Adapter, invokeAction) + sizeof(adapter.invokeAction) ||
+                                  (static_cast<bool>(adapter.actions) == static_cast<bool>(adapter.invokeAction));
+        return validActions && validMovement && adapter.size >= BaseAdapterSize &&
+               adapter.version == InterfaceVersion && adapter.id && *adapter.id && adapter.name && *adapter.name &&
+               adapter.enumerate && adapter.inspect && adapter.start;
     }
 
     inline bool CombatProtection(bool enabled, State state, bool eligible, bool dead, bool nativeOwned) {

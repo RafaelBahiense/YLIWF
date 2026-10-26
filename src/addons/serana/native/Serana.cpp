@@ -4,6 +4,7 @@
 #include "ModInfo.h"
 #include "AddonInfo.h"
 #include "Rules.h"
+#include "Reanimation.h"
 #include "PapyrusCommands.h"
 #include "PapyrusController.h"
 #include <array>
@@ -20,6 +21,7 @@ namespace {
     RE::Actor* serana = nullptr;
     constexpr char Script[] = "DLC1_NPCMentalModelScript";
     constexpr std::array Methods{"StopWaiting", "Wait", "Dismiss"};
+    constexpr std::uint32_t ReanimationAction = 1;
 
     void Reason(char* output, std::uint32_t capacity, const char* text) {
         if (output && capacity)
@@ -175,6 +177,42 @@ namespace {
             host->stateChanged(registration);
     }
 
+    std::uint32_t Actions(void*, ActorID actor, FollowerAction* output, std::uint32_t capacity) {
+        if (!output || !capacity || output->size < sizeof(*output))
+            return 0;
+        FollowerState state;
+        if (!Inspect(nullptr, actor, &state) || (state.state != State::Following && state.state != State::Waiting))
+            return 0;
+        *output = {};
+        output->id = ReanimationAction;
+        output->kind = ActionKind::Toggle;
+        output->enabled = Supports(state, Command::Follow) && !commands.Pending(actor) &&
+                          mod::serana_reanimation::Available() && !serana->GetCurrentScene();
+        output->value = mod::serana_reanimation::Allowed();
+        Reason(output->label, sizeof(output->label), "Allow raising the dead");
+        Reason(output->description, sizeof(output->description),
+               "Allow Serana's combat AI to use reanimation spells. Saved with this game; her spellbook is preserved.");
+        if (!output->enabled)
+            Reason(output->reason, sizeof(output->reason),
+                   state.reason[0] ? state.reason
+                                   : "Unavailable during scenes, pending commands or unsupported saved settings");
+        return 1;
+    }
+
+    std::uint32_t InvokeAction(void*, ActorID actor, std::uint32_t action, std::uint32_t value, char* reason,
+                               std::uint32_t capacity) {
+        FollowerAction current;
+        if (action != ReanimationAction || value > 1 || !Actions(nullptr, actor, &current, 1) || !current.enabled ||
+            !mod::serana_reanimation::SetAllowed(value != 0)) {
+            Reason(reason, capacity, "Serana's reanimation setting is unavailable now");
+            return 0;
+        }
+        Reason(reason, capacity,
+               value ? "Serana may raise the dead in combat." : "Serana will not raise the dead in combat.");
+        NotifyState();
+        return 1;
+    }
+
     std::uint32_t SetFollowDistance(void*, ActorID actor, FollowDistance distance) {
         FollowerState state;
         if (!Inspect(nullptr, actor, &state) || !Supports(state, Command::Follow) ||
@@ -255,7 +293,7 @@ namespace {
             const auto query = module ? reinterpret_cast<QueryAPI>(GetProcAddress(module, QueryExport)) : nullptr;
             host = query ? query(mod::addon::RequiredAdapterAPIVersion) : nullptr;
             if (!host || host->size < BaseAPISize || host->version != InterfaceVersion || !host->registerAdapter ||
-                !host->complete || !HasCoreMovement(host)) {
+                !host->complete || !HasCoreMovement(host) || !HasActionControls(host)) {
                 SKSE::log::warn("Serana adapter: compatible YLIWF host API is unavailable");
                 host = nullptr;
                 return;
@@ -275,7 +313,9 @@ namespace {
                                   nullptr,
                                   nullptr,
                                   MovementPermissions,
-                                  MovementBit(Movement::Formation) | MovementBit(Movement::StandDown)};
+                                  MovementBit(Movement::Formation) | MovementBit(Movement::StandDown),
+                                  Actions,
+                                  InvokeAction};
             registration = host->registerAdapter(&adapter);
             if (!registration)
                 SKSE::log::warn("Serana adapter registration rejected");
@@ -288,6 +328,8 @@ namespace {
             }
             if (!mentalModel || !serana)
                 SKSE::log::warn("Serana adapter: Dawnguard forms unavailable");
+            if (registration)
+                mod::serana_reanimation::Initialize(serana);
             if (auto* events = RE::ScriptEventSourceHolder::GetSingleton()) {
                 static StateEvents stateEvents;
                 events->AddEventSink<RE::TESQuestStageEvent>(&stateEvents);
@@ -296,15 +338,22 @@ namespace {
                 events->AddEventSink<RE::TESCombatEvent>(&stateEvents);
                 events->AddEventSink<RE::TESDeathEvent>(&stateEvents);
             }
-        } else if (message->type == SKSE::MessagingInterface::kPreLoadGame ||
-                   message->type == SKSE::MessagingInterface::kNewGame) {
+        } else if (message->type == SKSE::MessagingInterface::kPreLoadGame) {
             commands.Invalidate();
+            mod::serana_reanimation::Invalidate();
+        } else if (message->type == SKSE::MessagingInterface::kNewGame) {
+            commands.Invalidate();
+            mod::serana_reanimation::NewGame();
+            mod::serana_reanimation::GameLoaded();
+        } else if (message->type == SKSE::MessagingInterface::kPostLoadGame && message->data) {
+            mod::serana_reanimation::GameLoaded();
         }
     }
 }
 
 extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface* skse) {
     SKSE::Init(skse);
+    mod::serana_reanimation::RegisterSerialization();
     auto* messages = SKSE::GetMessagingInterface();
     return messages && messages->RegisterListener(OnMessage);
 }

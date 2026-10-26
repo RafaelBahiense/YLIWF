@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <cstring>
 
 #include "adapters/AdapterRules.h"
 #include "adapters/MovementRules.h"
@@ -21,11 +22,53 @@ namespace {
     using mod::adapter_rules::Requests;
     using mod::adapter_rules::Valid;
 
+    TEST_CASE("Adapter action descriptors and values are bounded") {
+        using mod::adapter_rules::ValidAction;
+        using mod::adapter_rules::ValidActionValue;
+        FollowerAction action;
+        action.id = 1;
+        action.enabled = 1;
+        std::strcpy(action.label, "Example action");
+        CHECK(ValidAction(action));
+        CHECK(ValidActionValue(action, 0));
+        CHECK_FALSE(ValidActionValue(action, 1));
+        action.kind = ActionKind::Toggle;
+        CHECK(ValidActionValue(action, 1));
+        CHECK_FALSE(ValidActionValue(action, 2));
+        action.enabled = 0;
+        CHECK_FALSE(ValidActionValue(action, 0));
+        action.enabled = 2;
+        CHECK_FALSE(ValidAction(action));
+        action.enabled = 1;
+        action.id = 0;
+        CHECK_FALSE(ValidAction(action));
+        action.id = 1;
+        std::fill(std::begin(action.label), std::end(action.label), 'x');
+        CHECK_FALSE(ValidAction(action));
+    }
+
+    TEST_CASE("Action support requires both callbacks and an advertised host capability") {
+        Adapter adapter;
+        adapter.actions = [](void*, ActorID, FollowerAction*, std::uint32_t) { return 0u; };
+        CHECK_FALSE(HasActions(adapter));
+        adapter.invokeAction = [](void*, ActorID, std::uint32_t, std::uint32_t, char*, std::uint32_t) { return 1u; };
+        CHECK(HasActions(adapter));
+        adapter.size = 120;
+        CHECK_FALSE(HasActions(adapter));
+        API host;
+        CHECK_FALSE(HasActionControls(&host));
+        host.supportedActions = AllActionKinds;
+        CHECK(HasActionControls(&host));
+        host.size = 40;
+        CHECK_FALSE(HasActionControls(&host));
+        CHECK_FALSE(HasActionControls(nullptr));
+    }
+
     static_assert(sizeof(void*) == 8 && sizeof(FollowerState) == 204 && BaseAdapterSize == 56 &&
                   offsetof(Adapter, canRecruitThroughDialogue) == 64 &&
                   offsetof(Adapter, canReceiveCombatProtection) == 72 &&
-                  offsetof(Adapter, canTravelInFormation) == 80 && sizeof(Adapter) == 120 && BaseAPISize == 24 &&
-                  sizeof(API) == 40);
+                  offsetof(Adapter, canTravelInFormation) == 80 && sizeof(Adapter) == 136 && BaseAPISize == 24 &&
+                  sizeof(API) == 48);
 
     Adapter ValidAdapter() {
         Adapter adapter;
@@ -40,6 +83,17 @@ namespace {
         adapter.canTravelInFormation = [](void*, ActorID) { return 1u; };
         adapter.setFormationPackage = [](void*, ActorID, std::uint32_t) { return 1u; };
         return adapter;
+    }
+
+    TEST_CASE("Action callbacks must be registered together") {
+        auto adapter = ValidAdapter();
+        adapter.actions = [](void*, ActorID, FollowerAction*, std::uint32_t) { return 0u; };
+        CHECK_FALSE(Valid(adapter));
+        adapter.invokeAction = [](void*, ActorID, std::uint32_t, std::uint32_t, char*, std::uint32_t) { return 1u; };
+        CHECK(Valid(adapter));
+        adapter.size = 120;
+        CHECK(Valid(adapter));
+        CHECK_FALSE(HasActions(adapter));
     }
 
     TEST_CASE("Core movement is an optional v1 extension with explicit feature support") {

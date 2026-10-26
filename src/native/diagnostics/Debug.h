@@ -3,6 +3,7 @@
 #include <fmt/format.h>
 #include "combat/CombatRoles.h"
 #include "followers/PackageControl.h"
+#include "FollowerAdapter.h"
 
 #include <atomic>
 #include <cstdint>
@@ -85,6 +86,8 @@ namespace mod::debug {
         std::string location = "Unknown", distanceUnavailable;
         std::string adapterName, adapterStatus, adapterReason;
         std::uint32_t adapterCommands = 0;
+        yliwf::sdk::AdapterID adapterID = 0;
+        std::vector<yliwf::sdk::FollowerAction> adapterActions;
         std::uint32_t questCommands = 7;
         std::string questRestriction;
         std::int32_t followDistance = 1;
@@ -168,4 +171,6 @@ namespace mod::debug {
     void RequestDump();
     void RequestAction(Action action, std::uint32_t actorID, std::int32_t aliasID, std::uint64_t generation);
     void RequestPartyAction(Action action, std::uint64_t generation);
+    void RequestAdapterAction(std::uint32_t actor, yliwf::sdk::AdapterID adapter, std::uint32_t action,
+                              std::uint32_t value, std::uint64_t generation);
 }

@@ -506,6 +506,35 @@ namespace {
         EndDisabled(!canClear);
     }
 
+    void RenderAdapterActions(const mod::debug::Follower& row, const mod::debug::Snapshot& state) {
+        if (row.adapterActions.empty())
+            return;
+        SectionGap();
+        ImGuiMCP::SeparatorText("ADAPTER OPTIONS");
+        for (const auto& action : row.adapterActions) {
+            ImGuiMCP::PushID(static_cast<int>(action.id));
+            const bool disabled = !state.ready || state.busy || !action.enabled;
+            BeginDisabled(disabled);
+            bool invoke = false;
+            bool value = action.value != 0;
+            if (action.kind == yliwf::sdk::ActionKind::Toggle)
+                invoke = ImGuiMCP::Checkbox(action.label, &value);
+            else
+                invoke = ImGuiMCP::Button(action.label);
+            if (invoke)
+                mod::debug::RequestAdapterAction(
+                    row.formID, row.adapterID, action.id,
+                    action.kind == yliwf::sdk::ActionKind::Toggle ? static_cast<std::uint32_t>(value) : 0,
+                    state.generation);
+            EndDisabled(disabled);
+            if (action.description[0])
+                ControlTooltip(action.description);
+            if (!action.enabled && action.reason[0])
+                ImGuiMCP::TextWrapped("%s", action.reason);
+            ImGuiMCP::PopID();
+        }
+    }
+
     void RenderFollowerRow(const mod::debug::Follower& row, const mod::debug::Snapshot& state, bool debug) {
         ImGuiMCP::SetWindowFontScale(1.2f);
         ImGuiMCP::TextWrapped("%s", row.name.empty() ? "Unnamed follower" : row.name.c_str());
@@ -530,6 +559,7 @@ namespace {
         RenderFollowerCommands(row, state);
         RenderFollowerDistance(row, state);
         RenderCombatRole(row, state);
+        RenderAdapterActions(row, state);
         if (debug) {
             SectionGap();
             if (row.adapterName.empty())

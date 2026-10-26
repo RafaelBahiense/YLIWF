@@ -17,6 +17,20 @@ namespace yliwf::sdk {
     enum class StartResult : std::uint32_t { Rejected, Pending, Completed };
     enum class FollowDistance : std::uint32_t { Close, Normal, Far };
     enum class Movement : std::uint32_t { Distance = 1, Formation = 2, StandDown = 4 };
+    enum class ActionKind : std::uint32_t { Button, Toggle };
+    inline constexpr std::uint32_t AllActionKinds = 3;
+    inline constexpr std::uint32_t MaxFollowerActions = 16;
+
+    struct FollowerAction {
+        std::uint32_t size = sizeof(FollowerAction);
+        std::uint32_t id = 0;  // Stable, nonzero identity within this adapter.
+        ActionKind kind = ActionKind::Button;
+        std::uint32_t enabled = 0;
+        std::uint32_t value = 0;  // Toggle: 0/1. Button: always zero.
+        char label[96]{};
+        char description[192]{};
+        char reason[192]{};  // Why a visible action is disabled.
+    };
 
     constexpr std::uint32_t MovementBit(Movement feature) {
         return static_cast<std::uint32_t>(feature);
@@ -95,9 +109,22 @@ namespace yliwf::sdk {
         std::uint32_t (*movementPermissions)(void*, ActorID, std::uint32_t ownerPackage,
                                              const FollowerState*) = nullptr;
         std::uint32_t coreMovementFeatures = 0;
+        // Optional v1 extension. Main thread, read-only, bounded enumeration.
+        // Descriptors are copied by the host; no UI or engine pointers cross DLLs.
+        std::uint32_t (*actions)(void*, ActorID, FollowerAction*, std::uint32_t capacity) = nullptr;
+        // Main thread, synchronous, no deferred mutation or use of API.complete.
+        // Revalidate ownership and restrictions. Return 1 after the effect finishes.
+        // The adapter owns persistence of its settings and reports fresh values.
+        std::uint32_t (*invokeAction)(void*, ActorID, std::uint32_t action, std::uint32_t value, char* reason,
+                                      std::uint32_t capacity) = nullptr;
     };
 
     inline constexpr std::uint32_t BaseAdapterSize = offsetof(Adapter, setFollowDistance);
+
+    inline bool HasActions(const Adapter& adapter) {
+        return adapter.size >= offsetof(Adapter, invokeAction) + sizeof(adapter.invokeAction) && adapter.actions &&
+               adapter.invokeAction;
+    }
 
     inline bool UsesCoreMovement(const Adapter& adapter, Movement feature) {
         return adapter.size >= offsetof(Adapter, coreMovementFeatures) + sizeof(adapter.coreMovementFeatures) &&
@@ -149,6 +176,8 @@ namespace yliwf::sdk {
         // packages when validating an owner's current interrupt. This does not
         // grant permission to install or release one.
         std::uint32_t (*isMovementPackage)(std::uint32_t package) = nullptr;
+        // Optional v1 extension: supported ActionKind bits (1 << kind).
+        std::uint32_t supportedActions = 0;
     };
 
     inline constexpr std::uint32_t BaseAPISize = offsetof(API, stateChanged);
@@ -163,14 +192,23 @@ namespace yliwf::sdk {
                api->version == InterfaceVersion && api->isMovementPackage;
     }
 
+    inline bool HasActionControls(const API* api) {
+        return api && api->version == InterfaceVersion &&
+               api->size >= offsetof(API, supportedActions) + sizeof(api->supportedActions) &&
+               (api->supportedActions & AllActionKinds) == AllActionKinds;
+    }
+
     using QueryAPI = const API* (*)(std::uint32_t version);
-    static_assert(std::is_standard_layout_v<Adapter> && std::is_standard_layout_v<API>);
+    static_assert(std::is_standard_layout_v<Adapter> && std::is_standard_layout_v<API> &&
+                  std::is_standard_layout_v<FollowerAction>);
     static_assert(sizeof(void*) == 8 && sizeof(FollowerState) == 204 && BaseAdapterSize == 56 &&
                       offsetof(Adapter, canRecruitThroughDialogue) == 64 &&
                       offsetof(Adapter, canReceiveCombatProtection) == 72 &&
                       offsetof(Adapter, canTravelInFormation) == 80 && offsetof(Adapter, setStandDownPackage) == 96 &&
                       offsetof(Adapter, movementPermissions) == 104 && offsetof(Adapter, coreMovementFeatures) == 112 &&
-                      sizeof(Adapter) == 120 && BaseAPISize == 24 && offsetof(API, isMovementPackage) == 32 &&
-                      sizeof(API) == 40,
+                      offsetof(Adapter, actions) == 120 && offsetof(Adapter, invokeAction) == 128 &&
+                      sizeof(Adapter) == 136 && sizeof(FollowerAction) == 500 && BaseAPISize == 24 &&
+                      offsetof(API, isMovementPackage) == 32 && offsetof(API, supportedActions) == 40 &&
+                      sizeof(API) == 48,
                   "Follower adapter API v1 requires the standard x64 structure layout");
 }

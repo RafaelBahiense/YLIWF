@@ -24,6 +24,9 @@ namespace mod::adapters {
     std::vector<Follower> Followers(bool annotatePending = true);  // Main thread; quest-backed, never saved as aliases.
     bool Owns(yliwf::sdk::ActorID actor);
     bool HasFollowers();
+    std::vector<yliwf::sdk::FollowerAction> Actions(yliwf::sdk::ActorID actor);
+    bool InvokeAction(yliwf::sdk::ActorID actor, yliwf::sdk::AdapterID expectedAdapter, std::uint32_t action,
+                      std::uint32_t value, std::string& reason);
     bool CanRecruitThroughDialogue(yliwf::sdk::ActorID actor);
     bool SupportsTravelFormation(yliwf::sdk::ActorID actor);
     bool CanTravelInFormation(yliwf::sdk::ActorID actor);

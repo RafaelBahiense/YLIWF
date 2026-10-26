@@ -568,6 +568,8 @@ namespace mod::debug {
                 row.adapterName = follower.name;
                 row.combatRole = combat_roles::Inspect(RE::TESForm::LookupByID<RE::Actor>(row.formID));
                 row.adapterCommands = follower.state.commands;
+                row.adapterID = follower.adapter;
+                row.adapterActions = adapters::Actions(follower.actor);
                 row.distanceAvailable = follow_distance::Available() && follower.supportsDistance;
                 row.adapterReason = follower.state.reason;
                 using yliwf::sdk::State;
@@ -1121,6 +1123,40 @@ namespace mod::debug {
                 UpdateCommandProgress(ticket,
                                       fmt::format("{}: {} followers queued.", PartyActionName(action), group->targets));
             finish();
+        });
+    }
+
+    void RequestAdapterAction(std::uint32_t actor, yliwf::sdk::AdapterID adapter, std::uint32_t action,
+                              std::uint32_t value, std::uint64_t generation) {
+        auto* tasks = SKSE::GetTaskInterface();
+        if (!tasks || !IsCurrentGame(generation))
+            return;
+        {
+            std::scoped_lock lock(snapshotMutex);
+            if (snapshot.busy || !snapshot.ready || snapshot.generation != generation)
+                return;
+            snapshot.busy = true;
+            snapshot.commandState = CommandState::Pending;
+            snapshot.status = snapshot.commandStatus = "Adapter action queued. Close the menu to let the game run.";
+        }
+        tasks->AddTask([actor, adapter, action, value, generation] {
+            if (!IsCurrentGame(generation))
+                return;
+            std::string reason;
+            const bool success = adapters::InvokeAction(actor, adapter, action, value, reason);
+            if (reason.empty())
+                reason = success ? "Adapter action completed." : "Adapter action is no longer available.";
+            {
+                std::scoped_lock lock(snapshotMutex);
+                if (snapshot.generation != generation)
+                    return;
+                snapshot.busy = false;
+                snapshot.commandState = success ? CommandState::Succeeded : CommandState::Failed;
+                snapshot.status = snapshot.commandStatus = reason;
+            }
+            logger::info("Adapter action: adapter={} actor={:08X} action={} value={} success={} {}", adapter, actor,
+                         action, value, success, reason);
+            NotifyStateChanged();
         });
     }
 

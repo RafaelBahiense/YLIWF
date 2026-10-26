@@ -1,10 +1,36 @@
 #include <doctest/doctest.h>
 
 #include "Rules.h"
+#include "ReanimationRules.h"
 
 #include <cstring>
 
 namespace {
+    TEST_CASE("Reanimation combat snapshots suppress only the selected Serana handle") {
+        using mod::serana_reanimation::Suppress;
+        CHECK_FALSE(Suppress(0, 0));
+        CHECK_FALSE(Suppress(42, 0));
+        CHECK_FALSE(Suppress(0, 42));
+        CHECK_FALSE(Suppress(43, 42));
+        CHECK(Suppress(42, 42));
+    }
+
+    TEST_CASE("Reanimation preference decoding rejects malformed or unsupported saves") {
+        using mod::serana_reanimation::DecodePreference;
+        const std::array<std::uint8_t, 4> enabled{1, 0, 0, 0}, disabled{};
+        CHECK(DecodePreference(1, enabled) == true);
+        CHECK(DecodePreference(1, disabled) == false);
+        CHECK_FALSE(DecodePreference(2, enabled));
+        for (std::size_t count = 0; count < enabled.size(); ++count)
+            CHECK_FALSE(DecodePreference(1, std::span(enabled).first(count)));
+        auto invalid = enabled;
+        invalid[0] = 2;
+        CHECK_FALSE(DecodePreference(1, invalid));
+        invalid = enabled;
+        invalid[3] = 1;
+        CHECK_FALSE(DecodePreference(1, invalid));
+    }
+
     using namespace yliwf::sdk;
     using mod::serana_rules::ControllerState;
     using mod::serana_rules::Describe;

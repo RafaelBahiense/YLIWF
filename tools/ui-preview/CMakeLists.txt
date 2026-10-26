@@ -25,7 +25,7 @@ add_executable(yliwf-ui-preview WIN32 Main.cpp ReloadableUI.cpp)
 set_target_properties(yliwf-ui-preview PROPERTIES OUTPUT_NAME yliwf-ui-preview-host)
 add_dependencies(yliwf-ui-preview yliwf-preview-ui)
 foreach(target yliwf-preview-ui yliwf-ui-preview)
-  target_include_directories(${target} PRIVATE include "${REPO_ROOT}/src/native"
+  target_include_directories(${target} PRIVATE include "${REPO_ROOT}/src/native" "${REPO_ROOT}/include"
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_precompile_headers(${target} PRIVATE <algorithm> <array> <atomic> <mutex> <string> <vector>)
   target_compile_definitions(${target} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
