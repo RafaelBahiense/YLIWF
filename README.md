@@ -75,6 +75,10 @@ README for requirements and installation.
 - **[M'rissi](src/addons/mrissi/README.md)** (`-Mrissi-<version>.zip`):
   Connects her follower commands, distance, formations and Stand down while
   respecting her story and mount controller. Requires **M'rissi's Tails of Troubles SE 1.7**.
+- **[Aela FDE](src/addons/aela-fde/README.md)** (`-AelaFDE-<version>.zip`):
+  Keeps FDE Aela's werewolf transformations and authored departures consistent
+  with core follower control. Requires **Follower Dialogue Expansion – Aela the
+  Huntress**, including `FDE Aela.esp` and `FDE Aela Part 2.esp`.
 - **[Fura FDE](src/addons/fura-fde/README.md)** (`-FuraFDE-<version>.zip`):
   Routes FDE Fura's recruitment and dialogue into the core follower controller,
   with normal slots, distance and combat roles while respecting her quests.

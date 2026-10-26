@@ -9,6 +9,32 @@ Supplementary controllers can use [policies for core-owned followers](#policies-
 without claiming the follower or replacing the quest owner's policy.
 See the [available add-ons](../README.md#add-ons).
 
+## Adapter actions
+
+The optional v1 `actions` and `invokeAction` callbacks expose buttons and boolean
+toggles in the selected follower's **Adapter options** section. Check
+`HasActionControls(host)` before requiring this feature. `API.supportedActions`
+advertises supported `ActionKind` bits; the interface version remains 1.
+
+`actions` is read-only, on the main thread, and writes at most the supplied
+capacity (up to 16). Each `FollowerAction` has a stable nonzero adapter-local ID,
+kind, enabled flag, toggle value, label, description and disabled reason.
+Text buffers must be null-terminated. Duplicate IDs and malformed descriptors
+invalidate the entire list. Button values are zero; toggle values are zero or one.
+
+The host copies descriptors into UI snapshots. Invocation returns to the game
+thread, verifies the session and expected adapter, re-enumerates the action and
+checks its current enabled state and value. Pending/quarantined follower commands,
+dead actors and conflicting ownership block invocation. The provider must also
+revalidate its own restrictions. `invokeAction` is synchronous: return one only
+when the effect is complete, with optional result text. Do not retain buffers,
+schedule deferred effects or call `API.complete` for these actions.
+
+Providers own persistence of their settings and must reset transient state on
+save changes. Notify `API.stateChanged` when an action's value or availability
+changes outside invocation. Actions do not grant follower ownership or bypass
+quest policies.
+
 ## External ownership and scope
 
 Active followers appear in Followers and participate in party commands when

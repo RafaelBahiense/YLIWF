@@ -30,3 +30,17 @@ Serana retains native distance handling. See the
 
 Owner method dispatch uses `PapyrusCommands.h`, including session invalidation
 and Serana's additional dismissal verification.
+
+## Reanimation control
+
+Action 1 toggles combat reanimation, respecting controller restrictions. The
+per-save preference defaults to allowed (`YLSR` / `REAN` v1, four-byte boolean).
+Invalid records are retained and disable the control.
+
+`Reanimation.cpp` hooks spell scoring (0x0C) and reanimation cast admission (0x06).
+Combat workers compare an atomic Serana handle published on the main thread and
+cleared during loading. Disabling interrupts active reanimation; spellbooks,
+raised actors, other casters, scrolls, staves and scripted casts are preserved.
+
+Validate in game: toggle before/during combat, level while disabled, switch saves,
+re-enable, and check another necromancer still casts normally.
