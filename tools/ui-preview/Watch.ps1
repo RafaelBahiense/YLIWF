@@ -10,6 +10,17 @@ function Get-PreviewSourceStamp {
         Get-ChildItem -LiteralPath (Join-Path $repoDirectory 'src/native/ui') -Recurse -File
         Get-ChildItem -LiteralPath (Join-Path $repoDirectory 'src/native') -Recurse -File |
             Where-Object { $_.Extension -in @('.h', '.hpp') }
+        Get-ChildItem -LiteralPath (Join-Path $repoDirectory 'include') -Recurse -File |
+            Where-Object { $_.Extension -in @('.h', '.hpp') }
+        foreach ($manifest in Get-ChildItem -LiteralPath (Join-Path $repoDirectory 'src/addons') -Recurse -File -Filter addon.json) {
+            $previewDirectory = Join-Path $manifest.DirectoryName 'preview'
+            if (Test-Path -LiteralPath $previewDirectory) {
+                $manifest
+                Get-ChildItem -LiteralPath $previewDirectory -Recurse -File
+                Get-ChildItem -LiteralPath (Join-Path $manifest.DirectoryName 'native') -Recurse -File |
+                    Where-Object { $_.Extension -in @('.h', '.hpp') -or $_.Name -eq 'Menu.cpp' }
+            }
+        }
         Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -File |
             Where-Object { $_.Extension -in @('.cpp', '.h', '.hpp', '.cmake', '.json') -or $_.Name -eq 'CMakeLists.txt' }
     )

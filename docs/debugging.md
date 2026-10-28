@@ -152,7 +152,7 @@ Run `build.ps1 -Target Test`, then check in game:
 | Gameplay | Recruit, follow, wait, dismiss, death/promotion, fast travel, homes and 72-hour wait timeout |
 | Primary/party controls | Full party, duplicates, dead slots, promotion, all three party commands, cancellation and partial failure |
 | Distance | Global reset, one-actor override, promotion and save/load; same room, outdoors and unavailable positions |
-| Stand down | Ordinary followers and Serana: player attacks, player is attacked, follower is attacked; continued following/avoidance; normal combat after disabling; scene handoff and save/load cleanup |
+| Stand down | Core-managed and supported add-on followers: player attacks, player is attacked, follower is attacked; continued following/avoidance; normal combat after disabling; scene handoff and save/load cleanup |
 | Diagnosis/repair | Healthy quest, conflicting override, missing properties, uninitialized script, duplicates and orphan flags |
 | Admission | Reject player, dead/base/invalid IDs, animals and full party; lowering cap preserves followers |
 | Integrations | Animal/hireling behavior, Blades awaiting dismissal and optional 3DNPC forwarding |

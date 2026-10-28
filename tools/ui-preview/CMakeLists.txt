@@ -18,7 +18,16 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ModInfo.h" CONTENT
 include(Theme.cmake)
 add_library(yliwf-preview-ui SHARED UIModule.cpp Simulation.cpp Style.cpp
   "${REPO_ROOT}/src/native/ui/UI.cpp"
+  "${REPO_ROOT}/src/native/ui/TabRegistration.cpp"
   "${REPO_ROOT}/src/native/ui/HotkeysPage.cpp")
+file(GLOB_RECURSE addon_manifests CONFIGURE_DEPENDS "${REPO_ROOT}/src/addons/addon.json")
+foreach(manifest IN LISTS addon_manifests)
+  get_filename_component(addon_directory "${manifest}" DIRECTORY)
+  file(GLOB preview_sources CONFIGURE_DEPENDS "${addon_directory}/preview/*.cpp")
+  if(preview_sources)
+    target_sources(yliwf-preview-ui PRIVATE ${preview_sources} "${addon_directory}/native/Menu.cpp")
+  endif()
+endforeach()
 add_custom_command(TARGET yliwf-preview-ui POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E touch "${CMAKE_CURRENT_BINARY_DIR}/ui-ready")
 add_executable(yliwf-ui-preview WIN32 Main.cpp ReloadableUI.cpp)
@@ -33,3 +42,4 @@ foreach(target yliwf-preview-ui yliwf-ui-preview)
   target_link_libraries(${target} PRIVATE fmt::fmt d3d11 dxgi)
 endforeach()
 target_link_libraries(yliwf-preview-ui PRIVATE imgui::imgui)
+target_compile_definitions(yliwf-preview-ui PRIVATE YLIWF_UI_PREVIEW)

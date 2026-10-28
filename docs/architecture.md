@@ -12,7 +12,7 @@ reproducible source builds.
 | `include/` | Public add-on API headers |
 | `src/papyrus/` | Vanilla compatibility and engine-call adapters |
 | `src/plugin/` | Mutagen C# definitions generating the ESP |
-| `src/addons/` | Optional follower adapters |
+| `src/addons/` | Optional adapters and development modules |
 | `assets/settings.ini` | Default settings |
 | `src/shared/`, `mod.json` | Shared identity and filenames |
 | `tools/`, `cmake/` | Setup, builds, validation and packaging |
@@ -65,6 +65,10 @@ See [controller contracts](native-controller.md) for queue and save details.
 
 The menu exposes registrations and repair tools without being required for normal
 play. Debug controls and flow logging are separate. Snapshots refresh only while
-Followers or Debug is visible; gameplay runs independently.
+Followers, Debug or an add-on tab is visible; gameplay runs independently.
+
+Add-ons own their menu pages and register through the public
+[menu-tab API](addons/menu-tabs.md). The core supplies registration and cached roster
+data without depending on an add-on's renderer or runner.
 
 See [debugging](debugging.md) and the [build guide](build-release.md).

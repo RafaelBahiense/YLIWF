@@ -2,6 +2,8 @@
 #include "Simulation.h"
 #include "Style.h"
 #include "ui/UI.h"
+#include "ui/TabRegistration.h"
+#include "AddonTabs.h"
 #include "input/Hotkeys.h"
 #include "settings/PreferenceState.h"
 #include <cstdio>
@@ -45,7 +47,9 @@ namespace {
         preview::Reset(preview::Scenario::Party);
         preview::RestoreSession(*state);
         ImGui::GetIO().FontGlobalScale = state->scale;
+        mod::ui::ResetPreviewTabs();
         mod::ui::Register();
+        preview::RegisterAddonTabs();
         if (window) {
             win32Ready = ImGui_ImplWin32_Init(window);
             dxReady = win32Ready && ImGui_ImplDX11_Init(device, context);

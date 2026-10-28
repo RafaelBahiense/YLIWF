@@ -1,20 +1,20 @@
-# Native follower add-ons
+# Follower integration
 
 Add-ons integrate quest-managed followers through either an external controller
-([FollowerAdapter.h](../include/FollowerAdapter.h)) or restrictions on a core-owned
-follower ([FollowerPolicy.h](../include/FollowerPolicy.h)). The external API
+([FollowerAdapter.h](../../include/FollowerAdapter.h)) or restrictions on a core-owned
+follower ([FollowerPolicy.h](../../include/FollowerPolicy.h)). The external API
 delegates commands to the follower's controller and reports completion;
 [core-owned policies](#policies-for-core-owned-followers) restrict actions and request packages.
 Supplementary controllers can use [policies for core-owned followers](#policies-for-core-owned-followers)
 without claiming the follower or replacing the quest owner's policy.
-See the [available add-ons](../README.md#add-ons).
+See [add-on development](README.md) for source layout and builds.
 
 ## Adapter actions
 
-The optional v1 `actions` and `invokeAction` callbacks expose buttons and boolean
-toggles in the selected follower's **Adapter options** section. Check
-`HasActionControls(host)` before requiring this feature. `API.supportedActions`
-advertises supported `ActionKind` bits; the interface version remains 1.
+Implement `actions` and `invokeAction` to expose buttons and boolean toggles in
+the selected follower's **Adapter options** section. Check
+`HasActionControls(host)` for host support; `API.supportedActions` lists the
+supported `ActionKind` bits.
 
 `actions` is read-only, on the main thread, and writes at most the supplied
 capacity (up to 16). Each `FollowerAction` has a stable nonzero adapter-local ID,
@@ -47,7 +47,7 @@ The vanilla presence flag includes active external
 followers; YLIWF's count and recruitment limit remain separate.
 Duplicate claims or an actor already in YLIWF aliases disable commands.
 
-## API v1
+## Registration and callbacks
 
 At SKSE `PostLoad`, resolve `YLIWF_GetFollowerAdapterAPI` from the core DLL
 with `GetProcAddress`. Call `QueryAPI(InterfaceVersion)`; null means unsupported.
@@ -67,13 +67,13 @@ const auto registration = api->registerAdapter(&adapter);
 | `enumerate` | Write reference FormIDs; return the number written, bounded by capacity |
 | `inspect` | Return 1 for owned actors, including inactive ones; fill state, command bits and optional reason; 0 for unrelated actors |
 | `start` | Recheck eligibility; return `Rejected` without effects, `Completed` after finishing, or `Pending` |
-| `setFollowDistance` (optional) | Apply Close/Normal/Far synchronously, return 1 on success, preserve follow/wait state and respect restrictions |
-| `canRecruitThroughDialogue` (optional) | Read-only: return 1 for an inactive actor eligible for the owner's recruitment dialogue, ignoring only the vanilla one-follower limit |
-| `canReceiveCombatProtection` (optional) | Read-only: return 1 when the host may apply its crossfire-protection ability; respect quest restrictions |
-| `canTravelInFormation` (optional) | Read-only: return 1 only during ordinary following; reject quest movement, scenes and foreign overrides |
-| `setFormationPackage` (optional) | Apply the supplied host Travel package FormID synchronously; zero releases only the adapter's formation movement, even when its controller is blocked |
-| `setStandDownPackage` (optional) | Apply the host combat-ignore package only when permitted; zero releases only the adapter's stand-down override, including while quest-blocked |
-| `coreMovementFeatures` and `movementPermissions` (optional) | Opt into core package handling and report independent Distance, Formation and StandDown permissions for the underlying owner package |
+| `setFollowDistance` | Apply Close/Normal/Far synchronously, return 1 on success, preserve follow/wait state and respect restrictions |
+| `canRecruitThroughDialogue` | Read-only: return 1 for an inactive actor eligible for the owner's recruitment dialogue, ignoring only the vanilla one-follower limit |
+| `canReceiveCombatProtection` | Read-only: return 1 when the host may apply its crossfire-protection ability; respect quest restrictions |
+| `canTravelInFormation` | Read-only: return 1 only during ordinary following; reject quest movement, scenes and foreign overrides |
+| `setFormationPackage` | Apply the supplied host Travel package FormID synchronously; zero releases only the adapter's formation movement, even when its controller is blocked |
+| `setStandDownPackage` | Apply the host combat-ignore package only when permitted; zero releases only the adapter's stand-down override, including while quest-blocked |
+| `coreMovementFeatures` and `movementPermissions` | Opt into core package handling and report independent Distance, Formation and StandDown permissions for the underlying owner package |
 
 Callbacks run on the main thread: keep them quick, nonblocking and exception-free.
 Pointers and context must remain valid until process exit; no hot unloading.
@@ -81,13 +81,16 @@ Only fixed-width values, pointers and caller-owned buffers cross the x64 ABI.
 No STL/engine objects, allocation ownership or exceptions cross it.
 Invalid versions, tables, IDs, states and capabilities are rejected.
 
-The mandatory table prefixes are `BaseAPISize` and `BaseAdapterSize`. Check optional
+Registration requires `enumerate`, `inspect` and `start`. Implement the other
+callbacks for the capabilities your adapter provides; leave unused callbacks null.
+
+Validate table bounds with `BaseAPISize` and `BaseAdapterSize`. Check host and adapter
 callbacks with `CanNotifyState`, `HasFollowDistance`, `HasRecruitmentEligibility`,
 `HasCombatProtection`, `HasTravelFormation` and `HasStandDown` before access.
 `UsesCoreMovement` identifies features handled by the core; `HasCoreMovement(host)`
-checks the required host extension. Custom travel requires both legacy callbacks.
-Older v1 tables remain valid; unsupported features
-stay under the owner's controller and Stand down reports them as unavailable.
+checks host support. Custom formation handling requires both
+`canTravelInFormation` and `setFormationPackage`. Unsupported features stay
+under the owner's controller; Stand down reports them as unavailable.
 
 Call `stateChanged(registration)` after external state changes. It is thread-safe;
 the host coalesces notifications and checks state/counts on the main thread.
@@ -100,7 +103,7 @@ once when finished. It is thread-safe and copies the reason. The host verifies
 the reported final state. Failure must mean finished with a known failure,
 not still executing.
 
-v1 commands support Follow, Wait and Dismiss for active followers. Optional
+Commands support Follow, Wait and Dismiss for active followers. Implementing
 recruitment eligibility relaxes the count gate only for that dialogue speaker;
 the owner's dialogue still recruits and enforces quest conditions. Background
 count updates preserve this gate, and closing dialogue restores follower presence.
@@ -131,9 +134,9 @@ formation, then distance; a blocked higher-priority request does not fall back t
 another forced behavior. Custom callbacks remain available for features without
 core opt-in. Do not implement package application in both places for one feature.
 
-The optional distance callback can still mirror an owner's native preference.
+`setFollowDistance` mirrors an owner's native distance preference.
 It runs before core distance selection and must preserve waiting/recruitment.
-An adapter using its owner's distance implementation, such as Serana, can opt
+An adapter using its owner's distance implementation can opt
 into Formation and StandDown without opting into Distance.
 
 The core checks loaded state, scenes/dialogue, locomotion, combat, pending commands
@@ -157,7 +160,7 @@ before touching the restored interrupt.
 `host->isMovementPackage(package)` recognizes the service's package records for
 owner validation. It is read-only, main-thread only, and grants no authority to
 install or release an interrupt. Add-ons using this service require a host for
-which `HasCoreMovement(host)` succeeds, even though the API remains v1.
+which `HasCoreMovement(host)` succeeds.
 
 ## Commands and saves
 
@@ -189,42 +192,10 @@ movement overrides, and release only its own temporary movement. Releases are
 allowed while waiting, dismissed or quest-locked. The host clears saved formation
 movement on load and reevaluates permission during travel updates.
 
-## Source layout and build
-
-```text
-src/addons/<addon>/
-  addon.json
-  native/       # C++ and headers
-  plugin/       # Optional ESP source
-  papyrus/      # Optional scripts
-  tests/native/ # Native test entry points (*_test.cpp)
-```
-
-Create folders only when needed. Automatic build discovery supports native
-components and optional `papyrus/` sources. Add-on scripts compile against the
-core bridge and ship only in that add-on's ZIP. ESP components require explicit
-build integration.
-
-```json
-{"name": "Example", "version": "1.0.0", "adapterApiVersion": 1}
-```
-
-CMake discovers manifests, uses each add-on's version for SKSE/Windows DLL
-metadata, applies shared configuration and adds DLLs to
-`native_plugins`. ModTools records hashes and packages separate ZIPs with notices.
-Add-on `*_test.cpp` files become separate CTest executables in `native_tests`.
-Generic host/API tests live under the root `tests/` folder.
-Full builds require all declared DLLs; repackaging includes only supplied DLLs
-with matching source-manifest hashes.
-
-Core and add-on release versions are independent. `adapterApiVersion` declares
-the API used by the implementation; it must match the version requested during
-registration. Validate this against the SDK at compile time. Unsupported
-host APIs are rejected at runtime. Binary and source ZIPs use the add-on's name
-and version, independent of the core ZIP filename.
+## Papyrus helpers
 
 External authors may use their own SKSE project with the SDK headers.
-`PapyrusController.h` supplies optional bound-controller helpers.
+`PapyrusController.h` supplies bound-controller helpers.
 `PapyrusCommands.h` provides `papyrus::Commands` for zero-argument owner methods:
 call `Dispatch` with the bound object, method, request identity and verification
 function. It retains the controller, schedules verification on the main thread,
@@ -233,7 +204,9 @@ process-lifetime helper on SKSE PreLoadGame and NewGame. Old callbacks cannot
 complete or clear a request from a different session. The helper never retries
 or times out a VM call; the host's acknowledgement/quarantine contract applies.
 
-See [shared implementation responsibilities](adapter-simplification.md).
+The core owns registration, observations, request queues, acknowledgements and
+movement packages. Adapters own controller interpretation, quest permissions and
+final-state verification. Owner-specific scripts and hooks stay in the add-on.
 
 ## Policies for core-owned followers
 

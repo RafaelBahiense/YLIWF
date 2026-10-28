@@ -14,7 +14,7 @@ and persistence contracts.
 | Native saves | `ControllerState.h`, `StateCodec.h`, `ControllerStorage.cpp` |
 | Eight vanilla forwarding methods | `DialogueFollowerScript.psc` |
 | Mechanical engine calls | `YLIWF_Engine.psc` |
-| Quest-managed followers | [Add-on API](follower-adapters.md) |
+| Quest-managed followers | [Add-on API](addons/follower-integration.md) |
 | Packages, conditions and aliases | `src/plugin/` |
 
 Plans run on the main thread. CommonLib calls are used where available;
@@ -153,7 +153,7 @@ before load, on release or when debug options turn off. The controller scheduler
 observes enabled overrides independently of menu visibility.
 Policy requests are rediscovered from live aliases after load and leave interrupt
 packages intact. Restrictions from all providers combine; package requests use
-explicit priorities. See the [policy contract](follower-adapters.md#policies-for-core-owned-followers).
+explicit priorities. See the [policy contract](addons/follower-integration.md#policies-for-core-owned-followers).
 See [usage and restoration limits](debugging.md#force-package-control).
 
 ## Validation

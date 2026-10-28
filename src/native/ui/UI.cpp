@@ -1,4 +1,5 @@
 #include "ui/UI.h"
+#include "ui/TabRegistration.h"
 #include "ui/HotkeysPage.h"
 #include "ui/PreferencesFooter.h"
 #include "input/Hotkeys.h"
@@ -55,7 +56,7 @@ namespace {
         ImGuiMCP::Dummy({0, ImGuiMCP::GetFontSize() * 0.5f});
     }
 
-    enum class Page { Followers, Settings, Hotkeys, Debug };
+    enum class Page { Followers, Settings, Hotkeys, Extension, Debug };
     Page lastPage = Page::Settings;
     int lastPageFrame = -1;
     std::atomic_bool snapshotPageVisible{false};
@@ -932,6 +933,28 @@ void __stdcall mod::ui::RenderDebug() {
     ImGuiMCP::EndChild();
     PreferencesFooter(false);
     RenderConfirmation(state);
+}
+
+void mod::ui::RenderExtension(const yliwf::menu::Tab& tab) {
+    const auto state = PageSnapshot(Page::Extension);
+    std::vector<yliwf::menu::Follower> followers;
+    for (const auto& row : state.followers) {
+        if (!row.formID)
+            continue;
+        auto& follower = followers.emplace_back();
+        follower.actor = row.formID;
+        follower.loaded = row.loaded;
+        follower.waiting = row.waiting != 0;
+        follower.dead = row.dead;
+        std::snprintf(follower.name, sizeof(follower.name), "%s", row.name.c_str());
+        if (row.combatRole.available)
+            for (std::size_t i = 0; i < row.combatRole.options.size(); ++i)
+                if (row.combatRole.options[i].ready)
+                    follower.readyRoles |= 1u << i;
+    }
+    const yliwf::menu::Context context{sizeof(context), static_cast<std::uint32_t>(state.ready),
+                                       static_cast<std::uint32_t>(followers.size()), followers.data()};
+    tab.render(tab.context, &context);
 }
 
 void __stdcall mod::ui::RenderSettings() {
