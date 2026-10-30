@@ -83,6 +83,8 @@ public static partial class PapyrusCompiler
             Directory.CreateDirectory(staging);
             var arguments = new List<string> {
                 Path.GetFullPath(source), "--game=skyrim", "--ignorecwd", "--enable-language-extensions=false",
+                // Caprica's async reader can stall on cyclic script imports.
+                "--async-read=0",
                 "--import=" + string.Join(';', groupImports.Select(path => Path.GetFullPath(path))),
                 "--flags=" + Path.GetFullPath(flags), "--output=" + Path.GetFullPath(staging)
             };
