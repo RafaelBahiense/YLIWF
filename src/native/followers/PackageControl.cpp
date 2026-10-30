@@ -89,15 +89,20 @@ namespace mod::package_control {
             return original(actor);
         }
 
+        void Reevaluate(RE::Actor* actor) {
+            if (actor && actor->GetActorRuntimeData().currentProcess && !actor->IsDisabled() && !actor->IsDead())
+                actor->EvaluatePackage(actor->Is3DLoaded(), false);
+        }
+
         void Restore(RE::Actor* actor, Snapshot& state) {
             Publish(actor->GetFormID(), nullptr);
             state.active = false;
             state.requestedPackage = 0;
-            if (!actor->GetActorRuntimeData().currentProcess || !actor->Is3DLoaded() || actor->IsDisabled() ||
-                actor->IsDead())
+            if (!actor->GetActorRuntimeData().currentProcess || actor->IsDisabled() || actor->IsDead())
                 return;
             auto* saved = RE::TESForm::LookupByID<RE::TESPackage>(state.savedInterrupt);
-            if (package_control_rules::RestoreInterrupt(
+            if (actor->Is3DLoaded() &&
+                package_control_rules::RestoreInterrupt(
                     saved != nullptr, Interrupt(actor) != nullptr, actor->GetCurrentScene() != nullptr,
                     saved && saved->packConditions.IsTrue(actor, RE::PlayerCharacter::GetSingleton()))) {
                 actor->PutCreatedPackage(saved, true, false, false);
@@ -105,7 +110,7 @@ namespace mod::package_control {
             } else {
                 // Reevaluate the untouched alias/base lists rather than replaying
                 // a package whose conditions or controller have changed.
-                actor->EvaluatePackage(true, false);
+                Reevaluate(actor);
             }
             state.savedInterrupt = 0;
         }
@@ -152,10 +157,11 @@ namespace mod::package_control {
             state.policyRequested = yliwf::policy::HasPackageRequest(policy);
             auto* alias = Registration(actor.get());
             const auto decision = package_control_rules::Decide(
-                {state.enabled || state.policyRequested, alias != nullptr, !actor->IsDead(),
-                 actor->Is3DLoaded() && !actor->IsDisabled(), actor->GetCurrentScene() != nullptr,
+                {state.enabled || state.policyRequested, alias != nullptr, !actor->IsDead(), actor->Is3DLoaded(),
+                 actor->GetCurrentScene() != nullptr,
                  !(policy.blocked & yliwf::policy::Bit(quest_policies::Action::Movement)),
-                 controller::storage::Available() && controller::storage::Get().active.has_value()});
+                 controller::storage::Available() && controller::storage::Get().active.has_value(),
+                 state.policyRequested, actor->IsDisabled()});
             if (decision == package_control_rules::Decision::Release) {
                 Restore(actor.get(), state);
                 it = held.erase(it);
@@ -192,12 +198,13 @@ namespace mod::package_control {
                 changed = true;
             }
             if (changed) {
-                actor->EvaluatePackage(true, false);
+                Reevaluate(actor.get());
                 debug::Trace("PackageControl.Select", actor.get(), "requested={:08X} previous={:08X} saved={:08X}",
                              state.requestedPackage, state.previousPackage, state.savedInterrupt);
             }
             state.status = actor->GetCurrentPackage() == selected ? "Requested follower package running."
-                                                                  : "Requested follower package is not running.";
+                           : !actor->Is3DLoaded() ? "Follower-policy package selected; awaiting unloaded AI update."
+                                                  : "Requested follower package is not running.";
         }
     }
 
@@ -218,8 +225,7 @@ namespace mod::package_control {
         Publish(actor->GetFormID(), nullptr);
         found->second.snapshot.active = false;
         found->second.snapshot.requestedPackage = 0;
-        if (actor->Is3DLoaded() && !actor->IsDisabled() && !actor->IsDead())
-            actor->EvaluatePackage(true, false);
+        Reevaluate(actor);
     }
 
     void Release(RE::Actor* actor) {

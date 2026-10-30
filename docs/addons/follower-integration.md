@@ -252,5 +252,7 @@ Requests apply only to core-managed humanoid aliases. The core resolves a reques
 FormID as a package and checks its conditions. A missing or ineligible package
 withdraws selection instead of falling back to a different forced package.
 Scenes, pending commands and movement restrictions suspend selection. Explicit
+policy requests remain active when an actor's 3D unloads, so background AI keeps
+the selected follower package. Disabled actors remain suspended. Explicit
 interrupt packages remain intact. Preferences are rediscovered after load and
 withdrawn on dismissal; no package or controller state is serialized by this API.

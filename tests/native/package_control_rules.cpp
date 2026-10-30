@@ -45,6 +45,36 @@ TEST_CASE("Restoring a displaced interrupt never replaces a newer package or sce
     CHECK_FALSE(RestoreInterrupt(true, false, false, false));
 }
 
+TEST_CASE("Follower-policy ownership survives unloading without overriding restrictions") {
+    State state{true, true, true, false, false, true};
+    state.policyRequested = true;
+    CHECK(Decide(state) == Decision::Override);
+    SUBCASE("A scene still owns the actor") {
+        state.scene = true;
+        CHECK(Decide(state) == Decision::Suspend);
+    }
+    SUBCASE("Quest restrictions still win") {
+        state.questAllows = false;
+        CHECK(Decide(state) == Decision::Suspend);
+    }
+    SUBCASE("Pending alias commands still suspend selection") {
+        state.commandPending = true;
+        CHECK(Decide(state) == Decision::Suspend);
+    }
+    SUBCASE("Disabled actors stay suspended") {
+        state.disabled = true;
+        CHECK(Decide(state) == Decision::Suspend);
+    }
+    SUBCASE("Unregistering releases ownership") {
+        state.registered = false;
+        CHECK(Decide(state) == Decision::Release);
+    }
+    SUBCASE("Removing the policy leaves the unloaded debug override suspended") {
+        state.policyRequested = false;
+        CHECK(Decide(state) == Decision::Suspend);
+    }
+}
+
 TEST_CASE("Forced selection preserves alias package priority and stops evaluating after a match") {
     const std::array<std::uint32_t, 4> packages{10, 20, 30, 40};
     std::vector<std::uint32_t> evaluated;

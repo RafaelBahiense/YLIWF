@@ -9,12 +9,14 @@ namespace mod::package_control_rules {
         bool requested = false, registered = false, alive = false, loaded = false;
         bool scene = false, questAllows = false;
         bool commandPending = false;
+        bool policyRequested = false, disabled = false;
     };
 
     constexpr Decision Decide(const State& state) {
         if (!state.requested || !state.registered || !state.alive)
             return Decision::Release;
-        if (!state.loaded || state.scene || !state.questAllows || state.commandPending)
+        if (state.disabled || state.scene || !state.questAllows || state.commandPending ||
+            (!state.loaded && !state.policyRequested))
             return Decision::Suspend;
         return Decision::Override;
     }
