@@ -1,0 +1,6 @@
+{
+  "name": "CombatTests",
+  "version": "0.1.0",
+  "pluginFile": "YouLeadIWillFollow.CombatArena.esp",
+  "adapterApiVersion": 1
+}
