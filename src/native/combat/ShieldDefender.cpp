@@ -11,10 +11,12 @@
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include <chrono>
 
 namespace mod::shield_defender {
     namespace {
         using shield_defender_rules::Stance;
+        using Clock = std::chrono::steady_clock;
         std::array<RE::TESCombatStyle*, static_cast<std::size_t>(Stance::Count)> styles{};
         float elapsedSinceTick = 0;
 
@@ -28,6 +30,10 @@ namespace mod::shield_defender {
             std::uint32_t blockObservations = 0, bashObservations = 0;
             std::uint32_t loggedBlocks = 0, loggedBashes = 0;
             float stamina = 0, maximumStamina = 0;
+            RE::ActorHandle guardTarget;
+            Clock::time_point lastThreat{};
+            Clock::time_point lastDecision{};
+            Observation observation;
             std::string status = "Waiting for combat";
             std::string loggedStatus;
         };
@@ -53,7 +59,7 @@ namespace mod::shield_defender {
                    (defender->GetWorldspace() || enemy->GetParentCell() == defender->GetParentCell());
         }
 
-        bool IncomingMelee(RE::Actor* defender, RE::Actor* enemy, bool guarding) {
+        bool MeleeThreat(RE::Actor* defender, RE::Actor* enemy, bool guarding, bool requireAttack) {
             if (!NearbyOpponent(defender, enemy))
                 return false;
             const auto target = enemy->GetActorRuntimeData().currentCombatTarget.get();
@@ -62,25 +68,28 @@ namespace mod::shield_defender {
             // Casting and projectiles need separate threat detection. A melee
             // animation targeting someone else must not keep this shield raised.
             const bool melee = !weapon || (!weapon->IsBow() && !weapon->IsCrossbow() && !weapon->IsStaff());
-            return shield_defender_rules::IncomingMelee({defender->GetPosition().GetDistance(enemy->GetPosition()),
-                                                         target.get() == defender, enemy->IsAttacking(), melee},
-                                                        guarding);
+            const auto attack = enemy->AsActorState()->GetAttackState();
+            return shield_defender_rules::IncomingMelee(
+                {defender->GetPosition().GetDistance(enemy->GetPosition()), target.get() == defender,
+                 !requireAttack || enemy->IsAttacking(), melee,
+                 attack == RE::ATTACK_STATE_ENUM::kDraw || attack == RE::ATTACK_STATE_ENUM::kNextAttack},
+                guarding);
         }
 
-        bool IncomingMelee(RE::Actor* defender, RE::CombatController* controller, bool guarding) {
+        RE::Actor* IncomingMelee(RE::Actor* defender, RE::CombatController* controller, bool guarding) {
             const auto target = defender->GetActorRuntimeData().currentCombatTarget.get();
-            if (IncomingMelee(defender, target.get(), guarding))
-                return true;
+            if (MeleeThreat(defender, target.get(), guarding, true))
+                return target.get();
             auto* group = controller->combatGroup;
             if (!group)
-                return false;
+                return nullptr;
             // This executes at the engine combat-update boundary. Inspect only
             // this combat group's candidates, never scan every loaded actor.
             RE::BSReadLockGuard lock(group->lock);
             for (const auto& candidate : group->targets)
-                if (auto enemy = candidate.targetHandle.get(); IncomingMelee(defender, enemy.get(), guarding))
-                    return true;
-            return false;
+                if (auto enemy = candidate.targetHandle.get(); MeleeThreat(defender, enemy.get(), guarding, true))
+                    return enemy.get();
+            return nullptr;
         }
 
         RE::TESCombatStyle* SelectStyle(RE::Actor* actor, RE::CombatController* controller, Control& control) {
@@ -97,16 +106,45 @@ namespace mod::shield_defender {
                                                                                     RE::ActorValue::kStamina);
             control.recovering =
                 shield_defender_rules::Recovering(control.recovering, control.stamina, control.maximumStamina);
-            control.incomingMelee = IncomingMelee(actor, controller, shield_defender_rules::Guarding(control.stance));
+            auto* incoming = IncomingMelee(actor, controller, shield_defender_rules::Guarding(control.stance));
+            control.incomingMelee = incoming != nullptr;
+            const auto now = Clock::now();
+            control.lastDecision = now;
+            if (incoming) {
+                control.guardTarget = incoming->GetHandle();
+                control.lastThreat = now;
+            }
+            const auto held = control.guardTarget.get();
+            const float sinceThreat = std::chrono::duration<float>(now - control.lastThreat).count();
             const auto target = actor->GetActorRuntimeData().currentCombatTarget.get();
-            const auto* opponent = target.get();
+            auto* opponent = target.get();
             control.counterOpportunity =
                 NearbyOpponent(actor, target.get()) &&
                 shield_defender_rules::CounterOpportunity(actor->GetPosition().GetDistance(opponent->GetPosition()),
                                                           opponent->AsActorState()->actorState2.recoil != 0,
                                                           opponent->AsActorState()->actorState2.staggered);
-            control.stance = shield_defender_rules::ChooseStance(control.recovering, control.incomingMelee,
-                                                                 control.counterOpportunity);
+            const bool committed =
+                shield_defender_rules::KeepGuard(control.incomingMelee, MeleeThreat(actor, held.get(), true, false),
+                                                 sinceThreat, control.counterOpportunity && !control.recovering);
+            control.stance =
+                shield_defender_rules::ChooseStance(control.recovering, committed, control.counterOpportunity);
+            auto* threat = committed && held ? held.get() : opponent;
+            auto& observation = control.observation;
+            observation.available = true;
+            observation.stance = static_cast<std::uint32_t>(control.stance);
+            observation.threat = threat ? threat->GetFormID() : 0;
+            observation.incoming = control.incomingMelee;
+            observation.committed = committed;
+            observation.recovering = control.recovering;
+            observation.counter = control.counterOpportunity;
+            observation.stamina = control.stamina;
+            observation.maximumStamina = control.maximumStamina;
+            observation.guardRemaining =
+                committed ? std::max(0.0f, shield_defender_rules::GuardCommitment - sinceThreat) : 0;
+            observation.distance =
+                NearbyOpponent(actor, threat) ? actor->GetPosition().GetDistance(threat->GetPosition()) : -1;
+            observation.heading = observation.distance >= 0 ? actor->GetHeadingAngle(threat->GetPosition(), false) : 0;
+            observation.targeting = threat && threat->GetActorRuntimeData().currentCombatTarget.get().get() == actor;
             return styles[static_cast<std::size_t>(control.stance)];
         }
 
@@ -199,8 +237,25 @@ namespace mod::shield_defender {
                     recruited, actor->IsInCombat(), combat_orders::Enabled.load(),
                     actor->GetCurrentScene() || busy || (ui && ui->IsMenuOpen("Dialogue Menu")),
                     actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kWaitingForPlayer) > 0, incapacitated,
-                    interrupt != nullptr))
-                return "Ordinary behavior: not fighting or another order controls this follower";
+                    interrupt != nullptr)) {
+                if (!recruited)
+                    return "Shield defense suspended: follower faction or teammate status is missing";
+                if (!actor->IsInCombat())
+                    return "Shield defense waiting for combat";
+                if (combat_orders::Enabled.load())
+                    return "Shield defense suspended by Stand down";
+                if (actor->GetCurrentScene())
+                    return "Shield defense suspended by a scene";
+                if (busy)
+                    return "Shield defense suspended while a follower command is pending";
+                if (ui && ui->IsMenuOpen("Dialogue Menu"))
+                    return "Shield defense suspended during dialogue";
+                if (actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kWaitingForPlayer) > 0)
+                    return "Shield defense suspended while waiting";
+                if (incapacitated)
+                    return "Shield defense unavailable: unloaded, incapacitated, swimming, mounted or staggered";
+                return "Shield defense suspended by an interrupt package";
+            }
             if (!Equip(actor))
                 return "Waiting for a one-handed weapon and shield to be equipped";
             return {};
@@ -231,6 +286,10 @@ namespace mod::shield_defender {
             control.recovering = control.incomingMelee = control.counterOpportunity = false;
             control.blocking = control.bashing = false;
             control.stance = Stance::Pressure;
+            control.guardTarget = {};
+            control.lastThreat = {};
+            control.lastDecision = {};
+            control.observation = {};
         }
         if (!current)
             return;
@@ -265,6 +324,7 @@ namespace mod::shield_defender {
             case StyleAction::None:
                 break;
         }
+        control.observation.style = current->combatStyle ? current->combatStyle->GetFormID() : 0;
     }
 
     void Tick(float elapsed) {
@@ -280,12 +340,15 @@ namespace mod::shield_defender {
                 continue;
             active.insert(actor->GetFormID());
             auto status = Prepare(actor);
-            const bool allowed = quest_policies::Allows(actor, quest_policies::Action::Combat);
+            const auto policy = quest_policies::Inspect(actor);
+            const bool allowed = !(policy.blocked & yliwf::policy::Bit(quest_policies::Action::Combat));
             std::lock_guard lock(mutex);
             auto& control = controls[actor->GetFormID()];
             control.requested = status.empty() && allowed;
             if (!status.empty())
                 control.status = std::move(status);
+            else if (!allowed)
+                control.status = policy.reason[0] ? policy.reason : "Quest policy suspends shield defense";
             if (control.loggedStatus != control.status) {
                 control.loggedStatus = control.status;
                 debug::Trace("ShieldDefender.Status", actor,
@@ -326,5 +389,20 @@ namespace mod::shield_defender {
         std::lock_guard lock(mutex);
         const auto found = controls.find(actor);
         return found == controls.end() ? "Waiting for shield-defender observation" : found->second.status;
+    }
+
+    Observation Inspect(std::uint32_t actor) {
+        std::lock_guard lock(mutex);
+        const auto found = controls.find(actor);
+        if (found == controls.end())
+            return {};
+        const auto& control = found->second;
+        auto result = control.observation;
+        result.requested = control.requested;
+        result.owned = control.owned;
+        result.yielded = control.yielded;
+        result.reason = control.status;
+        result.age = result.available ? std::chrono::duration<float>(Clock::now() - control.lastDecision).count() : -1;
+        return result;
     }
 }

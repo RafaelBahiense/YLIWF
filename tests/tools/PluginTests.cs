@@ -37,7 +37,9 @@ public sealed partial class PluginTests : TestWorkspace
         Assert.True(recovery.CloseRange!.FallbackMult > pressure.CloseRange!.FallbackMult);
         foreach (var style in new[] { recovery, guardRecovery })
         {
+            Assert.Equal(0, style.OffensiveMult);
             Assert.NotNull(style.Melee);
+            Assert.Equal(0, style.Melee.AttackStaggeredMult);
             Assert.Equal(0, style.Melee.BashMult);
             Assert.Equal(0, style.Melee.BashAttackMult);
             Assert.Equal(0, style.Melee.BashRecoilMult);
@@ -48,6 +50,9 @@ public sealed partial class PluginTests : TestWorkspace
             Assert.True(style.EquipmentScoreMultMelee > style.EquipmentScoreMultMagic);
             Assert.False(style.Flags.GetValueOrDefault().HasFlag(CombatStyle.Flag.AllowDualWielding));
         }
+        Assert.Equal(0, guard.Melee!.PowerAttackStaggeredMult);
+        Assert.Equal(0, guard.Melee.PowerAttackBlockingMult);
+        Assert.Equal(0, guard.Melee.SpecialAttackMult);
     }
 
     [Fact]

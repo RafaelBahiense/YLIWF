@@ -6,10 +6,10 @@
 
 TEST_CASE("Defender stamina recovery has separate entry and exit thresholds") {
     using mod::shield_defender_rules::Recovering;
-    CHECK_FALSE(Recovering(false, 26, 100));
-    CHECK(Recovering(false, 25, 100));
-    CHECK(Recovering(true, 49, 100));
-    CHECK_FALSE(Recovering(true, 50, 100));
+    CHECK_FALSE(Recovering(false, 41, 100));
+    CHECK(Recovering(false, 40, 100));
+    CHECK(Recovering(true, 64, 100));
+    CHECK_FALSE(Recovering(true, 65, 100));
     CHECK(Recovering(false, -1, 100));
     CHECK_FALSE(Recovering(true, 101, 100));
     CHECK(Recovering(false, 10, 0));
@@ -19,12 +19,12 @@ TEST_CASE("Defender stamina recovery has separate entry and exit thresholds") {
 
 TEST_CASE("Defenders guard nearby melee attacks aimed at themselves") {
     using namespace mod::shield_defender_rules;
-    Threat threat{256, true, true, true};
+    Threat threat{288, true, true, true};
     CHECK(IncomingMelee(threat, false));
     threat.distance = 300;
     CHECK_FALSE(IncomingMelee(threat, false));
     CHECK(IncomingMelee(threat, true));
-    threat.distance = 321;
+    threat.distance = 353;
     CHECK_FALSE(IncomingMelee(threat, true));
     threat.distance = 100;
     threat.targetingDefender = false;
@@ -32,6 +32,9 @@ TEST_CASE("Defenders guard nearby melee attacks aimed at themselves") {
     threat.targetingDefender = true;
     threat.attacking = false;
     CHECK_FALSE(IncomingMelee(threat, true));
+    threat.windingUp = true;
+    CHECK(IncomingMelee(threat, true));
+    threat.windingUp = false;
     threat.attacking = true;
     threat.melee = false;
     CHECK_FALSE(IncomingMelee(threat, true));
@@ -40,6 +43,19 @@ TEST_CASE("Defenders guard nearby melee attacks aimed at themselves") {
     CHECK_FALSE(IncomingMelee(threat, true));
     threat.distance = std::numeric_limits<float>::quiet_NaN();
     CHECK_FALSE(IncomingMelee(threat, true));
+}
+
+TEST_CASE("Guard commitment bridges attack gaps but releases lost or distant threats") {
+    using namespace mod::shield_defender_rules;
+    CHECK(KeepGuard(true, true, 0));
+    CHECK(KeepGuard(false, true, 0.5f));
+    CHECK_FALSE(KeepGuard(false, true, 0.5f, true));
+    CHECK(KeepGuard(true, true, 0.5f, true));
+    CHECK_FALSE(KeepGuard(false, true, GuardCommitment));
+    CHECK_FALSE(KeepGuard(false, false, 0.1f));
+    CHECK_FALSE(KeepGuard(false, true, -1));
+    CHECK_FALSE(KeepGuard(false, true, std::numeric_limits<float>::quiet_NaN()));
+    CHECK_FALSE(KeepGuard(false, true, std::numeric_limits<float>::infinity()));
 }
 
 TEST_CASE("Low stamina changes offense without abandoning defense against an attack") {

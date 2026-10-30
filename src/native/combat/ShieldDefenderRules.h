@@ -5,22 +5,29 @@
 #include <string_view>
 
 namespace mod::shield_defender_rules {
-    inline constexpr float ExhaustedFraction = 0.25f;
-    inline constexpr float RecoveredFraction = 0.50f;
-    inline constexpr float GuardDistance = 256;
-    inline constexpr float GuardReleaseDistance = 320;
+    inline constexpr float ExhaustedFraction = 0.40f;
+    inline constexpr float RecoveredFraction = 0.65f;
+    inline constexpr float GuardDistance = 288;
+    inline constexpr float GuardReleaseDistance = 352;
+    inline constexpr float GuardCommitment = 0.8f;
     inline constexpr float CounterDistance = 192;
 
     enum class Stance { Pressure, Guard, Recover, GuardRecover, Counter, Count };
 
     struct Threat {
         float distance = 0;
-        bool targetingDefender = false, attacking = false, melee = false;
+        bool targetingDefender = false, attacking = false, melee = false, windingUp = false;
     };
 
     inline bool IncomingMelee(const Threat& threat, bool guarding) {
-        return threat.targetingDefender && threat.attacking && threat.melee && std::isfinite(threat.distance) &&
-               threat.distance >= 0 && threat.distance <= (guarding ? GuardReleaseDistance : GuardDistance);
+        return threat.targetingDefender && (threat.attacking || threat.windingUp) && threat.melee &&
+               std::isfinite(threat.distance) && threat.distance >= 0 &&
+               threat.distance <= (guarding ? GuardReleaseDistance : GuardDistance);
+    }
+
+    inline bool KeepGuard(bool incoming, bool threatStillNearby, float sinceThreat, bool safeCounterOpening = false) {
+        return incoming || (!safeCounterOpening && threatStillNearby && std::isfinite(sinceThreat) &&
+                            sinceThreat >= 0 && sinceThreat < GuardCommitment);
     }
 
     constexpr bool Guarding(Stance stance) {

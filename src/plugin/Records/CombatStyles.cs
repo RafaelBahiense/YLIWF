@@ -18,22 +18,22 @@ internal static partial class FollowerPlugin
         {
             EditorID = editorId,
             Flags = (CombatStyle.Flag)0,
-            OffensiveMult = recovering ? 0.1f : guarding ? 0.25f : counter ? 0.85f : 0.5f,
-            DefensiveMult = guarding ? 0.95f : recovering ? 0.25f : 0.6f,
+            OffensiveMult = recovering ? 0 : guarding ? 0.1f : counter ? 0.85f : 0.4f,
+            DefensiveMult = guarding ? 1.0f : 0.7f,
             GroupOffensiveMult = 0.75f,
             EquipmentScoreMultMelee = 1,
             EquipmentScoreMultShout = recovering ? 0 : 0.5f,
             AvoidThreatChance = guarding ? 0 : recovering ? 0.1f : 0.05f,
             Melee = new CombatStyleMelee
             {
-                AttackStaggeredMult = 1,
-                PowerAttackStaggeredMult = recovering ? 0 : counter ? 0.8f : 0.5f,
-                PowerAttackBlockingMult = recovering ? 0 : 0.2f,
+                AttackStaggeredMult = recovering ? 0 : 1,
+                PowerAttackStaggeredMult = recovering || guarding ? 0 : counter ? 0.8f : 0.2f,
+                PowerAttackBlockingMult = recovering || guarding ? 0 : 0.1f,
                 BashMult = recovering ? 0 : counter ? 0.2f : guarding ? 0.65f : 0.45f,
                 BashRecoilMult = recovering ? 0 : 0.2f,
                 BashAttackMult = recovering ? 0 : guarding ? 0.6f : 0.3f,
                 BashPowerAttackMult = recovering ? 0 : guarding ? 0.9f : 0.5f,
-                SpecialAttackMult = recovering ? 0 : 0.5f
+                SpecialAttackMult = recovering || guarding ? 0 : 0.25f
             },
             CloseRange = new CombatStyleCloseRange
             {

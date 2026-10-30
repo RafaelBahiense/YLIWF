@@ -53,13 +53,16 @@ the player or area spells. They remain passive even when escape fails.
 
 - Equips an existing one-handed weapon and shield during combat.
 - Favors blocking when a nearby enemy makes a melee attack against the defender,
-  and attacks between threats.
+  including attack wind-up. Holds the guard preference for up to 0.8 seconds
+  across attack-state gaps while that enemy remains nearby and targets the defender.
+  A safe counterattack opening can end the commitment when stamina permits.
 - Holds ground with less circling and retreating, and favors interrupting incoming
   attacks with bashes when stamina permits, especially enemy power attacks.
 - Favors a weapon counterattack when the current opponent recoils or staggers
   within melee range. Incoming attacks from other enemies still take priority.
-- Conserves stamina below 25%, reducing bash and power-attack preferences until
-  stamina recovers to 50%. Still favors blocking incoming melee attacks.
+- Reserves stamina at 40% or below: suppresses offensive, bash and power-attack
+  preferences until stamina reaches 65%. Still favors blocking incoming melee.
+  Guard profiles also suppress power attacks and reduce ordinary offense.
 - Yields to Stand down, waiting, scenes and foreign interrupt packages.
 
 Skyrim controls attack, block and bash timing. The style applies to the follower's
