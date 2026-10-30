@@ -44,6 +44,8 @@ public static class BuildReceipt
         };
         return name.StartsWith(sourceDirectory, StringComparison.Ordinal) || component switch
         {
+            BuildComponent.Plugin => name.StartsWith("src/addons/", StringComparison.Ordinal) &&
+                (name.EndsWith(".cs", StringComparison.Ordinal) || name.EndsWith("/addon.json", StringComparison.Ordinal)),
             BuildComponent.Native => IsNativeInput(name),
             BuildComponent.PapyrusAddons => name.StartsWith("src/addons/", StringComparison.Ordinal) &&
                 (name.EndsWith(".psc", StringComparison.Ordinal) || name.EndsWith("/addon.json", StringComparison.Ordinal)),
@@ -66,7 +68,9 @@ public static class BuildReceipt
 
     private static bool IsGeneratorInput(string name) =>
         (name.EndsWith(".cs", StringComparison.Ordinal) && (name.StartsWith("tools/ModTools/", StringComparison.Ordinal) ||
-            name.StartsWith("src/plugin/", StringComparison.Ordinal) || name == "src/shared/ModInfo.cs")) ||
+            name.StartsWith("src/plugin/", StringComparison.Ordinal) ||
+            (name.StartsWith("src/addons/", StringComparison.Ordinal) && name.Contains("/plugin/", StringComparison.Ordinal)) ||
+            name == "src/shared/ModInfo.cs")) ||
         name is ProjectPaths.Identity or ProjectPaths.ToolProject or ProjectPaths.ToolLock;
 
     private static void ValidateToolBuild(string root)

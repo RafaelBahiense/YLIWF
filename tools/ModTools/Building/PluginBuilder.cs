@@ -18,5 +18,6 @@ public static class PluginBuilder
             .Write();
         BuildReceipt.Write(root, BuildComponent.Plugin, inputs, [output], BuildReceipt.PluginPath(output));
         Console.WriteLine($"Generated {mod.EnumerateMajorRecords().Count()} records: {output}");
+        AddonPlugins.Generate(root, directory);
     }
 }

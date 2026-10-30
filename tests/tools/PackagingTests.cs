@@ -26,6 +26,7 @@ public sealed class PackagingTests : TestWorkspace
             archiveTimestamp = ReleaseTimestamp.Read(root);
             dll = CreateDll();
             esp = CreatePlugin();
+            AddonPlugins.Generate(root, temporary);
             papyrus = PapyrusTests.PrepareScripts(root, temporary);
             commonLib = Path.Combine(temporary, "commonlib");
             vcpkg = Path.Combine(temporary, "vcpkg");
@@ -244,6 +245,10 @@ public sealed class PackagingTests : TestWorkspace
         foreach (var declaredAddon in Addon.Read(root))
         {
             using var archive = ZipFile.OpenRead(Path.Combine(temporary, declaredAddon.ArchiveName));
+            if (declaredAddon.PluginFile != null)
+            {
+                Assert.NotNull(archive.GetEntry(declaredAddon.PluginFile));
+            }
             Assert.True(archive.GetEntry("SKSE/Plugins/" + declaredAddon.DllFile) != null && archive.GetEntry(Artifacts.Plugin) == null,
                 "Add-on must have its own DLL without the core ESP");
             var expectedScripts = Directory.Exists(declaredAddon.PapyrusSource)
@@ -298,6 +303,7 @@ public sealed class PackagingTests : TestWorkspace
             Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", previousEpoch);
         }
         var output = Path.Combine(temporary, "independent-release");
+        PluginBuilder.Generate(checkout, temporary);
         PapyrusTests.PrepareScripts(checkout, temporary);
         Artifacts.Package(checkout, esp, dll, papyrus, output, false, BuildMode.SuppliedDll, source);
         Assert.True(File.Exists(Path.Combine(output, addon.ArchiveName)) && File.Exists(Path.Combine(output, addon.SourceArchiveName)),

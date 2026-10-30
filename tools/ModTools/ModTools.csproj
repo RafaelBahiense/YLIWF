@@ -9,6 +9,7 @@
   <ItemGroup>
     <Using Include="Yliwf" />
     <Compile Include="../../src/plugin/**/*.cs" Link="Plugin/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../../src/addons/*/plugin/**/*.cs" Link="Addons/%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="../../src/shared/ModInfo.cs" Link="Shared/ModInfo.cs" />
     <EmbeddedResource Include="../../mod.json" LogicalName="ModIdentity" />
     <PackageReference Include="Mutagen.Bethesda.Skyrim" Version="0.54.4" />

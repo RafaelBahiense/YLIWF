@@ -7,6 +7,10 @@ namespace ModTools.Building;
 public sealed partial record Addon(string Name, string Version, uint AdapterApiVersion)
 {
     public string SourceDirectory { get; init; } = "";
+    public string? PluginFile
+    {
+        get; init;
+    }
     public string PapyrusSource => Path.Combine(SourceDirectory, "papyrus");
     public string DllFile => $"{ModInfo.BinaryName}.{Name}.dll";
     public string ArchiveName => $"{ModInfo.BinaryName}-{Name}-{Version}.zip";
@@ -42,7 +46,21 @@ public sealed partial record Addon(string Name, string Version, uint AdapterApiV
                 {
                     throw new InvalidDataException($"Invalid adapter API version: {path}");
                 }
-                return new Addon(name, version, apiVersion) { SourceDirectory = Path.GetDirectoryName(path)! };
+                string? plugin = null;
+                if (declaration.TryGetProperty("pluginFile", out var pluginField))
+                {
+                    plugin = pluginField.GetString();
+                    if (string.IsNullOrWhiteSpace(plugin) || plugin != Path.GetFileName(plugin) ||
+                        !plugin.EndsWith(".esp", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidDataException($"Invalid add-on plugin: {path}");
+                    }
+                }
+                return new Addon(name, version, apiVersion)
+                {
+                    SourceDirectory = Path.GetDirectoryName(path)!,
+                    PluginFile = plugin
+                };
             }).ToArray();
         if (addons.Select(addon => addon.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != addons.Length)
         {
