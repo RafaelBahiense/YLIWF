@@ -16,7 +16,7 @@ rebuilds and reloads the menu while the window stays open. Failed builds leave
 the current menu running; details appear in
 `build/ui-preview/hot-reload.log`. Closing the window stops the watcher.
 Tabs provide the Followers, Settings, Hotkeys, Debug and registered add-on pages.
-See [add-on menu tabs](../../docs/menu-tabs.md) for preview integration.
+See [add-on menu tabs](../../docs/addons/menu-tabs.md) for preview integration.
 Select a scenario to exercise party, empty, quest-restricted, pending, failed and
 unloaded states. Resize the window
 and adjust Scale to check wrapping and spacing.

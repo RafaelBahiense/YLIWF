@@ -67,7 +67,23 @@ unless a dedicated add-on supports them.
 Install optional add-on ZIPs alongside a compatible core. See each add-on's
 README for requirements and installation.
 
-Browse [the add-on directory](src/addons/) for available modules.
+- **[Serana](src/addons/serana/README.md)** (`-Serana-<version>.zip`):
+  Makes Serana available to YLIWF's follower controls, combat protection and travel formations when her Dawnguard quests allow them.
+- **[Inigo](src/addons/inigo/README.md)** (`-Inigo-<version>.zip`):
+  Connects Inigo's follower controls, Stand down, on-foot distance presets and travel formations to YLIWF while
+  retaining his own recruitment and quests. Requires **INIGO SE 2.4C**.
+- **[M'rissi](src/addons/mrissi/README.md)** (`-Mrissi-<version>.zip`):
+  Connects her follower commands, distance, formations and Stand down while
+  respecting her story and mount controller. Requires **M'rissi's Tails of Troubles SE 1.7**.
+- **[Aela FDE](src/addons/aela-fde/README.md)** (`-AelaFDE-<version>.zip`):
+  Keeps FDE Aela's werewolf transformations and authored departures consistent
+  with core follower control. Requires **Follower Dialogue Expansion – Aela the
+  Huntress**, including `FDE Aela.esp` and `FDE Aela Part 2.esp`.
+- **[Fura FDE](src/addons/fura-fde/README.md)** (`-FuraFDE-<version>.zip`):
+  Routes FDE Fura's recruitment and dialogue into the core follower controller,
+  with normal slots, distance and combat roles while respecting her quests.
+  Requires **Follower Dialogue Expansion – Fura Bloodmouth** (`FDE Fura.esp`)
+  and a compatible **YLIWF core**.
 
 ## Configuration
 

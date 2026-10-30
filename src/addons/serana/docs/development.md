@@ -1,7 +1,7 @@
 # Serana implementation
 
 [Serana.cpp](../native/Serana.cpp) delegates commands to `DLC1_NPCMentalModelScript`.
-The [add-on API](../../../../docs/follower-adapters.md) defines the host contracts.
+The [add-on API](../../../../docs/addons/follower-integration.md) defines the host contracts.
 
 | Command | Controller method | Requirements |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ eligible. Combat protection requires following or waiting, `CanFollow` and no
 during ordinary following or sandboxing. Quest packages and controller locks
 withdraw permission. The core handles interrupts and common movement guards;
 Serana retains native distance handling. See the
-[shared movement contract](../../../../docs/follower-adapters.md#core-managed-external-movement).
+[shared movement contract](../../../../docs/addons/follower-integration.md#core-managed-external-movement).
 
 Owner method dispatch uses `PapyrusCommands.h`, including session invalidation
 and Serana's additional dismissal verification.

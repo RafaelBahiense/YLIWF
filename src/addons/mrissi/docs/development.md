@@ -39,7 +39,7 @@ The adapter reports movement permission to the core's shared update; it needs no
 worker thread or package application code. `PapyrusCommands.h` handles owner
 method dispatch, pending work and session invalidation. The core persists actor
 distance preferences; the adapter adds no serialization format. See the
-[shared movement contract](../../../../docs/follower-adapters.md#core-managed-external-movement).
+[shared movement contract](../../../../docs/addons/follower-integration.md#core-managed-external-movement).
 
 ## Validation
 

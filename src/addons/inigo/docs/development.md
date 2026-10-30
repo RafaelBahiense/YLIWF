@@ -61,7 +61,7 @@ The core's shared movement update replaces add-on polling. It releases revoked
 movement and reapplies eligible preferences; no add-on thread or serialization
 format is needed. `PapyrusCommands.h` handles method dispatch, pending work and
 session invalidation. See the
-[shared movement contract](../../../../docs/follower-adapters.md#core-managed-external-movement).
+[shared movement contract](../../../../docs/addons/follower-integration.md#core-managed-external-movement).
 
 ## Validation
 
