@@ -18,6 +18,7 @@
 #include "formations/Formation.h"
 #include "combat/Healer.h"
 #include "combat/ShieldDefender.h"
+#include "combat/DefenderActions.h"
 #include "combat/CombatOrders.h"
 
 #include <atomic>
@@ -493,7 +494,7 @@ namespace mod::controller::executor {
                               !storage::Get().queue.empty() || !storage::Get().callers.empty() ||
                               std::ranges::any_of(storage::Get().deadlines, [](float time) { return time > 0; });
             DeadlineScheduler().Set(
-                work, delay && !paused,
+                work, (delay || defender_actions::HasWork()) && !paused,
                 (formation::HasWork() || package_control::HasWork() || adapters::HasMovement()) && !paused);
         }
 

@@ -1,6 +1,7 @@
 #include "followers/QuestPolicies.h"
 #include "ShieldDefender.h"
 #include "ShieldDefenderRules.h"
+#include "DefenderActions.h"
 #include "CombatRoles.h"
 #include "CombatOrders.h"
 #include "adapters/Adapters.h"
@@ -263,6 +264,7 @@ namespace mod::shield_defender {
     }
 
     void Configure() {
+        defender_actions::Install();
         auto* data = RE::TESDataHandler::GetSingleton();
         for (std::size_t i = 0; i < styles.size(); ++i)
             styles[i] = data
@@ -330,6 +332,7 @@ namespace mod::shield_defender {
     void Tick(float elapsed) {
         if (!std::isfinite(elapsed) || elapsed <= 0)
             return;
+        defender_actions::Tick();
         elapsedSinceTick += elapsed;
         if (elapsedSinceTick < 1)
             return;
@@ -370,6 +373,8 @@ namespace mod::shield_defender {
     }
 
     bool NeedsObservation() {
+        if (defender_actions::HasWork())
+            return true;
         const auto followers = Followers();
         if (std::ranges::any_of(followers, [](auto* actor) {
                 return !actor->IsDead() && combat_roles::Read(actor) == combat_roles::Role::ShieldDefender;
@@ -380,6 +385,7 @@ namespace mod::shield_defender {
     }
 
     void Invalidate() {
+        defender_actions::Invalidate();
         std::lock_guard lock(mutex);
         controls.clear();
         elapsedSinceTick = 0;

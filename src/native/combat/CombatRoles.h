@@ -34,5 +34,7 @@ namespace mod::combat_roles {
     Role Read(RE::Actor* actor);
     std::vector<HealingSpell> HealingSpells(RE::Actor* actor);
     Snapshot Inspect(RE::Actor* actor);
+    // Main-thread assignment shared by queued UI commands and development tools.
+    bool Apply(std::uint32_t actorID, std::uint32_t aliasID, Role role, std::uint64_t generation);
     void Request(std::uint32_t actorID, std::uint32_t aliasID, Role role, std::uint64_t generation);
 }

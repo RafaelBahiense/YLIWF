@@ -166,25 +166,28 @@ namespace mod::combat_roles {
         return result;
     }
 
+    bool Apply(std::uint32_t actorID, std::uint32_t aliasID, Role role, std::uint64_t generation) {
+        std::scoped_lock lock(settings::Mutex);
+        if (!Valid(static_cast<std::int32_t>(role)) || !debug::IsCurrentGame(generation))
+            return false;
+        auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorID);
+        if (!actor || !Registered(actor, aliasID))
+            return false;
+        const auto current = Inspect(actor);
+        if (!current.available || !current.options[static_cast<std::size_t>(role)].eligible)
+            return false;
+        actor->AddToFaction(marker, static_cast<std::int8_t>(role));
+        if (Read(actor) != role)
+            return false;
+        actor->EvaluatePackage();
+        debug::Trace("CombatRoles.Assign", actor, "role={}", Name(role));
+        debug::NotifyStateChanged();
+        controller::executor::Kick();
+        return true;
+    }
+
     void Request(std::uint32_t actorID, std::uint32_t aliasID, Role role, std::uint64_t generation) {
-        auto* tasks = SKSE::GetTaskInterface();
-        if (!tasks || !Valid(static_cast<std::int32_t>(role)) || !debug::IsCurrentGame(generation))
-            return;
-        tasks->AddTask([actorID, aliasID, role, generation] {
-            std::scoped_lock lock(settings::Mutex);
-            if (!debug::IsCurrentGame(generation))
-                return;
-            auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorID);
-            if (!actor || !Registered(actor, aliasID))
-                return;
-            const auto current = Inspect(actor);
-            if (!current.available || !current.options[static_cast<std::size_t>(role)].eligible)
-                return;
-            actor->AddToFaction(marker, static_cast<std::int8_t>(role));
-            actor->EvaluatePackage();
-            debug::Trace("CombatRoles.Assign", actor, "role={}", Name(role));
-            debug::NotifyStateChanged();
-            controller::executor::Kick();
-        });
+        if (auto* tasks = SKSE::GetTaskInterface())
+            tasks->AddTask([actorID, aliasID, role, generation] { Apply(actorID, aliasID, role, generation); });
     }
 }
