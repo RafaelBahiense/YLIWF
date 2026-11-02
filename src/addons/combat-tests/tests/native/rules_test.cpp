@@ -27,10 +27,13 @@ TEST_CASE("Combat recovery accepts the legacy prefix and validates native guard 
     CHECK(old->guardPhase == 0);
     CHECK(Valid(*old));
     CHECK_FALSE(DecodePlan(1, bytes));
-    CHECK_FALSE(DecodePlan(4, bytes));
+    CHECK_FALSE(DecodePlan(6, bytes));
     CHECK_FALSE(DecodePlan(2, std::span(bytes).first(44)));
     REQUIRE(DecodePlan(2, std::span(bytes).first(52)));
-    REQUIRE(DecodePlan(3, bytes));
+    REQUIRE(DecodePlan(3, std::span(bytes).first(64)));
+    REQUIRE(DecodePlan(4, std::span(bytes).first(76)));
+    REQUIRE(DecodePlan(5, bytes));
+    CHECK_FALSE(DecodePlan(3, bytes));
     auto guarded = original;
     guarded.mode = 3;
     guarded.guardPhase = 3;
@@ -41,6 +44,39 @@ TEST_CASE("Combat recovery accepts the legacy prefix and validates native guard 
     guarded.mode = 3;
     guarded.guardPhase = 5;
     CHECK_FALSE(Valid(guarded));
+}
+
+TEST_CASE("Repeat series advance only after successful restoration") {
+    using mod::test_rules::ContinueSeries;
+    CHECK(ContinueSeries(1, 3, true, true));
+    CHECK_FALSE(ContinueSeries(3, 3, true, true));
+    CHECK_FALSE(ContinueSeries(1, 3, false, true));
+    CHECK_FALSE(ContinueSeries(1, 3, true, false));
+    CHECK_FALSE(ContinueSeries(0, 0, true, true));
+    CHECK_FALSE(ContinueSeries(0, 101, true, true));
+}
+
+TEST_CASE("Follow recovery persists command receipts and rejects malformed ownership") {
+    using namespace mod::test_rules;
+    Plan plan{.subject = 1, .health = 100, .generation = 2};
+    plan.wasWaiting = 1;
+    plan.followRequest = 7;
+    plan.waitRequest = 8;
+    CHECK(Valid(plan));
+    const auto bytes = std::as_bytes(std::span(&plan, 1));
+    auto decoded = DecodePlan(5, {reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()});
+    REQUIRE(decoded);
+    CHECK(decoded->followRequest == 7);
+    CHECK(decoded->waitRequest == 8);
+    plan.wasWaiting = 0;
+    CHECK_FALSE(Valid(plan));
+    plan.wasWaiting = 1;
+    plan.followRequest = 0;
+    CHECK_FALSE(Valid(plan));
+    plan.followRequest = 8;
+    CHECK_FALSE(Valid(plan));
+    plan.followRequest = 0xFFFFFFFF;
+    CHECK_FALSE(Valid(plan));
 }
 
 TEST_CASE("Recovery rechecks require restored temporary changes and no pending combat callback") {

@@ -12,6 +12,8 @@ public sealed class CombatArena : IAddonPluginGenerator
 {
     public const string Plugin = "YouLeadIWillFollow.CombatArena.esp";
     public const string CellEditorId = "YLIWFCombatArena";
+    public const uint PowerBashIdle = 0x820;
+    public const uint PowerBashPerk = 0x058F67;
     public string AddonName => "CombatTests";
     SkyrimMod IAddonPluginGenerator.Create() => Create();
     // Keep navigable ground away from the Nordic wall kit's columns and lips.
@@ -94,7 +96,43 @@ public sealed class CombatArena : IAddonPluginGenerator
             Parent = new NavigationMapInfoCellParent { ParentCell = new FormLink<ICellGetter>(cell.FormKey) }
         });
         mod.NavigationMeshInfoMaps.Add(map);
+        AddPowerBashIdle(mod);
+        foreach (var ranged in new[] { false, true })
+        {
+            mod.CombatStyles.Add(new CombatStyle(Own(ranged ? 0x831u : 0x830u), SkyrimRelease.SkyrimSE)
+            {
+                EditorID = ranged ? "YLIWF_TestCasterStyle" : "YLIWF_TestArcherStyle",
+                OffensiveMult = 1,
+                DefensiveMult = 0.2f,
+                EquipmentScoreMultMelee = 0,
+                EquipmentScoreMultMagic = ranged ? 10 : 0,
+                EquipmentScoreMultRanged = ranged ? 0 : 10,
+                GroupOffensiveMult = 1
+            });
+        }
+
         return mod;
+    }
+
+    private static void AddPowerBashIdle(SkyrimMod mod)
+    {
+        var idle = new IdleAnimation(Own(PowerBashIdle), SkyrimRelease.SkyrimSE)
+        {
+            EditorID = "YLIWFCombatTestNpcPowerBash",
+            Filename = @"Meshes\Actors\Character\Behaviors\0_Master.hkx",
+            AnimationEvent = "bashPowerStart"
+        };
+        // Standalone: only the selected test actor's explicit idle request uses
+        // this record. Do not attach it to the ordinary power-attack tree.
+        idle.RelatedIdles.Add(new FormLink<IIdleRelationGetter>());
+        idle.RelatedIdles.Add(new FormLink<IIdleRelationGetter>());
+        var perk = new HasPerkConditionData();
+        perk.Perk.Link.SetTo(Vanilla(PowerBashPerk));
+        idle.Conditions.Add(new ConditionFloat { Data = perk, ComparisonValue = 1 });
+        idle.Conditions.Add(new ConditionFloat { Data = new IsBlockingConditionData(), ComparisonValue = 1 });
+        idle.Conditions.Add(new ConditionFloat { Data = new GetWantBlockingConditionData(), ComparisonValue = 1 });
+        idle.Conditions.Add(new ConditionFloat { Data = new GetAttackStateConditionData(), ComparisonValue = 0 });
+        mod.IdleAnimations.Add(idle);
     }
 
     private static CellLighting Lighting()

@@ -11,6 +11,15 @@ TEST_CASE("Role encounters accept only their applicable control settings") {
     CHECK(ValidConfiguration(1, 0));
     CHECK_FALSE(ValidConfiguration(1, 1));
     CHECK_FALSE(ValidConfiguration(2, 0));
+    for (auto id : {2u, 3u, 4u, 5u}) {
+        CHECK(ValidConfiguration(id, 3));
+        CHECK_FALSE(ValidConfiguration(id, 2));
+        CHECK(EncounterRole(id) == 0);
+        CHECK(EquipmentRole(id) == ShieldRole);
+        CHECK(RestoreRole(true, 0, id));
+        CHECK_FALSE(RestoreRole(true, ShieldRole, id));
+    }
+    CHECK_FALSE(ValidConfiguration(6, 3));
     CHECK_FALSE(ValidConfiguration(0, 4));
     CHECK(RestoreRole(true, 1, 1));
     CHECK_FALSE(RestoreRole(true, 5, 1));
@@ -32,8 +41,10 @@ TEST_CASE("Healer restore plans retain player health and exclude shield guard ow
     CHECK(Valid(plan));
     std::array<std::uint8_t, sizeof(Plan)> bytes;
     std::memcpy(bytes.data(), &plan, sizeof(plan));
-    REQUIRE(DecodePlan(3, bytes));
-    CHECK(DecodePlan(3, bytes)->playerHealth == 50);
+    REQUIRE(DecodePlan(5, bytes));
+    CHECK(DecodePlan(5, bytes)->playerHealth == 50);
+    REQUIRE(DecodePlan(3, std::span(bytes).first(64)));
+    CHECK(DecodePlan(3, std::span(bytes).first(64))->playerHealth == 50);
     CHECK_FALSE(DecodePlan(2, bytes));
     plan.playerHealth = 0;
     CHECK_FALSE(Valid(plan));

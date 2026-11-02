@@ -13,6 +13,11 @@ namespace mod::test_rules {
     inline constexpr float Countdown = 3;
     inline constexpr float StartTimeout = 10;
     inline constexpr std::uint32_t ShieldRole = 5;
+    inline constexpr std::uint32_t MaxRuns = 100;
+    constexpr bool ContinueSeries(std::uint32_t finished, std::uint32_t requested, bool complete, bool restored,
+                                  std::uint32_t limit = MaxRuns) {
+        return requested > 0 && requested <= limit && finished < requested && complete && restored;
+    }
     enum class PositionAction { Complete, Move, Wait };
     enum class StartDecision { Wait, Ready, Failed };
     enum class BeginResult : std::int32_t { Accepted = 1, Expired = 2, MissingSword = 3, MissingActor = 4 };
@@ -49,7 +54,7 @@ namespace mod::test_rules {
         }
         return "Combat tests are unavailable.";
     }
-    enum class HitKind { Ignore, Incoming, Outgoing, Foreign };
+    enum class HitKind { Ignore, Incoming, Outgoing, Foreign, AllyIncoming, AllyOutgoing, Friendly, Crossfire };
 
     constexpr HitKind ClassifyHit(std::uint32_t subject, std::uint32_t enemy, std::uint32_t target,
                                   std::uint32_t cause) {
@@ -62,6 +67,26 @@ namespace mod::test_rules {
         if ((target == subject || target == enemy) && cause && cause != subject && cause != enemy)
             return HitKind::Foreign;
         return HitKind::Ignore;
+    }
+
+    constexpr HitKind ClassifyFixtureHit(std::uint32_t subject, std::uint32_t enemy, std::uint32_t auxiliary, bool ally,
+                                         std::uint32_t target, std::uint32_t cause) {
+        if (auxiliary) {
+            if (ally) {
+                if (target == auxiliary && cause == enemy)
+                    return HitKind::AllyIncoming;
+                if (target == enemy && cause == auxiliary)
+                    return HitKind::AllyOutgoing;
+                if ((target == subject && cause == auxiliary) || (target == auxiliary && cause == subject))
+                    return HitKind::Friendly;
+            } else {
+                if ((target == enemy && cause == auxiliary) || (target == auxiliary && cause == enemy))
+                    return HitKind::Crossfire;
+                if (target == auxiliary || cause == auxiliary)
+                    return ClassifyHit(subject, auxiliary, target, cause);
+            }
+        }
+        return ClassifyHit(subject, enemy, target, cause);
     }
 
     inline StartDecision ObserveStart(float elapsed, bool equipped, bool subjectCombat, bool enemyCombat) {
@@ -92,13 +117,16 @@ namespace mod::test_rules {
         std::uint32_t encounter = 0;
         float playerHealth = 0;
         std::uint32_t playerChanged = 0;
+        std::uint32_t wasWaiting = 0, followRequest = 0, waitRequest = 0;
+        std::uint32_t auxiliary = 0, fixture = 0;
     };
 
-    static_assert(sizeof(Plan) == 64 && offsetof(Plan, mode) == 44 && offsetof(Plan, encounter) == 52);
+    static_assert(sizeof(Plan) == 84 && offsetof(Plan, mode) == 44 && offsetof(Plan, encounter) == 52);
 
     inline std::optional<Plan> DecodePlan(std::uint32_t version, std::span<const std::uint8_t> bytes) {
         if ((version != 1 || bytes.size() != 44) && (version != 2 || bytes.size() != 52) &&
-            (version != 3 || bytes.size() != sizeof(Plan)))
+            (version != 3 || bytes.size() != 64) && (version != 4 || bytes.size() != 76) &&
+            (version != 5 || bytes.size() != sizeof(Plan)))
             return std::nullopt;
         Plan result;
         std::memcpy(&result, bytes.data(), bytes.size());
@@ -106,12 +134,21 @@ namespace mod::test_rules {
     }
 
     inline bool Valid(const Plan& plan) {
-        return plan.subject && plan.subject != plan.enemy && plan.subject != plan.origin &&
+        return plan.fixture < 13 &&
+               (!plan.auxiliary ||
+                (plan.auxiliary != plan.subject && plan.auxiliary != plan.enemy && plan.auxiliary != plan.origin &&
+                 plan.auxiliary != plan.enemyBase && (plan.fixture == 10 || plan.fixture == 11))) &&
+               plan.subject && plan.subject != plan.enemy && plan.subject != plan.origin &&
                (!plan.origin || (plan.origin != plan.enemy && plan.origin != plan.enemyBase)) &&
                plan.subject != plan.enemyBase && plan.role < 7 && plan.changedRole <= 1 && plan.restoreIssued <= 1 &&
                plan.generation > 0 && plan.generation < 0x7FFFFFFE && ValidConfiguration(plan.encounter, plan.mode) &&
-               plan.guardPhase <= 4 && (!plan.guardPhase || ((plan.mode & 2) && plan.origin && plan.encounter == 0)) &&
-               plan.playerChanged <= 1 && std::isfinite(plan.playerHealth) && plan.playerHealth >= 0 &&
+               plan.guardPhase <= 4 &&
+               (!plan.guardPhase ||
+                ((plan.mode & 2) && plan.origin && (plan.encounter == 0 || DirectEncounter(plan.encounter)))) &&
+               plan.wasWaiting <= 1 && plan.followRequest <= 0x7FFFFFFF && plan.waitRequest <= 0x7FFFFFFF &&
+               (!plan.waitRequest || (plan.followRequest && plan.waitRequest > plan.followRequest)) &&
+               (!plan.followRequest || plan.wasWaiting) && plan.playerChanged <= 1 &&
+               std::isfinite(plan.playerHealth) && plan.playerHealth >= 0 &&
                (!plan.playerChanged || (plan.encounter == 1 && plan.playerHealth > 0)) && std::isfinite(plan.health) &&
                plan.health > 0 && std::isfinite(plan.stamina) && plan.stamina >= 0 && std::isfinite(plan.magicka) &&
                plan.magicka >= 0;

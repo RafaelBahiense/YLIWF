@@ -26,6 +26,8 @@ namespace ImGuiMCP {
     using ::ImGuiTableColumnFlags_WidthFixed;
     using ::ImGuiTableColumnFlags_WidthStretch;
     using ::ImGuiTableFlags_SizingFixedFit;
+    using ::ImGuiTableFlags_RowBg;
+    using ::ImGuiTableFlags_BordersInnerH;
     using ::ImGuiWindowFlags_AlwaysAutoResize;
     using ::ImGuiWindowFlags_AlwaysVerticalScrollbar;
     using ::ImVec2;

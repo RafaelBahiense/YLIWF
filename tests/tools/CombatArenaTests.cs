@@ -24,6 +24,28 @@ public sealed class CombatArenaTests : TestWorkspace
     private static ICellGetter Cell(ISkyrimModGetter mod) => mod.Cells.Single().SubBlocks.Single().Cells.Single();
 
     [Fact]
+    public void PowerBashIdleIsStandaloneAndRequiresPerkAndOwnedBlockState()
+    {
+        var path = Path.Combine(temporary, CombatArena.Plugin);
+        CombatArena.Create().BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters()
+            .WithNoDataFolder().NoMastersListContentCheck().Write();
+        using var mod = SkyrimMod.CreateFromBinaryOverlay(path, SkyrimRelease.SkyrimSE);
+        var idle = Assert.Single(mod.IdleAnimations);
+        Assert.Equal(CombatArena.PowerBashIdle, idle.FormKey.ID);
+        Assert.Equal("bashPowerStart", idle.AnimationEvent);
+        Assert.All(idle.RelatedIdles, link => Assert.True(link.IsNull));
+        Assert.Equal(2, idle.RelatedIdles.Count);
+        Assert.Equal(4, idle.Conditions.Count);
+        var perk = Assert.IsType<HasPerkConditionData>(idle.Conditions[0].Data);
+        Assert.Equal(CombatArena.PowerBashPerk, perk.Perk.Link.FormKey.ID);
+        Assert.IsType<IsBlockingConditionData>(idle.Conditions[1].Data);
+        Assert.IsType<GetWantBlockingConditionData>(idle.Conditions[2].Data);
+        Assert.IsType<GetAttackStateConditionData>(idle.Conditions[3].Data);
+        Assert.All(idle.Conditions, condition => Assert.Equal(CompareOperator.EqualTo, condition.CompareOperator));
+        Assert.DoesNotContain(idle.Conditions, condition => condition.Data is GetIsIDConditionData);
+    }
+
+    [Fact]
     public void ArenaRoundTripsWithoutWorldOverridesOrStartupBehavior()
     {
         var path = Path.Combine(temporary, CombatArena.Plugin);
