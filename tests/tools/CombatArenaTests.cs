@@ -100,6 +100,18 @@ public sealed class CombatArenaTests : TestWorkspace
     }
 
     [Fact]
+    public void NavigationKeepsAColumnClearanceMarginFromThePhysicalPerimeter()
+    {
+        var data = Cell(CombatArena.Create()).NavigationMeshes.Single().Data!;
+        Assert.True(1952 - CombatArena.Boundary >= 384);
+        Assert.All(data.Vertices, vertex =>
+        {
+            Assert.InRange(vertex.X, -CombatArena.Boundary, CombatArena.Boundary);
+            Assert.InRange(vertex.Y, -CombatArena.Boundary, CombatArena.Boundary);
+        });
+    }
+
+    [Fact]
     public void PartitionHasNoWalkableTrianglesAndEveryStartIsOnConnectedNavigation()
     {
         var cell = Cell(CombatArena.Create());

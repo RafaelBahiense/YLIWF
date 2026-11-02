@@ -14,7 +14,8 @@ public sealed class CombatArena : IAddonPluginGenerator
     public const string CellEditorId = "YLIWFCombatArena";
     public string AddonName => "CombatTests";
     SkyrimMod IAddonPluginGenerator.Create() => Create();
-    public const float Boundary = 1952;
+    // Keep navigable ground away from the Nordic wall kit's columns and lips.
+    public const float Boundary = 1472;
     public const float ObstacleLeft = 480;
     public const float ObstacleRight = 608;
     public const float ObstacleEnd = 608;
@@ -179,7 +180,9 @@ public sealed class CombatArena : IAddonPluginGenerator
     }
 
     private static float[] Axis(params float[] extra) =>
-        [.. Enumerable.Range(0, 16).Select(i => -Boundary + i * 256).Append(Boundary).Concat(extra).Distinct().Order()];
+        [.. Enumerable.Range(0, (int)MathF.Ceiling(Boundary * 2 / 256) + 1)
+            .Select(i => MathF.Min(Boundary, -Boundary + i * 256)).Concat(extra)
+            .Where(value => value >= -Boundary && value <= Boundary).Distinct().Order()];
 
     private static NavigationMeshData Navigation()
     {

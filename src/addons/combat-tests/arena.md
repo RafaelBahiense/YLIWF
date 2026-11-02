@@ -2,8 +2,9 @@
 
 An isolated Nordic interior with an open combat area, a wall partition for
 line-of-sight tests, and persistent starting markers. The enclosed floor is
-4096 units square with a 640-unit ceiling. Navigation is inset from the perimeter
-and routes around both ends of the partition.
+4096 units square with a 640-unit ceiling. Navigation covers a central 2944-unit
+square, keeping actors clear of the perimeter columns, and routes around both
+ends of the partition.
 
 ## Use
 
