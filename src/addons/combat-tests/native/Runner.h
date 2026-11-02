@@ -39,6 +39,7 @@ namespace yliwf::testing {
         mod::combat_tests::telemetry::DodgeSnapshot dodgeTelemetry;
         std::uint32_t suite = 0;
         std::uint32_t suiteRepeats = mod::combat_tests::suite::DefaultRepeats;
+        std::uint32_t suiteSelection = mod::combat_tests::suite::AllPhases;
         Experiments experiments;
         mod::combat_tests::metrics::Snapshot metrics;
     };
@@ -69,11 +70,12 @@ namespace yliwf::testing {
         std::uint32_t (*readResult)(std::uint32_t index, RunResult*) = nullptr;
         std::uint32_t (*setInterruptionBypass)(bool enabled) = nullptr;
         std::uint32_t (*setDodgeBypass)(bool enabled) = nullptr;
-        std::uint32_t (*startDefenderSuite)(std::uint32_t actor, std::uint32_t repeats) = nullptr;
+        std::uint32_t (*startDefenderSuite)(std::uint32_t actor, std::uint32_t repeats,
+                                            std::uint32_t selection) = nullptr;
         std::uint32_t (*setExperiments)(const Experiments*) = nullptr;
     };
 
-    static_assert(sizeof(Snapshot) == 9532 + sizeof(Experiments) + sizeof(mod::combat_tests::metrics::Snapshot) &&
+    static_assert(sizeof(Snapshot) == 9536 + sizeof(Experiments) + sizeof(mod::combat_tests::metrics::Snapshot) &&
                   sizeof(API) == 128);
 }
 

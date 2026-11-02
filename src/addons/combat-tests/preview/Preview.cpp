@@ -35,7 +35,7 @@ const yliwf::testing::API* mod::combat_tests::RunnerAPI() {
                 std::uint32_t finished = 0;
                 while (finished < test.requestedRuns) {
                     const float duration =
-                        test.suite ? mod::combat_tests::suite::ForRun(finished + 1, test.suiteRepeats)->seconds
+                        test.suite ? mod::combat_tests::suite::ForRun(finished + 1, test.suiteRepeats, test.suiteSelection)->seconds
                         : mod::test_rules::DirectEncounter(test.encounter) ? 20
                                                                            : 60;
                     if (remaining < duration)
@@ -50,7 +50,7 @@ const yliwf::testing::API* mod::combat_tests::RunnerAPI() {
                                       ? mod::combat_tests::suite::Verdict::Inconclusive
                                       : mod::combat_tests::suite::Verdict::NotAssessed;
                     row.elapsed = test.suite ? mod::combat_tests::suite::ForRun(
-                                                   static_cast<std::uint32_t>(results.size()) + 1, test.suiteRepeats)
+                                                   static_cast<std::uint32_t>(results.size()) + 1, test.suiteRepeats, test.suiteSelection)
                                                    ->seconds
                                   : mod::test_rules::DirectEncounter(test.encounter) ? 20
                                                                                      : 60;
@@ -65,7 +65,7 @@ const yliwf::testing::API* mod::combat_tests::RunnerAPI() {
                 }
                 test.finishedRuns = finished;
                 test.run = std::min(test.requestedRuns, finished + 1);
-                test.duration = test.suite ? mod::combat_tests::suite::ForRun(test.run, test.suiteRepeats)->seconds
+                test.duration = test.suite ? mod::combat_tests::suite::ForRun(test.run, test.suiteRepeats, test.suiteSelection)->seconds
                                 : mod::test_rules::DirectEncounter(test.encounter) ? 20
                                                                                    : 60;
                 test.elapsed = finished == test.requestedRuns ? test.duration : remaining;
@@ -194,14 +194,15 @@ const yliwf::testing::API* mod::combat_tests::RunnerAPI() {
             excludeDodge = enabled;
             return 1;
         },
-        [](std::uint32_t actor, std::uint32_t repeats) -> std::uint32_t {
-            if (!mod::combat_tests::suite::ValidRepeats(repeats))
+        [](std::uint32_t actor, std::uint32_t repeats, std::uint32_t selection) -> std::uint32_t {
+            if (!mod::combat_tests::suite::ValidRepeats(repeats) || !mod::combat_tests::suite::ValidSelection(selection))
                 return 0;
             const auto accepted = api.startEncounter(actor, 0, 3);
             if (accepted) {
                 test.suite = 1;
                 test.suiteRepeats = repeats;
-                test.requestedRuns = mod::combat_tests::suite::Runs(repeats);
+                test.suiteSelection = selection;
+                test.requestedRuns = mod::combat_tests::suite::Runs(repeats, selection);
                 std::snprintf(test.status, sizeof(test.status), "Preview: Combined suite; synthetic coverage only.");
             }
             return accepted;

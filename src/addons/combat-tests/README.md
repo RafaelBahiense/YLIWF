@@ -85,6 +85,11 @@ encounter confirms cleanup, not that the role performed well.
 Under **Shield defender → Sustained melee**, enable **Combined validation suite**,
 select the follower, and click **Start Combined suite**. **Runs per phase**
 accepts 1–100, default 1. The suite fixes the control mode to Combined.
+Use **Select phases** to run any subset. **All phases**, **Ranged and magic**
+and **Clear selection** provide shortcuts. Selected phases keep their listed
+order; the displayed run count and duration reflect the selection. At least one
+phase is required. Ranged and magic takes three active minutes per repetition.
+**Repeat Combined suite** retains the last run's phase selection.
 
 | Phase | Active time | Setup |
 | --- | --- | --- |

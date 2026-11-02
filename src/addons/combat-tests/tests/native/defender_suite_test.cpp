@@ -30,6 +30,41 @@ TEST_CASE("Defender suite assigns the configured repetitions to every phase") {
     }
 }
 
+TEST_CASE("Selected phases retain fixture identities, repetition order and exact duration") {
+    using namespace mod::combat_tests::suite;
+    for (const auto selection :
+         {Select(Fixture::Area), Select(Fixture::Archer) | Select(Fixture::Projectile), RangedPhases}) {
+        REQUIRE(ValidSelection(selection));
+        for (const auto repeats : {1u, 2u, 5u}) {
+            std::uint32_t run = 1;
+            float duration = 0;
+            for (std::uint32_t phase = 0; phase < Phases.size(); ++phase) {
+                if (!(selection & (1u << phase)))
+                    continue;
+                for (std::uint32_t repetition = 1; repetition <= repeats; ++repetition) {
+                    REQUIRE(ForRun(run, repeats, selection));
+                    CHECK(ForRun(run, repeats, selection)->fixture == Phases[phase].fixture);
+                    CHECK(PhaseIndex(run, repeats, selection) == phase);
+                    CHECK(Repetition(run, repeats) == repetition);
+                    duration += Phases[phase].seconds;
+                    ++run;
+                }
+            }
+            CHECK(Runs(repeats, selection) == run - 1);
+            CHECK(ActiveSeconds(repeats, selection) == duration);
+            CHECK_FALSE(ForRun(run, repeats, selection));
+        }
+    }
+    CHECK(Runs(1, RangedPhases) == 4);
+    CHECK(ActiveSeconds(1, RangedPhases) == 180);
+    for (const auto selection : {0u, AllPhases + 1}) {
+        CHECK_FALSE(ValidSelection(selection));
+        CHECK(Runs(1, selection) == 0);
+        CHECK(ActiveSeconds(1, selection) == 0);
+        CHECK_FALSE(ForRun(1, 1, selection));
+    }
+}
+
 TEST_CASE("Failed tactical execution never receives a successful coverage explanation") {
     using namespace mod::combat_tests::suite;
     Evidence evidence{true, true, true};

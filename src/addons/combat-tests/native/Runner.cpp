@@ -69,6 +69,7 @@ namespace {
     bool nextRun = false, travelMenuPending = false;
     bool defenderSuite = false;
     std::uint32_t suiteRepeats = mod::combat_tests::suite::DefaultRepeats;
+    std::uint32_t suiteSelection = mod::combat_tests::suite::AllPhases;
     std::uint32_t fixtureSteps = 0;
     DefenderObservation lastDefense;
     mod::combat_tests::tactics::Metrics tacticalMetrics;
@@ -77,7 +78,7 @@ namespace {
     mod::combat_tests::metrics::Tracker metricTracker;
 
     const mod::combat_tests::suite::Phase* SuitePhase() {
-        return defenderSuite ? mod::combat_tests::suite::ForRun(currentRun, suiteRepeats) : nullptr;
+        return defenderSuite ? mod::combat_tests::suite::ForRun(currentRun, suiteRepeats, suiteSelection) : nullptr;
     }
 
     void PositionOpponent(RE::Actor* enemy, RE::Actor* subject, bool initial) {
@@ -189,7 +190,7 @@ namespace {
             const auto& row = results[i];
             if (defenderSuite) {
                 const auto run = static_cast<std::uint32_t>(i + 1);
-                output << mod::combat_tests::suite::ForRun(run, suiteRepeats)->name << ','
+                output << mod::combat_tests::suite::ForRun(run, suiteRepeats, suiteSelection)->name << ','
                        << mod::combat_tests::suite::Repetition(run, suiteRepeats) << ','
                        << mod::combat_tests::suite::Name(row.verdict) << ',';
             } else if (mod::test_rules::DirectEncounter(snapshot.encounter))
@@ -208,10 +209,14 @@ namespace {
             using namespace mod::combat_tests::suite;
             output << "\nCOMBINED DEFENDER SUITE - " << suiteRepeats << " repetitions per phase\n";
             for (std::uint32_t phase = 0; phase < Phases.size(); ++phase) {
+                if (!(suiteSelection & (1u << phase)))
+                    continue;
                 std::uint32_t passed = 0, failed = 0, inconclusive = 0, completed = 0;
                 float damage = 0;
                 std::uint32_t incoming = 0, blocked = 0;
-                for (std::size_t i = phase * suiteRepeats; i < results.size() && i < (phase + 1) * suiteRepeats; ++i) {
+                for (std::size_t i = 0; i < results.size(); ++i) {
+                    if (PhaseIndex(static_cast<std::uint32_t>(i + 1), suiteRepeats, suiteSelection) != phase)
+                        continue;
                     ++completed;
                     passed += results[i].verdict == Verdict::Passed;
                     failed += results[i].verdict == Verdict::Failed;
@@ -365,7 +370,7 @@ namespace {
             << observation.releaseDeferrals << ',' << observation.releaseWait << ',' << observation.blockHitReadable
             << ',' << observation.blockHit << ',' << observation.graphWantReadable << ',' << observation.graphWantBlock
             << ',' << observation.releaseWaitPeak << ',' << defenderSuite << ','
-            << (defenderSuite ? mod::combat_tests::suite::PhaseIndex(currentRun, suiteRepeats) + 1 : 0)
+            << (defenderSuite ? mod::combat_tests::suite::PhaseIndex(currentRun, suiteRepeats, suiteSelection) + 1 : 0)
             << ',' << (defenderSuite ? mod::combat_tests::suite::Repetition(currentRun, suiteRepeats) : currentRun)
             << ',' << fixtureSteps << ',' << observation.recoveredInterruptTimeouts << ','
             << externalAttack.permaProposals << ',' << externalAttack.permaAccepted << ','
@@ -1610,6 +1615,7 @@ namespace {
                                                                         : mod::test_rules::Duration;
         snapshot.suite = defenderSuite;
         snapshot.suiteRepeats = suiteRepeats;
+        snapshot.suiteSelection = suiteSelection;
         fixtureSteps = 0;
         lastDefense = {};
         tacticalMetrics = {};
@@ -1752,14 +1758,16 @@ namespace {
         return accepted;
     }
 
-    std::uint32_t StartDefenderSuite(std::uint32_t actor, std::uint32_t repeats) {
+    std::uint32_t StartDefenderSuite(std::uint32_t actor, std::uint32_t repeats, std::uint32_t selection) {
         std::scoped_lock lock(mutex);
-        if (!mod::combat_tests::suite::ValidRepeats(repeats) || active || plan.subject || unsupported || !ready || !host.inspect || travel::NeedsUpdate() ||
+        if (!mod::combat_tests::suite::ValidRepeats(repeats) || !mod::combat_tests::suite::ValidSelection(selection) ||
+            active || plan.subject || unsupported || !ready || !host.inspect || travel::NeedsUpdate() ||
             !travel::Read().atArena || !actor)
             return 0;
         defenderSuite = true;
         suiteRepeats = repeats;
-        requestedRuns = mod::combat_tests::suite::Runs(repeats);
+        suiteSelection = selection;
+        requestedRuns = mod::combat_tests::suite::Runs(repeats, selection);
         currentRun = 1;
         nextRun = false;
         results.clear();

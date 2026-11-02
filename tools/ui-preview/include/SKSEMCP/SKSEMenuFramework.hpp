@@ -28,6 +28,7 @@ namespace ImGuiMCP {
     using ::ImGuiTableFlags_SizingFixedFit;
     using ::ImGuiTableFlags_RowBg;
     using ::ImGuiTableFlags_BordersInnerH;
+    using ::ImGuiTreeNodeFlags_DefaultOpen;
     using ::ImGuiWindowFlags_AlwaysAutoResize;
     using ::ImGuiWindowFlags_AlwaysVerticalScrollbar;
     using ::ImVec2;

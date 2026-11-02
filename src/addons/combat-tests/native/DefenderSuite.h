@@ -82,20 +82,48 @@ namespace mod::combat_tests::suite {
         return repeats >= 1 && repeats <= MaxRepeats;
     }
 
-    constexpr std::uint32_t Runs(std::uint32_t repeats) {
-        return ValidRepeats(repeats) ? static_cast<std::uint32_t>(Phases.size()) * repeats : 0;
+    inline constexpr std::uint32_t AllPhases = (1u << Phases.size()) - 1;
+
+    constexpr std::uint32_t Select(Fixture fixture) {
+        return 1u << static_cast<std::uint32_t>(fixture);
     }
 
-    constexpr std::uint32_t PhaseIndex(std::uint32_t run, std::uint32_t repeats) {
-        return run && ValidRepeats(repeats) ? (run - 1) / repeats : 0;
+    inline constexpr std::uint32_t RangedPhases =
+        Select(Fixture::Archer) | Select(Fixture::Projectile) | Select(Fixture::Concentration) | Select(Fixture::Area);
+
+    constexpr bool ValidSelection(std::uint32_t selection) {
+        return selection && !(selection & ~AllPhases);
+    }
+
+    constexpr std::uint32_t Runs(std::uint32_t repeats, std::uint32_t selection = AllPhases) {
+        if (!ValidRepeats(repeats) || !ValidSelection(selection))
+            return 0;
+        std::uint32_t count = 0;
+        for (std::uint32_t i = 0; i < Phases.size(); ++i)
+            count += (selection & (1u << i)) != 0;
+        return count * repeats;
+    }
+
+    constexpr std::uint32_t PhaseIndex(std::uint32_t run, std::uint32_t repeats, std::uint32_t selection = AllPhases) {
+        if (!run || run > Runs(repeats, selection))
+            return static_cast<std::uint32_t>(Phases.size());
+        auto ordinal = (run - 1) / repeats;
+        for (std::uint32_t i = 0; i < Phases.size(); ++i)
+            if (selection & (1u << i)) {
+                if (!ordinal)
+                    return i;
+                --ordinal;
+            }
+        return static_cast<std::uint32_t>(Phases.size());
     }
 
     constexpr std::uint32_t Repetition(std::uint32_t run, std::uint32_t repeats) {
         return run && ValidRepeats(repeats) ? (run - 1) % repeats + 1 : 0;
     }
 
-    constexpr const Phase* ForRun(std::uint32_t run, std::uint32_t repeats) {
-        return run && run <= Runs(repeats) ? &Phases[PhaseIndex(run, repeats)] : nullptr;
+    constexpr const Phase* ForRun(std::uint32_t run, std::uint32_t repeats, std::uint32_t selection = AllPhases) {
+        const auto index = PhaseIndex(run, repeats, selection);
+        return index < Phases.size() ? &Phases[index] : nullptr;
     }
 
     constexpr std::uint32_t ExpectedSteps(Fixture fixture) {
@@ -113,12 +141,13 @@ namespace mod::combat_tests::suite {
         return elapsed >= deadline;
     }
 
-    constexpr float ActiveSeconds(std::uint32_t repeats) {
-        if (!ValidRepeats(repeats))
+    constexpr float ActiveSeconds(std::uint32_t repeats, std::uint32_t selection = AllPhases) {
+        if (!ValidRepeats(repeats) || !ValidSelection(selection))
             return 0;
         float seconds = 0;
-        for (const auto& phase : Phases)
-            seconds += phase.seconds * repeats;
+        for (std::uint32_t i = 0; i < Phases.size(); ++i)
+            if (selection & (1u << i))
+                seconds += Phases[i].seconds * repeats;
         return seconds;
     }
 

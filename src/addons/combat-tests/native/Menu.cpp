@@ -54,9 +54,12 @@ namespace {
             ImGuiMCP::TextWrapped("Report: %s", test.reportPath);
         if (test.suite) {
             for (std::uint32_t phase = 0; phase < mod::combat_tests::suite::Phases.size(); ++phase) {
+                if (!(test.suiteSelection & (1u << phase)))
+                    continue;
                 std::uint32_t passed = 0, failed = 0, inconclusive = 0;
-                for (std::uint32_t i = phase * test.suiteRepeats;
-                     i < test.finishedRuns && i < (phase + 1) * test.suiteRepeats; ++i) {
+                for (std::uint32_t i = 0; i < test.finishedRuns; ++i) {
+                    if (mod::combat_tests::suite::PhaseIndex(i + 1, test.suiteRepeats, test.suiteSelection) != phase)
+                        continue;
                     RunResult row;
                     if (runner.readResult(i, &row)) {
                         passed += row.verdict == mod::combat_tests::suite::Verdict::Passed;
@@ -107,7 +110,7 @@ namespace {
             char title[64];
             if (test.suite)
                 std::snprintf(title, sizeof(title), "%s %u/%u##Run%u",
-                              mod::combat_tests::suite::ForRun(i + 1, test.suiteRepeats)->name,
+                              mod::combat_tests::suite::ForRun(i + 1, test.suiteRepeats, test.suiteSelection)->name,
                               mod::combat_tests::suite::Repetition(i + 1, test.suiteRepeats), test.suiteRepeats, i + 1);
             else
                 std::snprintf(title, sizeof(title), "Run %u details", i + 1);
@@ -181,9 +184,11 @@ namespace {
 
         static bool suite = false;
         static int suiteRepeats = static_cast<int>(mod::combat_tests::suite::DefaultRepeats);
+        static std::uint32_t suiteSelection = mod::combat_tests::suite::AllPhases;
         if (test.active) {
             suite = test.suite != 0;
             suiteRepeats = static_cast<int>(test.suiteRepeats);
+            suiteSelection = test.suiteSelection;
         }
         const auto& scenario = mod::test_rules::Scenarios[encounter];
         ImGuiMCP::SeparatorText(scenario.name);
@@ -202,14 +207,30 @@ namespace {
             EndDisabled(test.active != 0);
             const auto count = static_cast<std::uint32_t>(suiteRepeats);
             ImGuiMCP::Text("Combined | %u runs | %.0f active minutes plus setup",
-                           mod::combat_tests::suite::Runs(count),
-                           mod::combat_tests::suite::ActiveSeconds(count) / 60);
+                           mod::combat_tests::suite::Runs(count, suiteSelection),
+                           mod::combat_tests::suite::ActiveSeconds(count, suiteSelection) / 60);
             ImGuiMCP::TextWrapped("One consolidated report. Leave other followers outside the arena.");
-            if (ImGuiMCP::CollapsingHeader("Suite phases"))
-                for (const auto& phase : mod::combat_tests::suite::Phases) {
-                    ImGuiMCP::Text("%s | %d x %.0f s", phase.name, suiteRepeats, phase.seconds);
-                    ImGuiMCP::TextWrapped("%s", phase.description);
+            BeginDisabled(test.active != 0);
+            if (ImGuiMCP::Button("All phases"))
+                suiteSelection = mod::combat_tests::suite::AllPhases;
+            ImGuiMCP::SameLine();
+            if (ImGuiMCP::Button("Ranged and magic"))
+                suiteSelection = mod::combat_tests::suite::RangedPhases;
+            ImGuiMCP::SameLine();
+            if (ImGuiMCP::Button("Clear selection"))
+                suiteSelection = 0;
+            if (ImGuiMCP::CollapsingHeader("Select phases", ImGuiMCP::ImGuiTreeNodeFlags_DefaultOpen))
+                for (std::uint32_t i = 0; i < mod::combat_tests::suite::Phases.size(); ++i) {
+                    const auto& phase = mod::combat_tests::suite::Phases[i];
+                    bool enabled = (suiteSelection & (1u << i)) != 0;
+                    if (ImGuiMCP::Checkbox(phase.name, &enabled))
+                        suiteSelection = enabled ? suiteSelection | (1u << i) : suiteSelection & ~(1u << i);
+                    ImGuiMCP::SameLine();
+                    ImGuiMCP::TextDisabled("%d x %.0f s", suiteRepeats, phase.seconds);
                 }
+            EndDisabled(test.active != 0);
+            if (!suiteSelection)
+                ImGuiMCP::TextWrapped("Select at least one phase.");
         } else if (mod::test_rules::DirectEncounter(encounter))
             ImGuiMCP::TextDisabled("Ends on evidence | Up to 20 active seconds | One explicit request per action");
         else
@@ -376,10 +397,10 @@ namespace {
             repeats = std::clamp(repeats, 1, static_cast<int>(mod::test_rules::MaxRuns));
             EndDisabled(test.active != 0);
         }
-        BeginDisabled(!eligible || !test.canStart);
+        BeginDisabled(!eligible || !test.canStart || (runSuite && !suiteSelection));
         if (ImGuiMCP::Button(runSuite ? "Start Combined suite" : "Start test")) {
             if (runSuite)
-                runner.startDefenderSuite(selected, static_cast<std::uint32_t>(suiteRepeats));
+                runner.startDefenderSuite(selected, static_cast<std::uint32_t>(suiteRepeats), suiteSelection);
             else
                 runner.startSeries(selected, encounter,
                                    mod::test_rules::DirectEncounter(encounter) ? 3
@@ -387,7 +408,7 @@ namespace {
                                                                                : 0,
                                    static_cast<std::uint32_t>(repeats));
         }
-        EndDisabled(!eligible || !test.canStart);
+        EndDisabled(!eligible || !test.canStart || (runSuite && !suiteSelection));
         if (test.active) {
             ImGuiMCP::SameLine();
             if (ImGuiMCP::Button("Abort and restore"))
@@ -395,7 +416,7 @@ namespace {
             ImGuiMCP::Text("Run %u / %u", test.run, test.requestedRuns);
             if (test.suite)
                 ImGuiMCP::Text("%s | repetition %u/%u",
-                               mod::combat_tests::suite::ForRun(test.run, test.suiteRepeats)->name,
+                               mod::combat_tests::suite::ForRun(test.run, test.suiteRepeats, test.suiteSelection)->name,
                                mod::combat_tests::suite::Repetition(test.run, test.suiteRepeats), test.suiteRepeats);
             ImGuiMCP::Text("%.1f / %.0f active seconds | Opponent attacks %u", test.elapsed, test.duration,
                            test.attacks);
@@ -426,7 +447,8 @@ namespace {
             BeginDisabled(!test.canStart || !test.subject);
             if (ImGuiMCP::Button(test.suite ? "Repeat Combined suite" : "Repeat last test")) {
                 if (test.suite)
-                    runner.startDefenderSuite(test.subject, static_cast<std::uint32_t>(suiteRepeats));
+                    runner.startDefenderSuite(test.subject, static_cast<std::uint32_t>(suiteRepeats),
+                                              test.suiteSelection);
                 else
                     runner.startSeries(test.subject, test.encounter, test.mode, static_cast<std::uint32_t>(repeats));
             }
