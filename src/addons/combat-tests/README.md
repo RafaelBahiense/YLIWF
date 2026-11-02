@@ -21,7 +21,10 @@ Restart Skyrim after installing the DLL.
    needed, and checks equipment and spells after loading.
 
 Each run measures 60 active seconds and restores temporary changes before the
-next repeat. A failed or aborted run stops the series. **Repeat last test** uses
+next repeat. A defeated follower fails that run, then the series continues after
+restoration and observed bleedout recovery. Recovery waits up to 30 active seconds;
+death, invalidation, cancellation or unresolved cleanup stops the series.
+**Repeat last test** uses
 the last follower, encounter and control mode with the selected repeat count.
 **Full report** compares runs in a table with expandable per-run diagnostics.
 The menu closes at startup and reopens on its last selected page after the series
@@ -101,8 +104,9 @@ accepts 1–100, default 1. The suite fixes the control mode to Combined.
 
 One repetition takes **12¼ active minutes**, plus setup and restoration. The menu
 shows the configured duration. Interference settings stay fixed. Every run
-restores the follower before the next setup. A failed or aborted run, or unresolved
-restoration, stops the suite. Completed results remain in one text report and CSV.
+restores the follower before the next setup, including the defeat recovery described
+above. Failed runs remain in the text report and CSV with their original reason;
+continuing does not change their verdict.
 
 Melee baseline verdicts require clean restoration, observed guards and blocked
 hits, and no unresolved action timeout. Tactical phases assess their own coverage:

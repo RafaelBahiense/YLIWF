@@ -14,9 +14,29 @@ namespace mod::test_rules {
     inline constexpr float StartTimeout = 10;
     inline constexpr std::uint32_t ShieldRole = 5;
     inline constexpr std::uint32_t MaxRuns = 100;
-    constexpr bool ContinueSeries(std::uint32_t finished, std::uint32_t requested, bool complete, bool restored,
+    inline constexpr float DefeatRecoveryTimeout = 30;
+
+    constexpr bool RecoverableDefeat(bool running, bool exists, bool dead, bool downed, bool disabled, bool scene) {
+        return running && exists && !dead && downed && !disabled && !scene;
+    }
+
+    constexpr bool RepeatableRun(bool completed, bool defeated, bool cancelled) {
+        return !cancelled && (completed || defeated);
+    }
+
+    enum class DefeatRecovery { Ready, Wait, Review };
+
+    inline DefeatRecovery ObserveDefeatRecovery(bool downed, float health, float elapsed) {
+        if (!std::isfinite(health) || health <= 0)
+            return DefeatRecovery::Review;
+        if (!downed)
+            return DefeatRecovery::Ready;
+        return elapsed < DefeatRecoveryTimeout ? DefeatRecovery::Wait : DefeatRecovery::Review;
+    }
+
+    constexpr bool ContinueSeries(std::uint32_t finished, std::uint32_t requested, bool repeatable, bool restored,
                                   std::uint32_t limit = MaxRuns) {
-        return requested > 0 && requested <= limit && finished < requested && complete && restored;
+        return requested > 0 && requested <= limit && finished < requested && repeatable && restored;
     }
     enum class PositionAction { Complete, Move, Wait };
     enum class StartDecision { Wait, Ready, Failed };

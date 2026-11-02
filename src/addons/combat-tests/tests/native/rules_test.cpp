@@ -56,6 +56,30 @@ TEST_CASE("Repeat series advance only after successful restoration") {
     CHECK_FALSE(ContinueSeries(0, 101, true, true));
 }
 
+TEST_CASE("A recovered defeat advances the series without converting the failed run to a pass") {
+    using namespace mod::test_rules;
+    CHECK(RecoverableDefeat(true, true, false, true, false, false));
+    CHECK_FALSE(RecoverableDefeat(false, true, false, true, false, false));
+    CHECK_FALSE(RecoverableDefeat(true, true, true, true, false, false));
+    CHECK_FALSE(RecoverableDefeat(true, true, false, true, true, false));
+    CHECK_FALSE(RecoverableDefeat(true, true, false, true, false, true));
+    CHECK(ContinueSeries(17, 26, RepeatableRun(false, true, false), true));
+    CHECK_FALSE(ContinueSeries(17, 26, RepeatableRun(false, true, false), false));
+    CHECK_FALSE(ContinueSeries(17, 26, RepeatableRun(false, true, true), true));
+    CHECK_FALSE(ContinueSeries(17, 26, RepeatableRun(false, false, false), true));
+    CHECK_FALSE(ContinueSeries(26, 26, RepeatableRun(false, true, false), true));
+}
+
+TEST_CASE("Defeat restoration waits for observed recovery and stops on an expired recovery window") {
+    using namespace mod::test_rules;
+    CHECK(ObserveDefeatRecovery(true, 500, 0) == DefeatRecovery::Wait);
+    CHECK(ObserveDefeatRecovery(true, 500, 29.9f) == DefeatRecovery::Wait);
+    CHECK(ObserveDefeatRecovery(true, 500, 30) == DefeatRecovery::Review);
+    CHECK(ObserveDefeatRecovery(false, 500, 30) == DefeatRecovery::Ready);
+    CHECK(ObserveDefeatRecovery(false, 0, 1) == DefeatRecovery::Review);
+    CHECK(ObserveDefeatRecovery(false, -1, 1) == DefeatRecovery::Review);
+}
+
 TEST_CASE("Follow recovery persists command receipts and rejects malformed ownership") {
     using namespace mod::test_rules;
     Plan plan{.subject = 1, .health = 100, .generation = 2};

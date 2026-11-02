@@ -47,6 +47,8 @@ namespace {
     bool restoreCombatStopped = false;
     bool defenseBegun = false;
     bool restoredForReview = false;
+    bool recoverableDefeat = false;
+    float defeatRecoveryElapsed = 0;
     bool previousBlock = false, previousBash = false, previousAttack = false, unsupported = false;
     Phase outcome = Phase::Complete;
     float phaseTime = 0, previousHealth = 0, enemyHealth = 0;
@@ -721,7 +723,7 @@ namespace {
         snapshot.finishedRuns = static_cast<std::uint32_t>(results.size());
         nextRun = mod::test_rules::ContinueSeries(
             snapshot.finishedRuns, requestedRuns,
-            result == Phase::Complete && !abortRequested, !plan.subject,
+            mod::test_rules::RepeatableRun(result == Phase::Complete, recoverableDefeat, abortRequested), !plan.subject,
             defenderSuite ? mod::combat_tests::suite::Runs(mod::combat_tests::suite::MaxRepeats)
                           : mod::test_rules::MaxRuns);
         csv.flush();
@@ -773,6 +775,8 @@ namespace {
             return;
         }
         const bool defenseFault = defenseEnd == 2;
+        if (!defenseFault)
+            plan.guardPhase = 0;
         const bool unverifiedEnemy = (enemy && !OwnedEnemy(enemy)) || (auxiliary && !OwnedEnemy(auxiliary));
         if (OwnedEnemy(auxiliary)) {
             auxiliary->StopCombat();
@@ -870,13 +874,29 @@ namespace {
                    "manual review.");
             return;
         }
+        if (recoverableDefeat) {
+            const auto recovery =
+                mod::test_rules::ObserveDefeatRecovery(subject->AsActorState()->IsBleedingOut(),
+                                                       Value(subject, RE::ActorValue::kHealth), defeatRecoveryElapsed);
+            if (recovery == mod::test_rules::DefeatRecovery::Wait) {
+                Status("Defeated run failed; resources restored, waiting for bleedout recovery before continuing.");
+                return;
+            }
+            if (recovery == mod::test_rules::DefeatRecovery::Review) {
+                Finish(Phase::Failed,
+                       "Defeat recovery unconfirmed; remaining runs stopped and recovery retained for review.");
+                return;
+            }
+        }
         origin->Disable();
         origin->SetDelete(true);
         plan = {};
         Finish(outcome,
                outcome == Phase::Complete  ? "Test complete; position, resources and role restored."
                : outcome == Phase::Aborted ? "Test aborted; temporary changes restored."
-               : "Test invalidated; temporary changes restored.");
+               : recoverableDefeat
+                   ? "Follower defeated; run failed, temporary changes restored and bleedout recovery confirmed."
+                   : "Test invalidated; temporary changes restored.");
     }
 
     void Stop(Phase result, const char* reason) {
@@ -1237,6 +1257,9 @@ namespace {
             return;
         }
         if (snapshot.phase == Phase::Restoring) {
+            auto* subject = Actor(plan.subject);
+            if (recoverableDefeat && subject && subject->AsActorState()->IsBleedingOut())
+                defeatRecoveryElapsed += delta;
             Restore();
             return;
         }
@@ -1260,6 +1283,10 @@ namespace {
         Subject state;
         if (!subject || subject->IsDead() || subject->AsActorState()->IsBleedingOut() ||
             Value(subject, RE::ActorValue::kHealth) <= 0 || subject->IsDisabled() || subject->GetCurrentScene()) {
+            recoverableDefeat = mod::test_rules::RecoverableDefeat(
+                snapshot.phase == Phase::Running, subject != nullptr, subject && subject->IsDead(),
+                subject && (subject->AsActorState()->IsBleedingOut() || Value(subject, RE::ActorValue::kHealth) <= 0),
+                subject && subject->IsDisabled(), subject && subject->GetCurrentScene());
             Stop(Phase::Failed,
                  mod::combat_tests::metrics::Unavailable(
                      subject != nullptr, subject && subject->IsDead(),
@@ -1601,6 +1628,8 @@ namespace {
         defenseBegun = false;
         restoredForReview = false;
         recheckRequested = false;
+        recoverableDefeat = false;
+        defeatRecoveryElapsed = 0;
         previousBlock = previousBash = previousAttack = false;
         behaviorTimes.clear();
         hitCounts = {};
@@ -1825,6 +1854,8 @@ namespace {
         runtimeBase = nullptr;
         fixtureBases = {};
         initialized = abortRequested = beginPending = beginIssued = unsupported = false;
+        recoverableDefeat = false;
+        defeatRecoveryElapsed = 0;
         originalRecords.clear();
         defenseBegun = false;
         restoredForReview = false;
