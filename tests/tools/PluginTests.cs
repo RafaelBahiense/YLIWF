@@ -78,7 +78,7 @@ public sealed partial class PluginTests : TestWorkspace
         var esp = CreatePlugin();
         Artifacts.ValidateEsp(esp);
         using var loaded = SkyrimMod.CreateFromBinaryOverlay(esp, SkyrimRelease.SkyrimSE);
-        Assert.Equal(187, loaded.EnumerateMajorRecords().Count());
+        Assert.Equal(228, loaded.EnumerateMajorRecords().Count());
         Assert.True(loaded.Factions.Single(faction => faction.FormKey == new FormKey(loaded.ModKey, 0x995)).Flags.HasFlag(Faction.FactionFlag.HiddenFromPC));
         Assert.Equal(ModInfo.Identity.Author, loaded.ModHeader.Author);
         Assert.Equal("DialogueFollower", loaded.Quests.Single(q => q.FormKey == FormKey.Factory("0750BA:Skyrim.esm")).EditorID);
@@ -102,11 +102,12 @@ public sealed partial class PluginTests : TestWorkspace
         var overridesKey = new FormKey(loaded.ModKey, 0xA09);
         var activityKey = new FormKey(loaded.ModKey, 0xA08);
         var overrides = loaded.FormLists.Single(record => record.FormKey == overridesKey);
-        Assert.Equal(62, overrides.Items.Count);
+        Assert.Equal(94, overrides.Items.Count);
         Assert.Equal(new FormKey(loaded.ModKey, 0x9D0), overrides.Items[0].FormKey);
-        Assert.Equal(new FormKey(loaded.ModKey, 0xA20), overrides.Items[24].FormKey);
-        Assert.Equal(FormKey.Factory("109124:Skyrim.esm"), overrides.Items[60].FormKey);
-        Assert.Equal(FormKey.Factory("05C851:Skyrim.esm"), overrides.Items[61].FormKey);
+        Assert.Equal(new FormKey(loaded.ModKey, 0xB00), overrides.Items[24].FormKey);
+        Assert.Equal(new FormKey(loaded.ModKey, 0xA20), overrides.Items[56].FormKey);
+        Assert.Equal(FormKey.Factory("109124:Skyrim.esm"), overrides.Items[92].FormKey);
+        Assert.Equal(FormKey.Factory("05C851:Skyrim.esm"), overrides.Items[93].FormKey);
         Assert.Equal(Faction.FactionFlag.HiddenFromPC, loaded.Factions.Single(record => record.FormKey == activityKey).Flags);
         Assert.All(quest.Aliases.Where(alias => alias.ID != 1), alias => Assert.Equal(overridesKey, alias.CombatOverridePackageList.FormKey));
         Assert.Equal(FormKey.Null, quest.Aliases.Single(alias => alias.ID == 1).CombatOverridePackageList.FormKey);
@@ -190,7 +191,7 @@ public sealed partial class PluginTests : TestWorkspace
             Assert.Contains(markers, marker => marker.FormKey == target && (marker.MajorRecordFlagsRaw & 0x400) != 0);
         }
         var quest = loaded.Quests.Single(record => record.FormKey == FormKey.Factory("0750BA:Skyrim.esm"));
-        Assert.All(quest.Aliases.Where(alias => alias.ID != 1), alias => Assert.Equal(new FormKey(loaded.ModKey, 0x9D0), alias.PackageData[0].FormKey));
+        Assert.All(quest.Aliases.Where(alias => alias.ID != 1), alias => Assert.Equal(new FormKey(loaded.ModKey, 0xB00), alias.PackageData[0].FormKey));
     }
 
     [Fact]

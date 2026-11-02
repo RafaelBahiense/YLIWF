@@ -149,8 +149,10 @@ namespace mod::combat_roles {
             result.unavailable = "This quest controller does not expose combat roles";
         else if (!quest_policies::Allows(actor, quest_policies::Action::Combat))
             result.unavailable = quest_policies::Inspect(actor).reason;
-        else if (!actor->Is3DLoaded())
+        else if (!actor->Is3DLoaded()) {
+            result.needsLoad = true;
             result.unavailable = "Load the follower to inspect equipment and spells";
+        }
         if (!result.unavailable.empty())
             return result;
 

@@ -35,6 +35,40 @@ For healing, `combat/HealingSpells` reads costs, effects and engine cast checks.
 `combat/HealingForecast.h` estimates restoration through named casting, healing
 and regeneration steps. `combat/Healer.cpp` coordinates execution and receipts.
 
+`combat/DefenderObservation` reads bounded combat-group threats on the game thread.
+`DefenderTactics.h` selects approach, guard, interrupt, recovery, counter or
+repositioning from ordinary snapshots. `ShieldDefender` coordinates each follower's
+style and movement; the combat worker hook reconciles style ownership against a
+fresh published decision. Ordinary attacks and combos remain with combat AI.
+
+`DefenderMovement` owns eight independent marker/package slots. It checks loaded
+navmesh, direct clearance and other threats before applying a bounded movement
+intent. Skyrim performs route finding. Failed movement yields to ordinary combat
+AI; neither navmesh projection nor a selected package proves arrival. Movement
+releases on restrictions, role changes and loss of combat eligibility.
+Actor displacement drives progress checks. Stalled destinations are temporarily
+excluded; bounded lateral waypoints can open a route around an obstruction, and
+repeated failure yields to ordinary AI. Body-width rays at two heights screen
+clearance without claiming a capsule sweep. Guard preparation and observed guards
+use walking packages. Acquisition checks actual displacement speed, sprint state
+and weapon readiness; releasing a package does not prove that the actor stopped.
+Hostile spells with a live current spell in startup/ready/charging states count
+as preparation. Idle equipped spells and unknown/interrupt states do not establish
+an imminent cast, and release does not establish projectile-flight timing.
+
+`combat/actions/Dispatch` owns experimental native action dispatch, resolved
+intent validation and dispatch receipts for guard, release and bashes. Its hooks
+and external-attack reservation mailbox support one actor scope; engine dispatch
+runs on the main thread. `GuardExecution`, `BashExecution` and `RightAttackExecution` own acknowledgement,
+completion, interruption cleanup and unresolved ownership. Their state machines
+consume ordinary snapshots and a dispatch callback, so tests can exercise them
+without Skyrim. `Samples` reads the engine state; graph callbacks touch only the
+keyed animation mailbox. `DefenderActions` supplies tactical intent, permission and
+stamina policy, and maps transitions into diagnostic reports. Dispatch acceptance
+does not establish animation start or completion. The diagnostic host also accepts
+explicit primitive requests with role tactics bypassed; live actor permission and
+ownership checks still apply.
+
 ESP records are generated from C# so aliases, packages, dialogue and bindings can
 be reviewed and versioned with their implementations. Creation Kit and xEdit
 support inspection. Dependency pins and release source archives identify

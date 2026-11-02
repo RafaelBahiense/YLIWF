@@ -113,6 +113,7 @@ public static class SourceSnapshot
             files["licenses/" + port + ".txt"] = notices;
         }
         files["licenses/CommonLibSSE-NG.txt"] = Path.Combine(commonLib, ProjectPaths.License);
+        files["licenses/Precision.txt"] = Path.Combine(root, "src/native/combat/integrations/Precision-LICENSE.txt");
         foreach (var (name, path) in files.Where(file => file.Key.StartsWith("licenses/", StringComparison.Ordinal)))
         {
             if (!File.Exists(path))
@@ -279,7 +280,7 @@ public static class SourceSnapshot
         var files = new Dictionary<string, string>(StringComparer.Ordinal);
         // fmt permits omitting its notice for compiled code embedded in a binary.
         // Its source and notice remain in the corresponding source archive.
-        foreach (var dependency in Ports.Prepend("CommonLibSSE-NG").Where(name => name != "fmt"))
+        foreach (var dependency in Ports.Prepend("CommonLibSSE-NG").Append("Precision").Where(name => name != "fmt"))
         {
             var name = "licenses/" + dependency + ".txt";
             var entry = archive.GetEntry(name) ?? throw new InvalidDataException($"Missing dependency notice: {dependency}");

@@ -163,7 +163,8 @@ public sealed class PackagingTests : TestWorkspace
         Assert.True(File.ReadAllBytes(sourceArchive).SequenceEqual(originalSourceArchive), "Missing or empty notice changed the existing source archive");
         File.WriteAllText(installedFmtNotice, originalFmtNotice);
         var dependencyNotices = SourceSnapshot.ExtractBinaryNotices(sourceArchive, Path.Combine(temporary, "notices"));
-        Assert.True(dependencyNotices.Count == 4 && !dependencyNotices.ContainsKey("licenses/fmt.txt"), "Binary notice selection did not honor fmt's exception");
+        Assert.True(dependencyNotices.Count == 5 && !dependencyNotices.ContainsKey("licenses/fmt.txt") &&
+            dependencyNotices.ContainsKey("licenses/Precision.txt"), "Binary notices must include Precision and honor fmt's exception");
     }
 
     [Fact]

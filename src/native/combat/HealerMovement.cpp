@@ -186,4 +186,16 @@ namespace mod::healer_movement {
         currentWorld = nullptr;
         refreshed = std::chrono::steady_clock::time_point::min();
     }
+
+    std::optional<Point> Ground(RE::Actor* actor, Point desired) {
+        if (!actor || !actor->Is3DLoaded())
+            return {};
+        Refresh(actor);
+        const auto point = formation_ground::Project(desired, triangles);
+        if (!point)
+            return {};
+        const auto sight =
+            healing_geometry::From(actor, {point->x, point->y, point->z + actor->GetHeight() * 0.8f}, actor);
+        return sight.available && sight.clear ? point : std::nullopt;
+    }
 }

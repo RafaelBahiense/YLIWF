@@ -7,10 +7,25 @@ namespace yliwf::testing {
     inline constexpr std::uint32_t Version = 1;
     inline constexpr char QueryExport[] = "YLIWF_GetCombatTestHost";
 
+    enum class CommandState : std::uint32_t { Unknown, Pending, Succeeded, Failed };
+
     struct Subject {
         std::uint32_t size = sizeof(Subject), managed = 0, allowed = 0, role = 0;
         char reason[192]{}, behavior[192]{};
         std::uint32_t eligibleRoles = 0;
+    };
+
+    enum class AttackCommitment : std::uint32_t { Clear, Active, Finishing };
+    enum class BashAnimationEvent : std::uint32_t { Started, Ended, Interrupted };
+
+    enum class PrimitiveAction : std::uint32_t { Guard, Release, Bash, PowerBash, RightAttack };
+
+    enum class AttackAnimationEvent : std::uint32_t {
+        Started,
+        Ended,
+        Interrupted,
+        ConflictingStarted,
+        ConflictingEnded
     };
 
     struct Host {
@@ -22,6 +37,34 @@ namespace yliwf::testing {
         std::uint32_t (*endDefense)(std::uint32_t actor, std::uint32_t token, std::uint32_t savedPhase) = nullptr;
         // Thread-safe, engine-free recovery state; permitted during co-save writing.
         std::uint32_t (*defenseState)(std::uint32_t actor, std::uint32_t token) = nullptr;
+        // Restore requests require the captured command sequence; newer commands retain priority.
+        std::uint32_t (*setFollowing)(std::uint32_t actor, bool following, std::uint32_t expected) = nullptr;
+        // Requests are observed without replaying them.
+        CommandState (*commandState)(std::uint32_t request) = nullptr;
+        // Thread-safe and engine-free; actor/token/sequence ownership is checked on every call.
+        // Finishing retains ownership while blocking new offensive actions.
+        bool (*setAttackCommitment)(std::uint32_t actor, std::uint32_t token, std::uint32_t sequence,
+                                    AttackCommitment phase) = nullptr;
+        // kind: 0 off, 1 normal, 2 power; configured before guard acquisition.
+        // Power requires a standalone test idle and the live power-root condition gate.
+        bool (*setDefensiveBash)(std::uint32_t actor, std::uint32_t token, std::uint32_t kind, std::uint32_t idle,
+                                 std::uint32_t gate) = nullptr;
+        // Engine-free graph evidence; read a request ID and return it unchanged with the event.
+        std::uint32_t (*bashRequest)(std::uint32_t actor, std::uint32_t token) = nullptr;
+        bool (*bashAnimation)(std::uint32_t actor, std::uint32_t token, std::uint32_t request,
+                              BashAnimationEvent event) = nullptr;
+        // Explicit primitive requests bypass role tactics. Acceptance queues one
+        // request; observe reports its engine outcome and lifecycle evidence.
+        std::uint32_t (*beginDirect)(std::uint32_t actor, std::uint32_t token) = nullptr;
+        bool (*requestDirect)(std::uint32_t actor, std::uint32_t token, PrimitiveAction action) = nullptr;
+        std::uint32_t (*attackRequest)(std::uint32_t actor, std::uint32_t token) = nullptr;
+        bool (*attackAnimation)(std::uint32_t actor, std::uint32_t token, std::uint32_t request,
+                                AttackAnimationEvent event) = nullptr;
+        std::uint32_t observationSize = 0;
+        // Main-thread, active actor/token only. Replaces the spectator tether
+        // with an anchor/radius in the same area until teardown or revert.
+        bool (*setMovementBounds)(std::uint32_t actor, std::uint32_t token, std::uint32_t anchor,
+                                  float radius) = nullptr;
     };
 
     struct DefenderObservation {
@@ -42,8 +85,37 @@ namespace yliwf::testing {
         char guardEvent[96]{};
         std::uint32_t guardSuspended = 0, blockReadable = 0, wantsBlock = 0, startRecovering = 0, releaseRejected = 0;
         float startStaminaFraction = -1;
+        std::uint32_t dodgeDeferrals = 0, dodgeInterruptions = 0, dodgeResumes = 0;
+        std::uint32_t attackDeferrals = 0, attackInterruptions = 0, attackResumes = 0;
+        std::uint32_t releaseDeferrals = 0, blockHitReadable = 0, blockHit = 0, graphWantReadable = 0;
+        std::int32_t graphWantBlock = -1;
+        float releaseWait = 0, releaseWaitPeak = 0;
+        // A missed start is recovered only after interrupted guard cleanup and a verified resume.
+        std::uint32_t recoveredInterruptTimeouts = 0;
+        std::uint32_t nativeBashRequests = 0, nativeBashAccepted = 0, nativeBashObserved = 0, nativeBashCompleted = 0,
+                      nativeBashRejected = 0, nativeBashTimeouts = 0, bashPhase = 0;
+        char bashStatus[128]{};
+        std::uint32_t powerBashRequests = 0, powerBashAccepted = 0, powerBashObserved = 0, powerBashCompleted = 0,
+                      powerBashRejected = 0, powerBashTimeouts = 0;
+        std::uint32_t handoffAttackRejections = 0;
+        std::uint32_t nativeBashInterrupted = 0, powerBashInterrupted = 0;
+        std::uint32_t bashGraphStarts = 0, bashGraphEnds = 0, bashNativeStarts = 0;
+        std::uint32_t rightAttackRequests = 0, rightAttackAccepted = 0, rightAttackObserved = 0,
+                      rightAttackCompleted = 0, rightAttackInterrupted = 0, rightAttackRejected = 0,
+                      rightAttackTimeouts = 0, rightAttackPhase = 0;
+        std::uint32_t attackGraphStarts = 0, attackGraphEnds = 0, attackNativeStarts = 0, attackRecoveryCompletions = 0;
+        char rightAttackStatus[192]{};
+        std::uint32_t intent = 0, motion = 0, threatKind = 0, threatCount = 0, moving = 0;
+        std::uint32_t movementRequests = 0, movementFailures = 0, precisionAvailable = 0, precisionCallbacks = 0;
+        float weaponReach = 0;
+        std::uint32_t precisionIncoming = 0, precisionOutgoing = 0;
+        std::uint32_t movementStalls = 0, movementDetours = 0, movementStatus = 0, guardPreparing = 0;
+        float destinationX = 0, destinationY = 0, destinationZ = 0, movementProgress = 0, movementWait = 0;
+        float guardLocomotionSpeed = -1;
+        std::uint32_t guardLocomotionReady = 0;
+        std::uint32_t threatVisible = 0, threatAttacking = 0, threatPreparing = 0;
     };
 
     using QueryHost = const Host* (*)(std::uint32_t);
-    static_assert(sizeof(Subject) == 404 && sizeof(Host) == 56);
+    static_assert(sizeof(Subject) == 404 && sizeof(Host) == 152);
 }

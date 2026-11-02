@@ -15,4 +15,6 @@ namespace mod::healing_geometry {
 
     Sight Check(RE::Actor* caster, RE::Actor* target);
     Sight From(RE::Actor* caster, const RE::NiPoint3& origin, RE::Actor* target);
+    Sight Segment(RE::Actor* actor, const RE::NiPoint3& from, const RE::NiPoint3& to);
+    bool Corridor(RE::Actor* actor, const RE::NiPoint3& destination);
 }

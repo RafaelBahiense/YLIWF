@@ -1,177 +1,153 @@
 #include "DefenderActions.h"
 #include "DefenderActionRules.h"
+#include "DefensiveBashRules.h"
+#include "actions/Samples.h"
+#include "actions/Dispatch.h"
 #include "ShieldDefender.h"
+#include "DefenderMovement.h"
 #include "CombatRoles.h"
 #include "CombatOrders.h"
 #include "followers/QuestPolicies.h"
 #include "followers/ControllerRuntime.h"
 #include "diagnostics/Debug.h"
-#include <atomic>
-#include <array>
 #include <chrono>
 #include <mutex>
+#include <utility>
 
 namespace mod::defender_actions {
     namespace {
         using namespace defender_action_rules;
+        using namespace combat_actions::guard_rules;
+        using combat_actions::Dispatch;
+        using combat_actions::SelectionRejected;
         using Clock = std::chrono::steady_clock;
-        using Action = RE::BGSDefaultObjectManager::DefaultObject;
-        std::atomic_bool installed{false};
-        std::atomic_uint32_t leasedActor{0}, published{0};
-        std::atomic_uint64_t expires{0};
-        std::atomic_uint32_t actions{0}, attacks{0}, rejected{0}, engineRejected{0}, lastAction{0}, foreignReady{0};
-        std::atomic_uint32_t blockRequests{0}, bashRequests{0}, unknownLeftRequests{0};
-        std::array<RE::BGSAction*, 6> offensive{};
-        RE::BGSAction* leftAttack = nullptr;
-        thread_local bool issuing = false;
-        thread_local RE::TESActionData* issuedData = nullptr;
-
-        struct DispatchEvidence {
-            bool seen = false, returned = false;
-            bool rejectedBeforeDispatch = false;
-            std::int32_t result = -1;
-            std::uint32_t flags = 0, validationMask = 0;
-            std::string event;
-        };
-
-        thread_local DispatchEvidence evidence;
-        SKSE::Trampoline trampoline{"YLIWF Defender actions"};
-        REL::Relocation<bool (*)(void*, RE::BGSActionData*)> previous;
-        REL::Relocation<bool (*)(RE::TESActionData*)> previousProcess;
-        REL::Relocation<bool (*)(void*, RE::BGSActionData*)> previousResolved;
-        REL::Relocation<bool (*)(void*, RE::BGSActionData*)> previousSelection;
-        bool processProtocol = false;
-        bool selectionProtocol = false, resolvedProtocol = false;
+        combat_actions::DispatchEvidence evidence;
         std::mutex mutex;
+        combat_actions::BashExecution bashExecution;
+        combat_actions::RightAttackExecution attackExecution;
 
         struct Lease {
             std::uint32_t actor = 0, token = 0, readyEpoch = 0;
             Mode mode = Mode::Styles;
-            Phase phase = Phase::Idle;
+            combat_actions::GuardExecution guard;
             bool closing = false, armed = true, fault = false;
-            bool releaseRejected = false, missedStart = false;
-            bool releaseCompleted = false;
-            float elapsed = 0, cooldown = 0;
+            bool direct = false, directGuard = false, directBash = false, directAttack = false;
+            bool dodgeDeferred = false, dodgeInterrupted = false, dodgeCleanupCompleted = false;
+            bool attackDeferred = false, attackInterrupted = false, attackCleanupCompleted = false;
+            float cooldown = 0, bashCooldown = 0;
+            MovementHandoff movementHandoff;
+            RE::NiPoint3 previousPosition{};
+            bool positionKnown = false;
             Clock::time_point lastTick{};
             Observation observation;
+            defensive_bash_rules::Kind bashKind = defensive_bash_rules::Kind::Off;
+            std::uint32_t bashIdle = 0, bashGate = 0;
         } lease;
 
-        std::uint64_t Milliseconds() {
-            return static_cast<std::uint64_t>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count());
+        combat_actions::Receipt Send(RE::Actor* actor, combat_actions::Intent intent) {
+            const auto receipt = combat_actions::Send(actor, lease.token, intent, lease.bashIdle, lease.bashGate);
+            evidence = receipt.evidence;
+            if (receipt.attempted) {
+                lease.observation.dispatch = static_cast<std::uint32_t>(receipt.outcome);
+                lease.observation.validationMask = evidence.validationMask;
+                lease.observation.processFlags = evidence.flags;
+                lease.observation.processResult = evidence.result;
+                lease.observation.processReturned = evidence.seen ? static_cast<std::int32_t>(evidence.returned) : -1;
+                if (intent == combat_actions::Intent::Guard || intent == combat_actions::Intent::RightAttack)
+                    lease.observation.guardEvent = evidence.event;
+            }
+            return receipt;
         }
 
-        bool Validate(void* manager, RE::BGSActionData* data) {
-            const bool allowed = previous(manager, data);
-            if (!data || !data->source || data->source->GetFormID() != leasedActor.load() || !data->action)
-                return allowed;
-            ++actions;
-            if (data == issuedData)
-                evidence.validationMask |= allowed ? InitialAllowed : InitialRejected;
-            lastAction = data->action->GetFormID();
-            if (!allowed)
-                ++engineRejected;
-            const bool attack = std::ranges::find(offensive, data->action) != offensive.end();
-            if (attack)
-                ++attacks;
-            const auto decision = published.load();
-            if (allowed && attack && decision && Milliseconds() <= expires.load()) {
-                ++rejected;
+        bool ObserveAttack(RE::Actor* actor, float delta) {
+            namespace rules = combat_actions::attack_rules;
+            if (attackExecution.Phase() == rules::Phase::Idle)
                 return false;
+            auto sample = combat_actions::ReadAttack(actor);
+            sample.interrupted |= combat_actions::ExternalActive();
+            const auto result = attackExecution.Observe(sample, delta);
+            lease.observation.attackGraphStarts += result.graphStart;
+            lease.observation.attackGraphEnds += result.graphEnd;
+            lease.observation.attackNativeStarts += result.nativeStart;
+            switch (result.step) {
+                case rules::Step::Observed:
+                    ++lease.observation.rightAttackObserved;
+                    lease.observation.rightAttackStatus = "Owned right-hand normal attack observed; awaiting cleanup.";
+                    break;
+                case rules::Step::Finished:
+                    ++lease.observation.rightAttackCompleted;
+                    lease.observation.attackRecoveryCompletions += result.recoveryCompletion;
+                    lease.observation.rightAttackStatus = "Right-hand normal attack completed; cleanup confirmed.";
+                    return false;
+                case rules::Step::Interrupted:
+                    ++lease.observation.rightAttackInterrupted;
+                    lease.observation.rightAttackStatus =
+                        "Right-hand attack interrupted or superseded; cleanup confirmed.";
+                    return false;
+                case rules::Step::Fault:
+                    ++lease.observation.rightAttackTimeouts;
+                    lease.guard.Fail();
+                    lease.fault = true;
+                    lease.observation.status = lease.observation.rightAttackStatus =
+                        "Right-hand attack evidence unresolved; ownership retained. No replay.";
+                    break;
+                case rules::Step::None:
+                    break;
             }
-            return allowed;
+            return true;
         }
 
-        bool SelectAction(void* manager, RE::BGSActionData* data) {
-            const bool allowed = previousSelection(manager, data);
-            if (data && data == issuedData) {
-                evidence.validationMask |= allowed ? SelectionAllowed : SelectionRejected;
-                evidence.rejectedBeforeDispatch |= !allowed && selectionProtocol;
-            }
-            return allowed;
-        }
-
-        bool ValidateResolved(void* manager, RE::BGSActionData* data) {
-            const bool allowed = previousResolved(manager, data);
-            if (data && data == issuedData) {
-                evidence.validationMask |= allowed ? ResolvedAllowed : ResolvedRejected;
-                evidence.rejectedBeforeDispatch |= !allowed && resolvedProtocol;
-            }
-            if (!data || !data->source || data->source->GetFormID() != leasedActor.load() || data->action != leftAttack)
-                return allowed;
-
-            // Selection has populated ActionOutput, but deferred work and graph
-            // dispatch have not started. Reject through normal validation cleanup.
-            // Read the passed event, not actor state or gameplay policy on a worker.
-            const auto* event = data->animEvent.c_str();
-            const auto action = ClassifyLeftAction(event ? event : "");
-            const bool ownGuard = data == issuedData;
-            if (ownGuard)
-                evidence.event = event ? event : "";
-            if (action == LeftAction::Block)
-                ++blockRequests;
-            else if (action == LeftAction::Bash) {
-                ++bashRequests;
-                ++attacks;
-            } else
-                ++unknownLeftRequests;
-
-            const bool suppress = published.load() && Milliseconds() <= expires.load();
-            if (allowed && RejectLeftAction(action, ownGuard, suppress)) {
-                if (action == LeftAction::Bash)
-                    ++rejected;
+        bool ObserveBash(RE::Actor* actor, float delta) {
+            namespace rules = combat_actions::bash_rules;
+            if (bashExecution.Phase() == rules::Phase::Idle)
                 return false;
+            const auto result = bashExecution.Observe(combat_actions::ReadBash(actor), delta);
+            if (result.graphStart)
+                ++lease.observation.bashGraphStarts;
+            if (result.graphEnd)
+                ++lease.observation.bashGraphEnds;
+            if (result.nativeStart)
+                ++lease.observation.bashNativeStarts;
+            switch (result.step) {
+                case rules::Step::Observed:
+                    ++lease.observation.nativeBashObserved;
+                    if (lease.bashKind == defensive_bash_rules::Kind::Power)
+                        ++lease.observation.powerBashObserved;
+                    lease.observation.bashStatus = "Native defensive bash observed; awaiting completion.";
+                    break;
+                case rules::Step::Finished:
+                case rules::Step::Interrupted:
+                    if (result.step == rules::Step::Interrupted) {
+                        ++lease.observation.nativeBashInterrupted;
+                        if (lease.bashKind == defensive_bash_rules::Kind::Power)
+                            ++lease.observation.powerBashInterrupted;
+                        lease.observation.bashStatus =
+                            "Native bash interrupted; cleanup confirmed and control returned.";
+                    } else {
+                        ++lease.observation.nativeBashCompleted;
+                        if (lease.bashKind == defensive_bash_rules::Kind::Power)
+                            ++lease.observation.powerBashCompleted;
+                        lease.observation.bashStatus = "Native defensive bash completed; control returned.";
+                    }
+                    return false;
+                case rules::Step::Fault:
+                    lease.guard.Fail();
+                    lease.fault = true;
+                    ++lease.observation.nativeBashTimeouts;
+                    if (lease.bashKind == defensive_bash_rules::Kind::Power)
+                        ++lease.observation.powerBashTimeouts;
+                    lease.observation.status =
+                        "Native bash acknowledgement/completion unconfirmed; no request replayed.";
+                    lease.observation.bashStatus = lease.observation.status;
+                    break;
+                case rules::Step::None:
+                    break;
             }
-            if (allowed && action == LeftAction::Block && !ownGuard && (data->flags & 3) == 0)
-                ++foreignReady;
-            return allowed;
-        }
-
-        bool ProcessIssued(RE::TESActionData* data) {
-            auto* previousData = issuedData;
-            const bool capture =
-                issuing && !issuedData && data && data->source && data->source->GetFormID() == leasedActor.load();
-            if (capture)
-                issuedData = data;
-            const bool result = previousProcess(data);
-            if (capture) {
-                evidence.seen = true;
-                evidence.returned = result;
-                evidence.result = data->result;
-                evidence.flags = data->flags;
-                issuedData = previousData;
-            }
-            return result;
-        }
-
-        Dispatch Send(RE::Actor* actor, RE::DEFAULT_OBJECT action) {
-            struct Scope {
-                Scope() {
-                    issuing = true;
-                }
-
-                ~Scope() {
-                    issuing = false;
-                }
-            } scope;
-
-            evidence = {};
-            RE::SourceActionMap::DoAction(actor, action);
-            const auto result = ClassifyDispatch(evidence.seen && processProtocol, evidence.returned, evidence.result,
-                                                 evidence.flags, evidence.rejectedBeforeDispatch);
-            lease.observation.dispatch = static_cast<std::uint32_t>(result);
-            lease.observation.validationMask = evidence.validationMask;
-            lease.observation.processFlags = evidence.flags;
-            lease.observation.processResult = evidence.result;
-            lease.observation.processReturned = evidence.seen ? static_cast<std::int32_t>(evidence.returned) : -1;
-            if (action == RE::DEFAULT_OBJECT::kActionLeftAttack)
-                lease.observation.guardEvent = evidence.event;
-            return result;
+            return true;
         }
 
         void Publish(bool value) {
-            expires = Milliseconds() + 250;
-            published = value ? 1 : 0;
+            combat_actions::PublishSuppression(value);
         }
 
         bool Managed(RE::Actor* actor) {
@@ -190,17 +166,19 @@ namespace mod::defender_actions {
         }
 
         void Pump() {
-            if (!leasedActor.load())
+            lease.observation.prepareGuardMovement = false;
+            if (!combat_actions::Active())
                 return;
-            if (lease.phase == Phase::Fault) {
+            if (lease.guard.Read().phase == Phase::Fault) {
                 Publish(false);
                 return;
             }
             auto* actor = RE::TESForm::LookupByID<RE::Actor>(lease.actor);
             const auto now = Clock::now();
             const float delta = std::clamp(std::chrono::duration<float>(now - lease.lastTick).count(), 0.0f, 0.25f);
-            lease.elapsed += delta;
+            lease.guard.Advance(delta);
             lease.cooldown = std::max(0.0f, lease.cooldown - delta);
+            lease.bashCooldown = std::max(0.0f, lease.bashCooldown - delta);
             lease.lastTick = now;
             const auto defender = shield_defender::Inspect(lease.actor);
             const auto* process = actor ? actor->GetActorRuntimeData().currentProcess : nullptr;
@@ -211,76 +189,278 @@ namespace mod::defender_actions {
             const bool equipped = shield && shield->IsShield() && weapon &&
                                   (weapon->IsOneHandedSword() || weapon->IsOneHandedDagger() ||
                                    weapon->IsOneHandedAxe() || weapon->IsOneHandedMace());
-            const bool foreignPackage = process && process->middleHigh && process->middleHigh->runOncePackage.package;
+            const auto* interrupt =
+                process && process->middleHigh ? process->middleHigh->runOncePackage.package : nullptr;
+            const bool foreignPackage = interrupt && !defender_movement::Owned(interrupt);
             const bool valid =
                 actor && !actor->IsDead() && !actor->IsDisabled() && actor->Is3DLoaded() && actor->IsInCombat() &&
                 equipped && Managed(actor) && actor->IsPlayerTeammate() && !actor->GetCurrentScene() &&
                 !foreignPackage && !actor->AsActorState()->IsBleedingOut() && !actor->AsActorState()->IsUnconscious() &&
                 !actor->AsActorState()->actorState2.staggered && !actor->IsOnMount() &&
                 actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kWaitingForPlayer) == 0 &&
-                combat_roles::Read(actor) == combat_roles::Role::ShieldDefender && !combat_orders::Enabled &&
-                quest_policies::Allows(actor, quest_policies::Action::Combat) && defender.requested && defender.owned &&
-                !defender.yielded && defender.age >= 0 && defender.age <= 0.25f;
+                !combat_orders::Enabled && quest_policies::Allows(actor, quest_policies::Action::Combat) &&
+                (lease.direct ? combat_roles::Read(actor) == combat_roles::Role::Automatic
+                              : combat_roles::Read(actor) == combat_roles::Role::ShieldDefender && defender.requested &&
+                                    defender.owned && !defender.yielded && defender.age >= 0 && defender.age <= 0.25f);
             const bool live = valid && !lease.closing && !lease.fault;
             if (!live)
                 Publish(false);
-            const bool wanted = live && Guard(lease.mode) && !lease.observation.guardSuspended && defender.committed &&
-                                defender.targeting && defender.distance >= 0 && defender.distance <= 352 &&
-                                std::abs(defender.heading) <= 80;
+            bool dodgeValue = false;
+            const bool dodgeReadable = actor && actor->GetGraphVariableBool("bIsDodging", dodgeValue);
+            const bool dodging = ActiveDodge(dodgeReadable, dodgeValue);
+            const bool external = combat_actions::ExternalActive();
+            if (GuardInterrupted(lease.guard.Read().phase, dodging) && !lease.dodgeInterrupted) {
+                lease.dodgeInterrupted = true;
+                lease.dodgeCleanupCompleted = false;
+                ++lease.observation.dodgeInterruptions;
+            }
+            if (GuardInterrupted(lease.guard.Read().phase, external) && !lease.attackInterrupted) {
+                lease.attackInterrupted = true;
+                lease.attackCleanupCompleted = false;
+                ++lease.observation.attackInterruptions;
+            }
+            const bool guardOpportunity =
+                live && Guard(lease.mode) && !lease.observation.guardSuspended &&
+                (lease.direct ? lease.directGuard
+                              : defender.committed && defender.targeting && defender.distance >= 0 &&
+                                    std::abs(defender.heading) <= 80);
+            const bool wanted =
+                guardOpportunity && !dodging && !lease.dodgeInterrupted && !external && !lease.attackInterrupted;
+            float speed = -1;
+            if (actor && lease.positionKnown && delta > 0)
+                speed = actor->GetPosition().GetDistance(lease.previousPosition) / delta;
+            if (actor) {
+                lease.previousPosition = actor->GetPosition();
+                lease.positionKnown = true;
+            }
+            lease.observation.locomotionSpeed = speed;
+            lease.observation.locomotionReady =
+                actor && GuardLocomotionReady(speed, actor->AsActorState()->IsSprinting(),
+                                              actor->AsActorState()->IsWeaponDrawn());
+            const auto guardPhase = lease.guard.Read().phase;
+            lease.movementHandoff.Update(delta, live, lease.direct, wanted, lease.armed, lease.cooldown == 0,
+                                         guardPhase, !lease.observation.locomotionReady);
+            lease.observation.prepareGuardMovement = lease.movementHandoff.Preparing();
+            const bool deferred = guardOpportunity && dodging && lease.guard.Read().phase == Phase::Idle;
+            if (deferred && !lease.dodgeDeferred)
+                ++lease.observation.dodgeDeferrals;
+            lease.dodgeDeferred = deferred;
+            const bool attackDeferred = guardOpportunity && external && lease.guard.Read().phase == Phase::Idle;
+            if (attackDeferred && !lease.attackDeferred)
+                ++lease.observation.attackDeferrals;
+            lease.attackDeferred = attackDeferred;
             if (!wanted)
                 lease.armed = true;
-            if (lease.phase != Phase::Idle && lease.phase != Phase::Fault && foreignReady.load() != lease.readyEpoch) {
-                lease.phase = Phase::Idle;
+            if (lease.guard.Read().phase != Phase::Idle && lease.guard.Read().phase != Phase::Fault &&
+                combat_actions::ForeignGuardEpoch() != lease.readyEpoch) {
+                lease.guard.YieldOwnership();
                 lease.armed = false;
+                lease.dodgeInterrupted = lease.dodgeCleanupCompleted = false;
+                lease.attackInterrupted = lease.attackCleanupCompleted = false;
                 lease.observation.status = "Another block-start request took ownership; no release was sent.";
             }
             if (!actor || actor->IsDead()) {
                 Publish(false);
-                if (lease.phase != Phase::Idle)
-                    lease.phase = Phase::Fault;
+                lease.guard.ActorUnavailable();
                 lease.fault = true;
                 lease.observation.status = "Actor unavailable; guard release needs review.";
                 return;
             }
-            bool blocking = false;
-            const bool blockReadable = actor->GetGraphVariableBool("IsBlocking", blocking);
-            const bool wantsBlock = actor->AsActorState()->actorState2.wantBlocking;
+            if (ObserveAttack(actor, delta)) {
+                Publish(!lease.fault && Gate(lease.mode) && !dodging && !external);
+                return;
+            }
+            if (ObserveBash(actor, delta)) {
+                Publish(!lease.fault && Gate(lease.mode) && !dodging && !external);
+                return;
+            }
+            const auto sample = combat_actions::ReadGuard(actor);
+            const bool blocking = sample.blocking;
+            const bool blockReadable = sample.blockReadable;
+            const bool reacting = sample.reactionReadable && sample.reacting;
+            const bool intent = sample.IntentActive();
             lease.observation.blockReadable = blockReadable;
-            lease.observation.wantsBlock = wantsBlock;
-            const bool canStart = valid && lease.cooldown == 0 && !actor->IsAttacking() && blockReadable &&
-                                  !wantsBlock && !actor->AsActorState()->actorState2.recoil &&
+            lease.observation.wantsBlock = sample.wantsBlock;
+            lease.observation.blockHitReadable = sample.reactionReadable;
+            lease.observation.blockHit = sample.reacting;
+            lease.observation.graphWantReadable = sample.graphIntentReadable;
+            lease.observation.graphWantBlock = sample.graphIntent;
+            const auto reaction = lease.guard.ObserveReaction(sample, wanted, delta);
+            const bool beforeReleaseReaction = reaction.beforeRelease;
+            const bool afterReleaseReaction = reaction.afterRelease;
+            if (reaction.newlyDeferred)
+                ++lease.observation.releaseDeferrals;
+            if (beforeReleaseReaction || afterReleaseReaction)
+                lease.observation.status =
+                    beforeReleaseReaction
+                        ? "Waiting for block-hit reaction to finish before releasing the owned guard."
+                        : "Release accepted and intent clear; waiting for the block-hit reaction without replay.";
+            lease.observation.releaseWait = lease.guard.Read().releaseWait;
+            lease.observation.releaseWaitPeak =
+                std::max(lease.observation.releaseWaitPeak, lease.guard.Read().releaseWait);
+            if (!lease.closing &&
+                ResumeAfterYield(lease.guard.Read().phase, lease.dodgeInterrupted, lease.dodgeCleanupCompleted,
+                                 dodgeReadable, dodging, blockReadable, blocking, intent)) {
+                lease.dodgeInterrupted = lease.dodgeCleanupCompleted = false;
+                lease.observation.guardSuspended = false;
+                lease.armed = true;
+                ++lease.observation.dodgeResumes;
+                if (lease.guard.TakeMissedStart())
+                    ++lease.observation.recoveredInterruptTimeouts;
+                lease.observation.status = "Dodge ended and guard cleanup confirmed; reevaluating current threat.";
+                // wanted remains false for this tick. A later fresh snapshot must justify a new request.
+            } else if (lease.guard.Read().phase == Phase::Idle && (deferred || lease.dodgeInterrupted)) {
+                lease.observation.status = "Yielding native guard control until dodge and guard cleanup are clear.";
+            }
+            if (!lease.closing &&
+                ResumeAfterYield(lease.guard.Read().phase, lease.attackInterrupted, lease.attackCleanupCompleted, true,
+                                 external, blockReadable, blocking, intent)) {
+                lease.attackInterrupted = lease.attackCleanupCompleted = false;
+                lease.observation.guardSuspended = false;
+                lease.armed = true;
+                ++lease.observation.attackResumes;
+                if (lease.guard.TakeMissedStart())
+                    ++lease.observation.recoveredInterruptTimeouts;
+                lease.observation.status =
+                    "External attack ended and guard cleanup confirmed; reevaluating current threat.";
+            } else if (lease.guard.Read().phase == Phase::Idle && (attackDeferred || lease.attackInterrupted)) {
+                lease.observation.status = "Yielding native guard control to an external attack commitment.";
+            }
+            if (lease.directAttack && live && lease.guard.Read().phase == Phase::Idle && !blocking && !intent &&
+                !reacting && !dodging && !external && !actor->IsAttacking() &&
+                actor->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kNone &&
+                actor->AsActorState()->GetKnockState() == RE::KNOCK_STATE_ENUM::kNormal) {
+                lease.directAttack = false;
+                ++lease.observation.rightAttackRequests;
+                const auto receipt =
+                    attackExecution.Start(lease.actor, lease.token, lease.observation.rightAttackRequests,
+                                          [&](combat_actions::Intent action) { return Send(actor, action); });
+                if (receipt.outcome == Dispatch::Accepted) {
+                    ++lease.observation.rightAttackAccepted;
+                    lease.observation.rightAttackStatus = "Right-hand normal attack accepted; awaiting evidence.";
+                } else if (receipt.outcome == Dispatch::Rejected) {
+                    ++lease.observation.rightAttackRejected;
+                    lease.observation.rightAttackStatus =
+                        "Right-hand normal attack rejected; resolved event: " +
+                        (evidence.event.empty() ? std::string("<none>") : evidence.event) + "; validation mask " +
+                        std::to_string(evidence.validationMask) + "; " + evidence.rejection;
+                } else {
+                    lease.guard.Fail();
+                    lease.fault = true;
+                    lease.observation.status = lease.observation.rightAttackStatus =
+                        "Right-hand dispatch unconfirmed; no request replayed.";
+                }
+                Publish(!lease.fault && Gate(lease.mode));
+                return;
+            }
+            auto target = RE::TESForm::LookupByID<RE::Actor>(defender.threat);
+            const bool windingUp = target && target->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kDraw;
+            auto* values = actor->AsActorValueOwner();
+            const float bashStamina = values->GetActorValue(RE::ActorValue::kStamina);
+            const float bashMaximum =
+                values->GetPermanentActorValue(RE::ActorValue::kStamina) +
+                actor->GetActorValueModifier(RE::ACTOR_VALUE_MODIFIER::kTemporary, RE::ActorValue::kStamina);
+            const defensive_bash_rules::Opportunity bash{
+                lease.bashKind != defensive_bash_rules::Kind::Off,
+                live,
+                lease.guard.Read().phase == Phase::Holding,
+                blockReadable && blocking,
+                dodging || external || lease.dodgeInterrupted || lease.attackInterrupted,
+                reacting,
+                actor->IsAttacking(),
+                windingUp && defender.targeting,
+                defender.distance,
+                defender.heading,
+                bashStamina,
+                bashMaximum,
+                lease.bashCooldown,
+                lease.bashKind};
+            const bool directBashReady = lease.directBash && live && lease.guard.Read().phase == Phase::Holding &&
+                                         blockReadable && blocking && !reacting && !actor->IsAttacking() && !dodging &&
+                                         !external && !lease.dodgeInterrupted && !lease.attackInterrupted;
+            if (lease.direct ? directBashReady : defensive_bash_rules::CanRequest(bash)) {
+                lease.directBash = false;
+                ++lease.observation.nativeBashRequests;
+                if (lease.bashKind == defensive_bash_rules::Kind::Power)
+                    ++lease.observation.powerBashRequests;
+                lease.bashCooldown = defensive_bash_rules::Cooldown;
+                // Preserve idle/perk selection; resolved validation accepts only the requested bash kind.
+                const bool power = lease.bashKind == defensive_bash_rules::Kind::Power;
+                const auto receipt =
+                    bashExecution.Start(lease.actor, lease.token, lease.observation.nativeBashRequests,
+                                        power ? combat_actions::Intent::PowerBash : combat_actions::Intent::Bash,
+                                        [&](combat_actions::Intent action) { return Send(actor, action); });
+                const auto result = receipt.outcome;
+                if (result == Dispatch::Rejected) {
+                    ++lease.observation.nativeBashRejected;
+                    if (lease.bashKind == defensive_bash_rules::Kind::Power)
+                        ++lease.observation.powerBashRejected;
+                    lease.observation.bashStatus =
+                        evidence.rejection.empty()
+                            ? "Bash rejected before dispatch; selected " +
+                                  (evidence.event.empty() ? std::string("<none>") : evidence.event) +
+                                  "; validation mask " + std::to_string(evidence.validationMask) +
+                                  ". Guard observation continues."
+                            : evidence.rejection;
+                } else {
+                    lease.armed = false;
+                    if (lease.direct)
+                        lease.directGuard = false;
+                    if (result == Dispatch::Accepted) {
+                        ++lease.observation.nativeBashAccepted;
+                        if (lease.bashKind == defensive_bash_rules::Kind::Power)
+                            ++lease.observation.powerBashAccepted;
+                        lease.guard.YieldOwnership();
+                        lease.observation.bashStatus = "Defensive bash accepted; guard handed off to bash observation.";
+                    } else {
+                        lease.guard.Fail();
+                        lease.fault = true;
+                        lease.observation.status = "Native bash dispatch unconfirmed; no request replayed.";
+                        lease.observation.bashStatus = lease.observation.status;
+                    }
+                    Publish(!lease.fault && Gate(lease.mode));
+                    return;
+                }
+            }
+            const bool canStart = valid && lease.movementHandoff.Ready() && lease.cooldown == 0 &&
+                                  !actor->IsAttacking() && blockReadable && !intent && !reacting && !dodging &&
+                                  !lease.dodgeInterrupted && !external && !lease.attackInterrupted &&
+                                  !actor->AsActorState()->actorState2.recoil &&
                                   actor->AsActorState()->GetKnockState() == RE::KNOCK_STATE_ENUM::kNormal &&
                                   actor->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kNone;
-            switch (Decide(lease.phase, wanted, canStart, blocking, lease.armed, lease.elapsed, blockReadable,
-                           wantsBlock)) {
+            const auto transition = lease.guard.Update(sample, wanted, canStart, lease.armed, dodging, reaction,
+                                                       [&](combat_actions::Intent action) {
+                                                           if (action == combat_actions::Intent::Guard)
+                                                               lease.readyEpoch = combat_actions::ForeignGuardEpoch();
+                                                           else if (lease.guard.Read().missedStart)
+                                                               Publish(false);
+                                                           return Send(actor, action);
+                                                       });
+            switch (transition.step) {
                 case Step::Start:
                     lease.cooldown = 1.5f;
                     lease.armed = false;
-                    lease.readyEpoch = foreignReady.load();
                     ++lease.observation.guardRequests;
-                    lease.elapsed = 0;
-                    lease.phase = Phase::StartPending;
-                    lease.releaseRejected = lease.missedStart = false;
-                    lease.releaseCompleted = false;
+                    lease.dodgeInterrupted = lease.dodgeCleanupCompleted = false;
+                    lease.attackInterrupted = lease.attackCleanupCompleted = false;
                     lease.observation.startRecovering = defender.recovering;
                     lease.observation.startStaminaFraction =
                         defender.maximumStamina > 0 ? defender.stamina / defender.maximumStamina : -1;
-                    if (const auto result = Send(actor, RE::DEFAULT_OBJECT::kActionLeftAttack);
-                        result == Dispatch::Accepted) {
+                    if (const auto result = transition.receipt.outcome; result == Dispatch::Accepted) {
                         ++lease.observation.guardAccepted;
                         lease.observation.status = "Shield block-start accepted; awaiting blocking state.";
                     } else if (result == Dispatch::Rejected) {
                         ++lease.observation.guardRejected;
-                        lease.phase = Phase::Idle;
                         lease.observation.status =
-                            (evidence.validationMask & SelectionRejected)
+                            evidence.externalBlocked
+                                ? "External attack superseded guard selection; request rejected before dispatch."
+                            : (evidence.validationMask & SelectionRejected)
                                 ? "No eligible block idle selected; request rejected before dispatch."
                                 : "Shield block-start rejected; no guard is owned.";
                     } else {
                         // The dispatcher's false result does not expose whether
                         // downstream action work remains. Do not assume rejection
                         // or retry this request on a later threat episode.
-                        lease.phase = Phase::Fault;
                         lease.fault = true;
                         Publish(false);
                         lease.observation.status =
@@ -289,227 +469,272 @@ namespace mod::defender_actions {
                     break;
                 case Step::Acknowledge:
                     ++lease.observation.guardObserved;
-                    lease.phase = Phase::Holding;
-                    lease.elapsed = 0;
                     lease.observation.status = "Requested guard observed.";
                     break;
                 case Step::Release:
-                    if (lease.phase == Phase::StartPending) {
+                    if (transition.missedStart) {
                         ++lease.observation.timeouts;
-                        lease.missedStart = true;
                         lease.observation.guardSuspended = true;
                         Publish(false);
                     }
                     ++lease.observation.releaseRequests;
-                    lease.phase = Phase::ReleasePending;
-                    lease.elapsed = 0;
-                    if (const auto dispatch = Send(actor, RE::DEFAULT_OBJECT::kActionLeftRelease);
-                        dispatch == Dispatch::Accepted) {
+                    if (const auto dispatch = transition.receipt.outcome; dispatch == Dispatch::Accepted) {
                         ++lease.observation.releaseAccepted;
-                        lease.releaseCompleted = true;
                         lease.observation.status = "Shield-release accepted; awaiting non-blocking state.";
                     } else if (dispatch == Dispatch::Rejected) {
-                        lease.releaseRejected = true;
-                        lease.releaseCompleted = true;
                         ++lease.observation.releaseRejected;
                         lease.observation.status =
                             "Shield-release rejected; observing block intent and graph without retry.";
                     } else {
-                        lease.phase = Phase::Fault;
                         lease.fault = true;
                         lease.observation.status = "Shield-release dispatch unconfirmed; no request was replayed.";
                     }
                     break;
                 case Step::Finished:
-                    if (lease.phase == Phase::ReleasePending && !lease.releaseRejected)
+                    if (lease.dodgeInterrupted)
+                        lease.dodgeCleanupCompleted = transition.cleanupConfirmed;
+                    if (lease.attackInterrupted)
+                        lease.attackCleanupCompleted = transition.cleanupConfirmed;
+                    if (transition.releaseObserved)
                         ++lease.observation.releaseObserved;
-                    lease.phase = Phase::Idle;
-                    lease.elapsed = 0;
-                    if (lease.missedStart)
+                    if (lease.attackInterrupted)
                         lease.observation.status =
-                            lease.releaseRejected
+                            "Interrupted guard cleanup confirmed; waiting for external attack ownership.";
+                    else if (lease.dodgeInterrupted)
+                        lease.observation.status =
+                            "Interrupted guard cleanup confirmed; waiting for dodge state to clear.";
+                    else if (lease.guard.Read().missedStart)
+                        lease.observation.status =
+                            lease.guard.Read().releaseRejected
                                 ? "Guard start unobserved; release rejected, no guard intent remains. Native guards "
                                   "suspended."
                                 : "Guard start unobserved; release confirmed. Native guards suspended.";
                     else
-                        lease.observation.status =
-                            lease.releaseRejected ? "Release rejected; no guard intent remains." : "Guard ended.";
+                        lease.observation.status = lease.guard.Read().releaseRejected
+                                                       ? "Release rejected; no guard intent remains."
+                                                       : "Guard ended.";
                     break;
                 case Step::Fault:
-                    if (lease.phase != Phase::Fault)
+                    if (transition.timeout)
                         ++lease.observation.timeouts;
-                    lease.phase = Phase::Fault;
                     lease.fault = true;
                     Publish(false);
-                    lease.observation.status = lease.releaseRejected
-                                                   ? "Release rejected; block intent or graph still unresolved. Manual "
-                                                     "review required. No retry."
-                                                   : "Guard release unconfirmed; manual review required. No replay.";
+                    lease.observation.status =
+                        beforeReleaseReaction  ? "Block-hit reaction did not finish within its observation window; no "
+                                                 "release was sent. Review required."
+                        : afterReleaseReaction ? "Block-hit reaction exceeded the release observation bound; release "
+                                                 "was already dispatched. No replay."
+                        : lease.guard.Read().releaseRejected
+                            ? "Release rejected; block intent or graph still unresolved. Manual "
+                              "review required. No retry."
+                            : "Guard release unconfirmed; manual review required. No replay.";
                     break;
                 case Step::None:
                     break;
             }
-            const bool guardActive = blocking || lease.phase == Phase::StartPending || lease.phase == Phase::Holding;
-            Publish(Suppress(lease.mode, valid && !lease.closing && !lease.fault, defender.recovering,
-                             !lease.observation.guardSuspended && defender.committed && guardActive, true));
+            const bool guardActive = blocking || lease.guard.Read().phase == Phase::StartPending ||
+                                     lease.guard.Read().phase == Phase::Holding;
+            Publish(lease.direct
+                        ? live && !dodging && !external
+                        : Suppress(lease.mode, valid && !lease.closing && !lease.fault, defender.recovering,
+                                   !lease.observation.guardSuspended && defender.committed && guardActive, true,
+                                   dodging || lease.dodgeInterrupted || external || lease.attackInterrupted));
         }
     }
 
     void Install() {
-        if (installed || REL::Module::get().version() != REL::Version(1, 6, 1170, 0))
-            return;
-        // Verified AE 1.6.1170 action-manager validation call. Rejection remains
-        // inside the engine's normal completion path. Existing callees are chained.
-        const auto entry = REL::ID(38949).address();
-        const auto source = REL::ID(34202).address();
-        const auto* sourceBytes = reinterpret_cast<const std::uint8_t*>(source);
-        const auto* bytes = reinterpret_cast<const std::uint8_t*>(entry);
-        if (bytes[0x4F] != 0x48 || bytes[0x50] != 0x8B || bytes[0x51] != 0xD3 || bytes[0x52] != 0x48 ||
-            bytes[0x53] != 0x8B || bytes[0x54] != 0x0D || bytes[0x59] != 0xE8 || sourceBytes[0x65] != 0x48 ||
-            sourceBytes[0x66] != 0x8D || sourceBytes[0x67] != 0x4C || sourceBytes[0x68] != 0x24 ||
-            sourceBytes[0x69] != 0x40 || sourceBytes[0x6A] != 0xE8 || bytes[0x86] != 0x48 || bytes[0x87] != 0x8B ||
-            bytes[0x88] != 0xD3 || bytes[0x90] != 0xE8 || bytes[0x69] != 0x48 || bytes[0x6A] != 0x8B ||
-            bytes[0x6B] != 0xD3 || bytes[0x73] != 0xE8) {
-            SKSE::log::warn("Defender action validation site unsupported; native test modes disabled");
-            return;
-        }
-        auto* defaults = RE::BGSDefaultObjectManager::GetSingleton();
-        if (!defaults)
-            return;
-        constexpr std::array actionsToGate{Action::kActionRightAttack,      Action::kActionRightReady,
-                                           Action::kActionRightPowerAttack, Action::kActionLeftPowerAttack,
-                                           Action::kActionDualAttack,       Action::kActionDualPowerAttack};
-        for (std::size_t i = 0; i < offensive.size(); ++i) {
-            offensive[i] = defaults->GetObject<RE::BGSAction>(actionsToGate[i]);
-            if (!offensive[i])
-                return;
-        }
-        leftAttack = defaults->GetObject<RE::BGSAction>(Action::kActionLeftAttack);
-        if (!leftAttack || !defaults->GetObject<RE::BGSAction>(Action::kActionLeftRelease))
-            return;
-        trampoline.create(128);
-        previousProcess = trampoline.write_call<5>(source + 0x6A, ProcessIssued);
-        const auto processor = REL::ID(41557).address();
-        const auto* processorBytes = reinterpret_cast<const std::uint8_t*>(processor);
-        processProtocol = previousProcess.address() == processor && processorBytes[0] == 0x48 &&
-                          processorBytes[1] == 0x8B && processorBytes[2] == 0xD1 && processorBytes[3] == 0x48 &&
-                          processorBytes[4] == 0x8B && processorBytes[5] == 0x0D && processorBytes[10] == 0xE9;
-        previous = trampoline.write_call<5>(entry + 0x59, Validate);
-        previousSelection = trampoline.write_call<5>(entry + 0x73, SelectAction);
-        previousResolved = trampoline.write_call<5>(entry + 0x90, ValidateResolved);
-        const auto selector = REL::ID(37147).address();
-        const auto* selectorBytes = reinterpret_cast<const std::uint8_t*>(selector);
-        selectionProtocol = previousSelection.address() == selector && selectorBytes[0] == 0x40 &&
-                            selectorBytes[1] == 0x53 && selectorBytes[2] == 0x48 && selectorBytes[3] == 0x83 &&
-                            selectorBytes[4] == 0xEC && selectorBytes[5] == 0x20;
-        const auto resolved = REL::ID(39003).address();
-        const auto* resolvedBytes = reinterpret_cast<const std::uint8_t*>(resolved);
-        resolvedProtocol = previousResolved.address() == resolved && resolvedBytes[0] == 0x40 &&
-                           resolvedBytes[1] == 0x56 && resolvedBytes[2] == 0x57 && resolvedBytes[3] == 0x41 &&
-                           resolvedBytes[4] == 0x56 && resolvedBytes[5] == 0x48;
-        installed = true;
-        SKSE::log::info("Experimental defender action validation hook installed (AE 1.6.1170)");
+        combat_actions::Install();
     }
 
     bool Begin(std::uint32_t actor, std::uint32_t mode, std::uint32_t token) {
         std::lock_guard lock(mutex);
-        if (!actor || !token || !ValidMode(mode) || leasedActor.load() || (mode && !installed) ||
-            ((mode & 2) && !processProtocol))
+        if (!actor || !token || !ValidMode(mode) || combat_actions::Active() ||
+            (mode && !combat_actions::Available().installed) || ((mode & 2) && !combat_actions::Available().process))
             return false;
         lease = {};
+        defender_movement::ClearTestBounds();
+        bashExecution.Reset();
+        attackExecution.Reset();
         lease.actor = actor;
         lease.token = token;
         lease.mode = static_cast<Mode>(mode);
         lease.lastTick = Clock::now();
-        actions = attacks = rejected = engineRejected = lastAction = foreignReady = 0;
-        blockRequests = bashRequests = unknownLeftRequests = 0;
-        published = 0;
-        leasedActor = actor;
+        combat_actions::Begin(actor, token);
         return true;
+    }
+
+    bool BeginDirect(std::uint32_t actor, std::uint32_t token) {
+        if (!Begin(actor, 3, token))
+            return false;
+        std::lock_guard lock(mutex);
+        lease.direct = true;
+        return true;
+    }
+
+    bool RequestDirect(std::uint32_t actor, std::uint32_t token, yliwf::testing::PrimitiveAction action) {
+        std::lock_guard lock(mutex);
+        if (!combat_actions::Active() || !lease.direct || lease.actor != actor || lease.token != token ||
+            lease.closing || lease.fault || lease.directAttack || lease.directBash ||
+            bashExecution.Phase() != combat_actions::bash_rules::Phase::Idle ||
+            attackExecution.Phase() != combat_actions::attack_rules::Phase::Idle)
+            return false;
+        using Action = yliwf::testing::PrimitiveAction;
+        const auto phase = lease.guard.Read().phase;
+        switch (action) {
+            case Action::RightAttack:
+                if (phase != Phase::Idle || lease.directAttack)
+                    return false;
+                lease.directGuard = false;
+                lease.directAttack = true;
+                return true;
+            case Action::Guard:
+                if (phase != Phase::Idle || lease.observation.guardSuspended)
+                    return false;
+                lease.directGuard = lease.armed = true;
+                return true;
+            case Action::Release:
+                if (phase != Phase::Holding && phase != Phase::StartPending)
+                    return false;
+                lease.directGuard = lease.directBash = false;
+                return true;
+            case Action::Bash:
+            case Action::PowerBash:
+                if (phase != Phase::Holding || lease.directBash ||
+                    lease.bashKind != (action == Action::PowerBash ? defensive_bash_rules::Kind::Power
+                                                                   : defensive_bash_rules::Kind::Normal))
+                    return false;
+                lease.directBash = true;
+                return true;
+        }
+        return false;
     }
 
     std::uint32_t End(std::uint32_t actor, std::uint32_t token, std::uint32_t savedPhase) {
         std::lock_guard lock(mutex);
-        if (!leasedActor.load()) {
+        if (!combat_actions::Active()) {
             if (!savedPhase)
                 return 1;
-            if (!installed || savedPhase > static_cast<std::uint32_t>(Phase::Fault))
+            if (!combat_actions::Available().installed || savedPhase > static_cast<std::uint32_t>(Phase::Fault))
                 return 2;
-            const auto* actorRef = RE::TESForm::LookupByID<RE::Actor>(actor);
+            auto* actorRef = RE::TESForm::LookupByID<RE::Actor>(actor);
             if (!actorRef)
                 return 2;
-            bool blocking = false;
-            const bool readable = actorRef->GetGraphVariableBool("IsBlocking", blocking);
-            const bool intent = actorRef->AsActorState()->actorState2.wantBlocking;
+            const auto sample = combat_actions::ReadGuard(actorRef);
             const auto recovery =
-                RestoreGuard(static_cast<Phase>(savedPhase), !ReleaseCleared(readable, blocking, intent));
+                RestoreGuard(static_cast<Phase>(savedPhase),
+                             !ReleaseCleared(sample.blockReadable, sample.blocking, sample.IntentActive()));
             if (recovery == Recovery::Finished)
                 return 1;
             lease = {};
             lease.actor = actor;
             lease.token = token;
-            lease.phase = recovery == Recovery::Manual ? Phase::Fault : Phase::ReleasePending;
-            lease.fault = lease.phase == Phase::Fault;
-            lease.readyEpoch = foreignReady.load();
+            lease.guard.Restore(static_cast<Phase>(savedPhase),
+                                !ReleaseCleared(sample.blockReadable, sample.blocking, sample.IntentActive()));
+            lease.fault = lease.guard.Read().phase == Phase::Fault;
+            lease.readyEpoch = combat_actions::ForeignGuardEpoch();
             lease.observation.status =
                 recovery == Recovery::Manual
                     ? "Loaded guard ownership is unverified; no new release was sent. Manual review required."
                     : "Observing the saved release without replaying it.";
             lease.lastTick = Clock::now();
-            leasedActor = actor;
+            combat_actions::RestoreScope(actor, token);
         }
         if (lease.actor != actor || lease.token != token)
             return 2;
         lease.closing = true;
+        defender_movement::ClearTestBounds();
+        lease.directBash = lease.directGuard = lease.directAttack = false;
+        if (bashExecution.Phase() != combat_actions::bash_rules::Phase::Idle)
+            bashExecution.Teardown();
+        attackExecution.Teardown();
+        combat_actions::CloseExternal();
         Publish(false);
-        if (lease.phase == Phase::Fault && lease.releaseCompleted) {
+        if (lease.guard.Read().phase == Phase::Fault &&
+            (lease.guard.Read().releaseCompleted || lease.guard.Read().releaseNotIssued)) {
             auto* actorRef = RE::TESForm::LookupByID<RE::Actor>(actor);
             if (actorRef && actorRef->Is3DLoaded()) {
-                bool blocking = false;
-                const bool readable = actorRef->GetGraphVariableBool("IsBlocking", blocking);
-                const bool intent = actorRef->AsActorState()->actorState2.wantBlocking;
-                if (ReconcileRelease(lease.releaseCompleted, readable, blocking, intent)) {
-                    lease.phase = Phase::Idle;
+                const auto sample = combat_actions::ReadGuard(actorRef);
+                if (lease.guard.Reconcile(sample)) {
                     lease.fault = false;
                     lease.observation.blockReadable = true;
                     lease.observation.wantsBlock = false;
                     lease.observation.status =
-                        "Completed release rechecked; graph and block intent are clear. No command replayed.";
+                        lease.guard.Read().releaseNotIssued
+                            ? "Observed guard rechecked after reaction wait; graph and block intent are clear. No "
+                              "release was sent."
+                            : "Completed release rechecked; graph and block intent are clear. No command replayed.";
                 }
             }
         }
         Pump();
-        if (lease.phase == Phase::Fault)
+        if (lease.guard.Read().phase == Phase::Fault)
             return 2;
-        if (lease.phase != Phase::Idle)
+        if (lease.guard.Read().phase != Phase::Idle ||
+            bashExecution.Phase() != combat_actions::bash_rules::Phase::Idle ||
+            attackExecution.Phase() != combat_actions::attack_rules::Phase::Idle)
             return 0;
-        leasedActor = 0;
+        combat_actions::Clear();
+        bashExecution.Reset();
+        attackExecution.Reset();
         return 1;
     }
 
     std::uint32_t SavedPhase(std::uint32_t actor, std::uint32_t token) {
         std::lock_guard lock(mutex);
-        return lease.actor == actor && lease.token == token ? static_cast<std::uint32_t>(lease.phase) : 0;
+        return lease.actor == actor && lease.token == token
+                   ? static_cast<std::uint32_t>((bashExecution.Phase() != combat_actions::bash_rules::Phase::Idle ||
+                                                 attackExecution.Phase() != combat_actions::attack_rules::Phase::Idle)
+                                                    ? Phase::Fault
+                                                    : lease.guard.Read().phase)
+                   : 0;
+    }
+
+    bool SetDefensiveBash(std::uint32_t actor, std::uint32_t token, std::uint32_t kind, std::uint32_t idle,
+                          std::uint32_t gate) {
+        std::lock_guard lock(mutex);
+        if (!combat_actions::Active() || lease.actor != actor || lease.token != token || lease.closing ||
+            lease.guard.Read().phase != Phase::Idle ||
+            bashExecution.Phase() != combat_actions::bash_rules::Phase::Idle ||
+            attackExecution.Phase() != combat_actions::attack_rules::Phase::Idle || (kind && !Guard(lease.mode)) ||
+            kind > static_cast<std::uint32_t>(defensive_bash_rules::Kind::Power))
+            return false;
+        if (kind == static_cast<std::uint32_t>(defensive_bash_rules::Kind::Power)) {
+            auto* selected = RE::TESForm::LookupByID<RE::TESIdleForm>(idle);
+            auto* conditions = RE::TESForm::LookupByID<RE::TESIdleForm>(gate);
+            if (!combat_actions::Available().process || !combat_actions::Available().selection ||
+                !combat_actions::Available().resolved || !selected || !conditions || selected->parentIdle ||
+                !defensive_bash_rules::AllowedEvent(selected->animEventName.c_str(), defensive_bash_rules::Kind::Power))
+                return false;
+        } else if (idle || gate)
+            return false;
+        lease.bashKind = static_cast<defensive_bash_rules::Kind>(kind);
+        lease.bashIdle = idle;
+        lease.bashGate = gate;
+        return true;
     }
 
     Observation Inspect(std::uint32_t actor) {
         std::lock_guard lock(mutex);
         Observation result;
         if (actor == lease.actor) {
+            const auto counters = combat_actions::Inspect();
             result = lease.observation;
             result.mode = static_cast<std::uint32_t>(lease.mode);
-            result.phase = static_cast<std::uint32_t>(lease.phase);
+            result.phase = static_cast<std::uint32_t>(lease.guard.Read().phase);
+            result.bashPhase = static_cast<std::uint32_t>(bashExecution.Phase());
+            result.rightAttackPhase = static_cast<std::uint32_t>(attackExecution.Phase());
             result.fault = lease.fault;
-            result.actions = actions;
-            result.attacks = attacks;
-            result.rejected = rejected;
-            result.engineRejected = engineRejected;
-            result.lastAction = lastAction;
-            result.blockRequests = blockRequests;
-            result.bashRequests = bashRequests;
-            result.unknownLeftRequests = unknownLeftRequests;
+            result.actions = counters.actions;
+            result.attacks = counters.attacks;
+            result.rejected = counters.rejected;
+            result.engineRejected = counters.engineRejected;
+            result.lastAction = counters.lastAction;
+            result.blockRequests = counters.blockRequests;
+            result.bashRequests = counters.bashRequests;
+            result.handoffAttackRejections = counters.handoffAttackRejections;
+            result.unknownLeftRequests = counters.unknownLeftRequests;
         }
-        result.available = installed;
+        result.available = combat_actions::Available().installed;
         return result;
     }
 
@@ -520,13 +745,82 @@ namespace mod::defender_actions {
 
     bool HasWork() {
         std::lock_guard lock(mutex);
-        return leasedActor.load() != 0 && lease.phase != Phase::Fault;
+        return combat_actions::Active() && lease.guard.Read().phase != Phase::Fault;
     }
 
     void Invalidate() {
         std::lock_guard lock(mutex);
-        published = 0;
-        leasedActor = 0;
+        defender_movement::ClearTestBounds();
+        combat_actions::Clear();
+        bashExecution.Reset();
+        attackExecution.Reset();
         lease = {};
+    }
+
+    bool SetMovementBounds(std::uint32_t actor, std::uint32_t token, std::uint32_t anchor, float radius) {
+        std::lock_guard lock(mutex);
+        if (!combat_actions::Active() || lease.actor != actor || lease.token != token || lease.closing || lease.fault)
+            return false;
+        return defender_movement::SetTestBounds(RE::TESForm::LookupByID<RE::Actor>(actor),
+                                                RE::TESForm::LookupByID<RE::TESObjectREFR>(anchor), radius);
+    }
+
+    bool SetAttackCommitment(std::uint32_t actor, std::uint32_t token, std::uint32_t sequence,
+                             yliwf::testing::AttackCommitment phase) {
+        using Commitment = yliwf::testing::AttackCommitment;
+        switch (phase) {
+            case Commitment::Clear:
+                return combat_actions::SetExternal(actor, token, sequence, false);
+            case Commitment::Active:
+                if (combat_actions::SetExternal(actor, token, sequence, true)) {
+                    Publish(false);
+                    return true;
+                }
+                return false;
+            case Commitment::Finishing:
+                return combat_actions::FinishExternal(actor, token, sequence);
+        }
+        return false;
+    }
+
+    std::uint32_t AttackRequest(std::uint32_t actor, std::uint32_t token) {
+        return attackExecution.Request(actor, token);
+    }
+
+    bool AttackAnimation(std::uint32_t actor, std::uint32_t token, std::uint32_t request,
+                         yliwf::testing::AttackAnimationEvent event) {
+        using Event = yliwf::testing::AttackAnimationEvent;
+        using Target = combat_actions::AttackEvent;
+        switch (event) {
+            case Event::Started:
+                return attackExecution.Record(actor, token, request, Target::Started);
+            case Event::Ended:
+                return attackExecution.Record(actor, token, request, Target::Ended);
+            case Event::Interrupted:
+                return attackExecution.Record(actor, token, request, Target::Interrupted);
+            case Event::ConflictingStarted:
+                return attackExecution.Record(actor, token, request, Target::ConflictingStarted);
+            case Event::ConflictingEnded:
+                return attackExecution.Record(actor, token, request, Target::ConflictingEnded);
+        }
+        return false;
+    }
+
+    std::uint32_t BashRequest(std::uint32_t actor, std::uint32_t token) {
+        return bashExecution.Request(actor, token);
+    }
+
+    bool BashAnimation(std::uint32_t actor, std::uint32_t token, std::uint32_t request,
+                       yliwf::testing::BashAnimationEvent event) {
+        using Event = yliwf::testing::BashAnimationEvent;
+        switch (event) {
+            case Event::Started:
+                return bashExecution.Record(actor, token, request, combat_actions::AnimationEvent::Started);
+            case Event::Ended:
+                return bashExecution.Record(actor, token, request, combat_actions::AnimationEvent::Ended);
+            case Event::Interrupted:
+                return bashExecution.Record(actor, token, request, combat_actions::AnimationEvent::Interrupted);
+        }
+        return false;
     }
 }

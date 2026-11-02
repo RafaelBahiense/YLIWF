@@ -47,6 +47,7 @@ internal static partial class FollowerPlugin
 
     private static void AddHealerPackages(SkyrimMod mod)
     {
+        AddDefenderMovementPackages(mod);
         mod.Factions.Add(new Faction(HealerActivityForm, SkyrimRelease.SkyrimSE)
         {
             EditorID = "YLIWF_HealerActivity",
@@ -113,6 +114,11 @@ internal static partial class FollowerPlugin
             mod.Packages.Add(cast);
             overrides.Items.Add(new FormLink<ISkyrimMajorRecordGetter>(cast.FormKey));
         }
+        foreach (var package in Enumerable.Range(0, DefenderMovementSlots * 4).Select(index => OwnForm(0xB00 + (uint)index)))
+        {
+            overrides.Items.Add(new FormLink<ISkyrimMajorRecordGetter>(package));
+        }
+
         foreach (var package in StandDownPackages)
         {
             overrides.Items.Add(new FormLink<ISkyrimMajorRecordGetter>(package));
@@ -135,6 +141,7 @@ internal static partial class FollowerPlugin
         {
             alias.CombatOverridePackageList = new FormLinkNullable<IFormListGetter>(HealerCombatOverridesForm);
             var packages = new List<FormKey>();
+            packages.AddRange(Enumerable.Range(0, DefenderMovementSlots * 4).Select(index => OwnForm(0xB00 + (uint)index)));
             for (var slot = 0; slot < HealerSlots; ++slot)
             {
                 foreach (var start in new[] { HealerTravelStart, HealerAlternateTravelStart, HealerCastStart })
@@ -156,6 +163,7 @@ internal static partial class FollowerPlugin
 
     private static void AddHealerTargets(Cell cell)
     {
+        AddDefenderMovementTargets(cell);
         for (var slot = 0; slot < HealerSlots; ++slot)
         {
             cell.Persistent.Add(new PlacedObject(OwnForm(HealerTargetStart + (uint)slot), SkyrimRelease.SkyrimSE)

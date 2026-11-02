@@ -17,4 +17,5 @@ namespace mod::healer_movement {
     std::optional<Point> Destination(RE::Actor* healer, RE::Actor* ally, float range, std::span<const Point> threats,
                                      Purpose purpose = Purpose::Seek);
     void Clear();
+    std::optional<Point> Ground(RE::Actor* actor, Point desired);
 }

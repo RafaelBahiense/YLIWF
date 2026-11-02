@@ -14,6 +14,7 @@ Git history records individual contributions. The upstream revision is GPL-3.0.
 | Component | Project | Role |
 | --- | --- | --- |
 | CommonLibSSE-NG | [CharmedBaryon/CommonLibSSE-NG](https://github.com/CharmedBaryon/CommonLibSSE-NG) | Skyrim/SKSE C++ interfaces |
+| Precision API | [ersh1/Precision](https://github.com/ersh1/Precision) | Passive hit feedback and weapon collision geometry; MIT |
 | fmt | [fmtlib/fmt](https://github.com/fmtlib/fmt) | Formatting |
 | spdlog | [gabime/spdlog](https://github.com/gabime/spdlog) | Logging |
 | SKSE-MCP | [QTR-Modding/SKSE-MCP](https://github.com/QTR-Modding/SKSE-MCP) | Menu framework interface |

@@ -18,7 +18,7 @@ namespace mod::combat_roles {
 
     struct Snapshot {
         Role assigned = Role::Automatic;
-        bool available = false;
+        bool available = false, needsLoad = false;
         std::string unavailable;
         std::string behavior;
         std::array<Option, RoleCount> options;
