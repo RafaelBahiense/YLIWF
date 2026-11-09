@@ -5,6 +5,9 @@
             "includePath": [
                 "${workspaceFolder}/include",
                 "${workspaceFolder}/src/native",
+                "${workspaceFolder}/src/addons/**",
+                "${workspaceFolder}/.tools/CommonLibSSE-NG/include",
+                "${workspaceFolder}/build/native/release/vcpkg_installed/x64-windows-static/include",
                 "${workspaceFolder}/build/native/release/generated"
             ],
             "defines": [
@@ -16,7 +19,8 @@
             "cppStandard": "c++23",
             "intelliSenseMode": "windows-msvc-x64",
             "compileCommands": [
-                "${workspaceFolder}/build/native/release/compile_commands.json"
+                "${workspaceFolder}/build/native/release/compile_commands.json",
+                "${workspaceFolder}/build/native/debug/compile_commands.json"
             ]
         },
         {
@@ -24,7 +28,12 @@
             "includePath": [
                 "${workspaceFolder}/include",
                 "${workspaceFolder}/src/native",
-                "${workspaceFolder}/build/native/debug/generated"
+                "${workspaceFolder}/src/addons/**",
+                "${workspaceFolder}/.tools/CommonLibSSE-NG/include",
+                "${workspaceFolder}/build/native/debug/vcpkg_installed/x64-windows-static/include",
+                "${workspaceFolder}/build/native/release/vcpkg_installed/x64-windows-static/include",
+                "${workspaceFolder}/build/native/debug/generated",
+                "${workspaceFolder}/build/native/release/generated"
             ],
             "defines": [
                 "_DEBUG",
@@ -36,7 +45,8 @@
             "cppStandard": "c++23",
             "intelliSenseMode": "windows-msvc-x64",
             "compileCommands": [
-                "${workspaceFolder}/build/native/debug/compile_commands.json"
+                "${workspaceFolder}/build/native/debug/compile_commands.json",
+                "${workspaceFolder}/build/native/release/compile_commands.json"
             ]
         }
     ],

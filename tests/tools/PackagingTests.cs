@@ -45,7 +45,7 @@ public sealed class PackagingTests : TestWorkspace
         }
     }
 
-    private static readonly string[] RequiredSourceFiles = ["README.md", "docs/architecture.md", "docs/debugging.md", "docs/build-release.md", "tools/README.md", "assets/settings.ini", "lint.ps1", ".clang-format"];
+    private static readonly string[] RequiredSourceFiles = ["README.md", "docs/architecture.md", "docs/debugging.md", "docs/build-release.md", "tools/README.md", "assets/settings.ini", "lint.ps1", ".clang-format", ".clang-tidy", "tools/IncludeAnalysis.ps1"];
 
     [Fact]
     public void SourceFiles()

@@ -3,15 +3,21 @@ param(
     [ValidateSet('All', 'CSharp', 'Cpp')] [string] $Language = 'All',
     [switch] $Fix,
     [switch] $NativeAnalysis,
+    [switch] $IncludeAnalysis,
+    [string[]] $IncludeScope,
     [ValidateSet('Debug', 'Release', 'RelWithDebInfo')] [string] $Configuration = 'Release',
-    [string] $ClangFormat
+    [string] $ClangFormat,
+    [string] $ClangTidy
 )
 
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/tools/Environment.ps1"
+. "$PSScriptRoot/tools/IncludeAnalysis.ps1"
 Push-Location $RepoRoot
 try {
     if ($NativeAnalysis -and $Language -eq 'CSharp') { throw '-NativeAnalysis requires Cpp or All.' }
+    if ($IncludeAnalysis -and $Language -eq 'CSharp') { throw '-IncludeAnalysis requires Cpp or All.' }
+    if (($IncludeScope -or $ClangTidy) -and -not $IncludeAnalysis) { throw '-IncludeScope and -ClangTidy require -IncludeAnalysis.' }
 
     if ($Language -in @('All', 'CSharp')) {
         Initialize-DotNet
@@ -29,21 +35,7 @@ try {
     }
 
     if ($Language -in @('All', 'Cpp')) {
-        if (-not $ClangFormat) {
-            $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
-            if (Test-Path -LiteralPath $vswhere) {
-                $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-                foreach ($relative in @('VC/Tools/Llvm/x64/bin/clang-format.exe', 'VC/Tools/Llvm/bin/clang-format.exe')) {
-                    $candidate = if ($vs) { Join-Path $vs $relative }
-                    if ($candidate -and (Test-Path -LiteralPath $candidate)) { $ClangFormat = $candidate; break }
-                }
-            }
-            if (-not $ClangFormat) {
-                $command = Get-Command clang-format -CommandType Application -ErrorAction SilentlyContinue
-                if ($command) { $ClangFormat = $command.Source }
-            }
-        }
-        if (-not $ClangFormat) { throw 'clang-format was not found. Supply -ClangFormat with an existing executable path.' }
+        $ClangFormat = Resolve-ClangTool 'clang-format' $ClangFormat
 
         $files = foreach ($directory in @('include', 'src/native', 'src/addons', 'tests/native')) {
             if (Test-Path -LiteralPath $directory) {
@@ -56,9 +48,18 @@ try {
         $formatFlags = if ($Fix) { @('-i') } else { @('--dry-run', '--Werror') }
         Invoke-Tool -Executable $ClangFormat -Arguments (@('--style=file', '--fallback-style=none') + $formatFlags + $files)
 
-        if ($NativeAnalysis) {
+        if ($IncludeAnalysis -or $NativeAnalysis) {
             Initialize-Native
             $native = Join-Path $RepoRoot ('build/native/' + $Configuration.ToLowerInvariant())
+        }
+
+        if ($IncludeAnalysis) {
+            $selected = @(Select-IncludeAnalysisFiles -Root $RepoRoot -Files $files -Scope $IncludeScope)
+            $ClangTidy = Resolve-ClangTool 'clang-tidy' $ClangTidy
+            Invoke-IncludeAnalysis -Root $RepoRoot -Native $native -ClangTidy $ClangTidy -Files $selected
+        }
+
+        if ($NativeAnalysis) {
             if (-not (Test-Path -LiteralPath (Join-Path $native 'CMakeCache.txt'))) {
                 throw "Configure/build native first: ./build.ps1 -Target Native -Configuration $Configuration"
             }

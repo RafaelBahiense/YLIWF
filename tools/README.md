@@ -38,6 +38,8 @@ Invoke-ModTools @('inspect', 'build/plugin/You Lead, I Will Follow.esp')
 ./lint.ps1 -Language Cpp           # C++ formatting only
 ./lint.ps1 -Fix                    # Apply supported formatting/style fixes
 ./lint.ps1 -NativeAnalysis         # Also run MSVC static analysis
+./lint.ps1 -Language Cpp -IncludeAnalysis  # Check C++ includes
+./lint.ps1 -Language Cpp -IncludeAnalysis -IncludeScope src/native/combat  # Limit include checks
 ```
 
 C# uses SDK analyzers and `dotnet format` with `.editorconfig`.
@@ -51,4 +53,18 @@ tests, and treats findings as errors. Its separate objects leave release flags
 and DLLs untouched; dependency code is excluded from analysis diagnostics.
 Use `-Configuration Debug` to analyze an existing Debug build.
 
-VS Code provides **Lint C# and C++**. Review `-Fix` changes and run relevant tests.
+`-IncludeAnalysis` runs Clang-Tidy's `misc-include-cleaner` against project C++
+sources and headers using the selected build's `compile_commands.json`.
+Each header is analyzed as a main file so unused and missing direct includes
+are reported there too. A configured native build and an existing Clang-Tidy
+with this check are required; `-ClangTidy` selects an executable. No tools are
+installed by lint.
+
+`-IncludeScope` accepts files or directories and limits include analysis;
+formatting still checks its normal scope. Unmatched scopes and parsing errors
+fail the check. Findings are errors and full diagnostics are written to
+`build/lint/include-analysis.log`. Include analysis reports findings without
+rewriting headers, including when `-Fix` applies formatting changes.
+
+VS Code provides **Lint C# and C++** and **Check C++ includes (current file)**.
+Review `-Fix` changes and run relevant tests.
