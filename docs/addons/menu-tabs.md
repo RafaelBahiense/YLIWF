@@ -23,6 +23,6 @@ selection state, commands and reports. Gameplay operations use separate,
 validated backend services.
 
 The standalone preview discovers add-on `preview/*.cpp` fixtures through their
-manifests and compiles each fixture with its production `native/Menu.cpp`.
+manifests and compiles each fixture with its production `Menu.cpp` under `native/`.
 Fixtures register factories through `tools/ui-preview/include/AddonTabs.h` and
 supply simulated backend services.

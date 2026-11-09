@@ -65,7 +65,34 @@ abort/restoration, repeats, save loading, and original behavior after the test.
 
 ## Dodge budget
 
-`DodgeBudgetRules.h` owns reserve and cooldown policy. The UND eligibility hook
+### Directed execution
+
+The test host accepts an actor/token-scoped `EvadeBackend`. `UND.cpp` supplies
+cost and graph-request callbacks only for the verified DLL, intact hooks and TK
+framework selector. Core direction selection validates the route before invoking
+the provider. The TK protocol uses `iStep = 2`, `bUND_IsDodgeRoll = false` and a
+directional animation event; UND's existing animation handler applies stamina
+costs and immunity. No additional stamina or invulnerability writes are made.
+The accepted request also advances the autonomous dodge budget's cooldown.
+
+Core acknowledgement reads `bIsDodging`, then requires its release and at least
+48 units of displacement in the requested direction. A missing start/end disables
+the capability for that scope without replay. Scope end drops callbacks and waits
+for observed completion. The framework selector/private cost ABI stays here;
+the core depends only on the execution-provider contract.
+
+Protocol reference: [UND source](https://github.com/LeoneKingzz/Ultimate-NPC-Dodging-PoiseBuild/blob/main/src/dodge.cpp).
+The installed 2.4.3 disassembly verifies the event and stamina-handler path;
+source from another build does not establish ABI compatibility.
+
+### Autonomous eligibility
+
+`DodgeBudgetRules.h` owns reserve, cooldown and recovery policy. Recovery declines
+discretionary dodges. Fresh, visible heavy-melee preparation and hostile casting
+retain eligibility subject to the resource and cooldown checks. Main-thread
+sampling publishes recovery and emergency state; hooks consume that snapshot.
+Reports separate recovery denials from reserve, cooldown and stale-snapshot denials.
+The UND eligibility hook
 first runs the original check, then applies the selected actor's budget to
 otherwise permitted decisions. A scope epoch prevents delayed callbacks from
 updating another run. Worker calls use a locked value snapshot with a 250 ms
@@ -89,7 +116,7 @@ before forwarding the input. No third-party function offsets or byte patches
 are used. The core exposes only an engine-free actor/token/sequence reservation;
 module recognition and animation lifecycle interpretation stay in this backend.
 PermaBlock attack counts are separate from its block/bash interruption filter.
-Attack handoff applies in Guard and Combined modes whether interruption
+Attack handoff applies in defender tests whether interruption
 suppression is enabled or disabled; it observes and reserves attacks without
 suppressing them.
 
@@ -99,7 +126,7 @@ the test host rejects new offensive action requests so ordinary AI cannot keep
 extending the reservation. Already issued actions must finish. Only two
 native-idle samples with readable recovery clear when available release ownership.
 Guard selection remains deferred throughout the handoff. This narrow transition
-applies in Guard and Combined independently of their regular offense-gating mode.
+applies during defender tests alongside regular offense gating.
 
 `Collision_AttackEnd` and generic `attackStop` do not prove completion. Without
 a recognized start, fallback requires an observed native attack and recovery
@@ -115,7 +142,7 @@ cleanup permits later guard evaluation. Worker callbacks exchange ordinary value
 through a dedicated engine-free mailbox and never acquire the controller mutex.
 Neither side holds its mailbox lock across engine calls.
 
-This handoff is armed only in Guard and Combined tests. Reset, load and restoration
+This handoff is armed during defender tests. Reset, load and restoration
 clear scope; ending a scope with an active commitment is counted separately from
 a reservation cleared during combat. The reservation is not serialized or replayed.
 Validate the known pre-swing race, rejected inputs, attack end, overlapping newer

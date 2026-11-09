@@ -11,7 +11,7 @@ Uses the existing Visual Studio C++ tools and repository-local vcpkg. The first
 build downloads Dear ImGui; subsequent builds are incremental.
 
 The preview compiles the production `UI.cpp` and `HotkeysPage.cpp`. Edit those
-files or a participating add-on's `native/Menu.cpp` and save: the launcher
+files or a participating add-on's `Menu.cpp` under `native/` and save: the launcher
 rebuilds and reloads the menu while the window stays open. Failed builds leave
 the current menu running; details appear in
 `build/ui-preview/hot-reload.log`. Closing the window stops the watcher.
@@ -55,8 +55,8 @@ override them. No installed files are changed.
 ./tools/ui-preview/build.ps1 -SmokeTest
 ```
 
-`-SmokeTest` renders all pages in six scenarios at two widths without opening a
-window. It also loads a replacement UI module, checks session restoration and
+`-SmokeTest` renders all pages and traverses their tab bars in six scenarios at
+two widths without opening a window. It also loads a replacement UI module, checks session restoration and
 rejects a missing replacement while retaining the previous module. It does not
 verify visual quality or gameplay. The executable is
 `build/ui-preview/yliwf-ui-preview-host.exe`.

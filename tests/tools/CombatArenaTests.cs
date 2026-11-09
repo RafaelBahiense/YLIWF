@@ -46,6 +46,55 @@ public sealed class CombatArenaTests : TestWorkspace
     }
 
     [Fact]
+    public void ScenePackagesHoldSetupAndAllowCombatWithoutFollowingThePlayer()
+    {
+        var path = Path.Combine(temporary, CombatArena.Plugin);
+        CombatArena.Create().BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters()
+            .WithNoDataFolder().NoMastersListContentCheck().Write();
+        using var mod = SkyrimMod.CreateFromBinaryOverlay(path, SkyrimRelease.SkyrimSE);
+        var packages = mod.Packages.Where(p => p.FormKey.ID is >= 0x840 and <= 0x843).OrderBy(p => p.FormKey.ID).ToArray();
+        Assert.Equal(4, packages.Length);
+        for (var index = 0; index < packages.Length; ++index)
+        {
+            var package = packages[index];
+            Assert.Equal((index & 1) == 0, package.Flags.HasFlag(Package.Flag.IgnoreCombat));
+            Assert.Equal((index & 1) == 0, package.Flags.HasFlag(Package.Flag.PreferredSpeed));
+            var location = Assert.IsAssignableFrom<IPackageDataLocationGetter>(package.Data[0]);
+            var radius = Assert.IsAssignableFrom<ILocationTargetRadiusGetter>(location.Location);
+            var target = Assert.IsAssignableFrom<ILocationTargetGetter>(radius.Target);
+            Assert.Equal(index < 2 ? 0x811u : 0x813u, target.Link.FormKey.ID);
+            Assert.Equal((index & 1) == 0 ? 32u : 4096u, radius.Radius);
+            if ((index & 1) == 0)
+            {
+                Assert.True(package.PackageTemplate.IsNull);
+                Assert.Equal("Travel", package.ProcedureTree[1].ProcedureType);
+                Assert.Equal("Wait", package.ProcedureTree[2].ProcedureType);
+                Assert.Equal(PackageRoot.Flag.RepeatWhenComplete, package.ProcedureTree[0].Root!.Flags);
+            }
+            else
+            {
+                Assert.Equal(0x503D0u, package.PackageTemplate.FormKey.ID);
+                Assert.Equal("Skyrim.esm", package.PackageTemplate.FormKey.ModKey.FileName.String);
+                Assert.Empty(package.ProcedureTree);
+                Assert.Equal(Package.Interrupt.Combat, package.InterruptOverride);
+                Assert.Equal(Package.Speed.Run, package.PreferredSpeed);
+                Assert.Equal(Package.Flag.AllowSwimming, package.Flags);
+                Assert.Equal(Package.InterruptFlag.FriendlyFireComments | Package.InterruptFlag.AggroRadiusBehavior, package.InterruptFlags);
+                Assert.Equal(5, package.DataInputVersion);
+                Assert.Equal((byte)130, package.Unknown);
+            }
+            if ((index & 1) != 0)
+            {
+                var condition = Assert.Single(package.Conditions);
+                var gate = Assert.IsAssignableFrom<IGetFactionRankConditionDataGetter>(condition.Data);
+                Assert.Equal(0x844u, gate.Faction.Link.FormKey.ID);
+                Assert.Equal(Condition.RunOnType.Subject, gate.RunOnType);
+                Assert.Equal(index < 2 ? 1 : 2, ((IConditionFloatGetter)condition).ComparisonValue);
+            }
+        }
+    }
+
+    [Fact]
     public void ArenaRoundTripsWithoutWorldOverridesOrStartupBehavior()
     {
         var path = Path.Combine(temporary, CombatArena.Plugin);
@@ -59,7 +108,7 @@ public sealed class CombatArenaTests : TestWorkspace
         Assert.Equal("Skyrim.esm", item.Master.FileName.String);
         Assert.All(mod.EnumerateMajorRecords(), r => Assert.Equal(mod.ModKey, r.FormKey.ModKey));
         Assert.Empty(mod.Quests);
-        Assert.Empty(mod.Npcs);
+        Assert.Equal(CombatArena.FixtureBaseCount + 1, mod.Npcs.Count);
         Assert.Empty(mod.Worldspaces);
         Assert.All(cell.Persistent.Concat(cell.Temporary), placed => Assert.IsType<IPlacedObjectGetter>(placed, exactMatch: false));
         Assert.Equal(68, cell.Temporary.Count);

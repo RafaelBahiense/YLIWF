@@ -14,6 +14,9 @@ public sealed class CombatArena : IAddonPluginGenerator
     public const string CellEditorId = "YLIWFCombatArena";
     public const uint PowerBashIdle = 0x820;
     public const uint PowerBashPerk = 0x058F67;
+    public const uint FixtureBaseStart = 0x850;
+    public const int AllyFixtureIndex = 6;
+    public const int FixtureBaseCount = AllyFixtureIndex + 1;
     public string AddonName => "CombatTests";
     SkyrimMod IAddonPluginGenerator.Create() => Create();
     // Keep navigable ground away from the Nordic wall kit's columns and lips.
@@ -96,6 +99,9 @@ public sealed class CombatArena : IAddonPluginGenerator
             Parent = new NavigationMapInfoCellParent { ParentCell = new FormLink<ICellGetter>(cell.FormKey) }
         });
         mod.NavigationMeshInfoMaps.Add(map);
+        AddScenePackages(mod);
+        AddFixtureBases(mod);
+        AddSpellDiagnostic(mod);
         AddPowerBashIdle(mod);
         foreach (var ranged in new[] { false, true })
         {
@@ -133,6 +139,157 @@ public sealed class CombatArena : IAddonPluginGenerator
         idle.Conditions.Add(new ConditionFloat { Data = new GetWantBlockingConditionData(), ComparisonValue = 1 });
         idle.Conditions.Add(new ConditionFloat { Data = new GetAttackStateConditionData(), ComparisonValue = 0 });
         mod.IdleAnimations.Add(idle);
+    }
+
+    private static void AddFixtureBases(SkyrimMod mod)
+    {
+        for (var index = 0; index < FixtureBaseCount; ++index)
+        {
+            mod.Npcs.Add(new Npc(Own(FixtureBaseStart + (uint)index), SkyrimRelease.SkyrimSE)
+            {
+                EditorID = index == AllyFixtureIndex ? "YLIWFCombatTestArcherAlly" : "YLIWFCombatTestOpponent" + index,
+                Name = index == AllyFixtureIndex ? "YLIWF Combat Test Archer Ally" : "YLIWF Combat Test Opponent",
+                Race = new FormLink<IRaceGetter>(Vanilla(0x13746)),
+                Template = new FormLinkNullable<INpcSpawnGetter>(Vanilla(index >= 3 && index != AllyFixtureIndex ? 0x44CD7u : 0xC3CA0u)),
+                Configuration = new NpcConfiguration
+                {
+                    Flags = NpcConfiguration.Flag.UseTemplate,
+                    TemplateFlags = NpcConfiguration.TemplateFlag.Traits | NpcConfiguration.TemplateFlag.Stats |
+                        NpcConfiguration.TemplateFlag.AIData | NpcConfiguration.TemplateFlag.ModelAnimation |
+                        NpcConfiguration.TemplateFlag.BaseData | NpcConfiguration.TemplateFlag.AttackData,
+                    SpeedMultiplier = 100
+                }
+            });
+        }
+    }
+
+    private static void AddSpellDiagnostic(SkyrimMod mod)
+    {
+        mod.Npcs.Add(new Npc(Own(0x857), SkyrimRelease.SkyrimSE)
+        {
+            EditorID = "YLIWFSpellDiagnosticTarget",
+            Name = "YLIWF Spell Diagnostic Target",
+            Race = new FormLink<IRaceGetter>(Vanilla(0x13746)),
+            Template = new FormLinkNullable<INpcSpawnGetter>(Vanilla(0xC3CA0)),
+            Configuration = new NpcConfiguration
+            {
+                Flags = NpcConfiguration.Flag.UseTemplate,
+                TemplateFlags = NpcConfiguration.TemplateFlag.Traits | NpcConfiguration.TemplateFlag.Stats |
+                    NpcConfiguration.TemplateFlag.ModelAnimation,
+                SpeedMultiplier = 100
+            }
+        });
+        mod.MagicEffects.Add(new MagicEffect(Own(0x859), SkyrimRelease.SkyrimSE)
+        {
+            EditorID = "YLIWFSpellDiagnosticWaterBreathingEffect",
+            Name = "Diagnostic Water Breathing",
+            Archetype = new MagicEffectArchetype(MagicEffectArchetype.TypeEnum.ValueModifier)
+            {
+                ActorValue = ActorValue.WaterBreathing
+            },
+            CastType = CastType.FireAndForget,
+            TargetType = TargetType.TargetActor,
+            ResistValue = ActorValue.None,
+            Sounds = []
+        });
+        var control = new Spell(Own(0x858), SkyrimRelease.SkyrimSE)
+        {
+            EditorID = "YLIWFSpellDiagnosticWaterBreathing",
+            Name = "Diagnostic Water Breathing",
+            Type = SpellType.Spell,
+            CastType = CastType.FireAndForget,
+            TargetType = TargetType.TargetActor,
+            BaseCost = 0
+        };
+        control.Effects.Add(new Effect
+        {
+            BaseEffect = new FormLinkNullable<IMagicEffectGetter>(Own(0x859)),
+            Data = new EffectData { Duration = 2, Magnitude = 1, Area = 0 }
+        });
+        mod.Spells.Add(control);
+    }
+
+    private static void AddScenePackages(SkyrimMod mod)
+    {
+        mod.Factions.Add(new Faction(Own(0x844), SkyrimRelease.SkyrimSE)
+        {
+            EditorID = "YLIWFCombatTestSubject",
+            Flags = Faction.FactionFlag.HiddenFromPC,
+            Relations = [new Relation { Target = new FormLink<IFactionGetter>(Own(0x845)), Reaction = CombatReaction.Enemy }]
+        });
+        mod.Factions.Add(new Faction(Own(0x845), SkyrimRelease.SkyrimSE)
+        {
+            EditorID = "YLIWFCombatTestOpponentFaction",
+            Flags = Faction.FactionFlag.HiddenFromPC,
+            Relations =
+            [
+                new Relation { Target = new FormLink<IFactionGetter>(Own(0x844)), Reaction = CombatReaction.Enemy }
+            ]
+        });
+        for (var index = 0; index < 4; ++index)
+        {
+            var combat = (index & 1) != 0;
+            var marker = index < 2 ? 0x811u : 0x813u;
+            var package = new Package(Own(0x840 + (uint)index), SkyrimRelease.SkyrimSE)
+            {
+                EditorID = "YLIWFCombatTest" + (index < 2 ? "Defender" : "Healer") + (combat ? "CombatAnchor" : "SetupHold"),
+                Type = Package.Types.Package,
+                PreferredSpeed = combat ? Package.Speed.Run : Package.Speed.Walk,
+                InterruptOverride = combat ? Package.Interrupt.Combat : Package.Interrupt.None,
+                Flags = combat ? Package.Flag.AllowSwimming :
+                    Package.Flag.PreferredSpeed | Package.Flag.NoCombatAlert | Package.Flag.IgnoreCombat,
+                InterruptFlags = combat ? Package.InterruptFlag.FriendlyFireComments | Package.InterruptFlag.AggroRadiusBehavior :
+                    Package.InterruptFlag.ObserveCombatBehavior,
+                Unknown = combat ? (byte)130 : (byte)3,
+                ScheduleMonth = -1,
+                ScheduleDayOfWeek = Package.DayOfWeek.Any,
+                ScheduleHour = -1,
+                ScheduleMinute = -1,
+                DataInputVersion = combat ? (byte)5 : (byte)3,
+                XnamMarker = new MemorySlice<byte>([7])
+            };
+            if (combat)
+            {
+                // Use the same engine procedure template as Skyrim's
+                // PlayerFollowerCombatOverridePackage, anchored to the arena.
+                package.PackageTemplate = new FormLinkNullable<IPackageGetter>(Vanilla(0x503D0));
+            }
+            else
+            {
+                package.ProcedureTree.Add(new PackageBranch
+                {
+                    BranchType = "Sequence",
+                    Root = new PackageRoot { BranchCount = 2, Flags = PackageRoot.Flag.RepeatWhenComplete }
+                });
+                package.ProcedureTree.Add(new PackageBranch { BranchType = "Procedure", ProcedureType = "Travel", DataInputIndices = [0, 2, 4] });
+                package.ProcedureTree.Add(new PackageBranch { BranchType = "Procedure", ProcedureType = "Wait", DataInputIndices = [5, 6] });
+                package.Data.Add(2, new PackageDataBool());
+                package.Data.Add(4, new PackageDataBool());
+                package.Data.Add(5, new PackageDataFloat { Data = 1 });
+                package.Data.Add(6, new PackageDataBool { Data = true });
+            }
+            package.Data.Add(0, new PackageDataLocation
+            {
+                Location = new LocationTargetRadius
+                {
+                    Target = new LocationTarget { Link = new FormLink<IPlacedGetter>(Own(marker)) },
+                    Radius = combat ? 4096u : 32u
+                }
+            });
+            package.OnBegin = new PackageEvent { Topics = { new TopicReference() } };
+            package.OnEnd = new PackageEvent { Topics = { new TopicReference() } };
+            package.OnChange = new PackageEvent { Topics = { new TopicReference() } };
+            if (combat)
+            {
+                package.Conditions.Add(new ConditionFloat
+                {
+                    Data = new GetFactionRankConditionData { Faction = { Link = { FormKey = Own(0x844) } } },
+                    CompareOperator = CompareOperator.EqualTo,
+                    ComparisonValue = index < 2 ? 1 : 2
+                });
+            }
+            mod.Packages.Add(package);
+        }
     }
 
     private static CellLighting Lighting()

@@ -17,6 +17,7 @@
 #include <iterator>
 #include <string_view>
 #include <vector>
+#include <cmath>
 
 #pragma comment(lib, "bcrypt.lib")
 
@@ -45,8 +46,9 @@ namespace {
         std::uint32_t actor = 0;
         std::uint64_t epoch = 0, expires = 0, next = 0;
         bool enabled = false;
+        bool recovering = false, emergency = false;
         float fraction = .2f, cooldown = 2, cost = 0, stamina = 0, maximum = 0;
-        std::uint32_t allowed = 0, reserveDenied = 0, cooldownDenied = 0, snapshotDenied = 0;
+        std::uint32_t allowed = 0, reserveDenied = 0, cooldownDenied = 0, snapshotDenied = 0, recoveryDenied = 0;
     } budget;
 
     std::uint64_t budgetEpoch = 0;
@@ -87,8 +89,9 @@ namespace {
         if (budget.epoch != epoch || !budget.enabled || budget.actor != actor->GetFormID())
             return allowed;
         const auto now = GetTickCount64();
-        const auto reason = control::dodge_budget_rules::Check(now, budget.expires, budget.next, budget.stamina,
-                                                               budget.maximum, budget.cost, budget.fraction);
+        const auto reason =
+            control::dodge_budget_rules::Check(now, budget.expires, budget.next, budget.stamina, budget.maximum,
+                                               budget.cost, budget.fraction, budget.recovering, budget.emergency);
         if (reason == control::dodge_budget_rules::Denial::None) {
             ++budget.allowed;
             budget.next = now + static_cast<std::uint64_t>(budget.cooldown * 1000);
@@ -98,6 +101,8 @@ namespace {
             ++budget.reserveDenied;
         else if (reason == control::dodge_budget_rules::Denial::Cooldown)
             ++budget.cooldownDenied;
+        else if (reason == control::dodge_budget_rules::Denial::Recovery)
+            ++budget.recoveryDenied;
         else
             ++budget.snapshotDenied;
         denied.fetch_add(1);
@@ -151,6 +156,50 @@ namespace {
             if (std::memcmp(reinterpret_cast<void*>(base + offset), installedBytes[i++].data(), 5))
                 return false;
         return true;
+    }
+
+    float DirectedCost(std::uint32_t id) {
+        auto* actor = RE::TESForm::LookupByID<RE::Actor>(id);
+        if (!Matches(actor) || bypass.load() || support != control::Support::Ready || !HooksIntact() ||
+            // Verified UND 2.4.3 framework selector: 0 is TK Dodge RE.
+            *reinterpret_cast<const std::uint32_t*>(base + 0x790AC) != 0)
+            return -1;
+        bool dodging = false, roll = false;
+        std::int32_t step = 0;
+        float cost = 0;
+        return actor->GetGraphVariableBool("bIsDodging", dodging) &&
+                       actor->GetGraphVariableBool("bUND_IsDodgeRoll", roll) &&
+                       actor->GetGraphVariableInt("iStep", step) && control::und::StaminaCost(actor, base, cost)
+                   ? cost
+                   : -1;
+    }
+
+    bool DirectedRequest(std::uint32_t id, yliwf::testing::EvadeDirection direction) {
+        auto* actor = RE::TESForm::LookupByID<RE::Actor>(id);
+        const float cost = DirectedCost(id);
+        if (cost < 0 || !actor || !originalEligibility || !actor->IsInCombat() ||
+            originalKeyword(actor, "UND_ExcludeDodge") ||
+            !originalEligibility(reinterpret_cast<void*>(base + 0x78FC0), actor) || actor->IsBlocking() ||
+            actor->IsAttacking() || actor->GetCurrentScene())
+            return false;
+        const float stamina = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kStamina);
+        const float maximum =
+            stamina - actor->GetActorValueModifier(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina);
+        if (!std::isfinite(stamina) || !std::isfinite(maximum) || maximum <= 0 || stamina < cost + maximum * .2f)
+            return false;
+        const char* event = direction == yliwf::testing::EvadeDirection::Back   ? "TKDodgeBack"
+                            : direction == yliwf::testing::EvadeDirection::Left ? "TKDodgeLeft"
+                                                                                : "TKDodgeRight";
+        // The UND animation-event handler owns stamina payment and i-frames.
+        // Never set bIsDodging or charge stamina here.
+        if (!actor->SetGraphVariableInt("iStep", 2) || !actor->SetGraphVariableBool("bUND_IsDodgeRoll", false))
+            return false;
+        const bool accepted = actor->NotifyAnimationGraph(event);
+        if (accepted) {
+            std::scoped_lock lock(budgetMutex);
+            budget.next = GetTickCount64() + static_cast<std::uint64_t>(budget.cooldown * 1000);
+        }
+        return accepted;
     }
 
     bool AllocateTrampoline() {
@@ -263,7 +312,7 @@ bool mod::combat_tests::interference::und::Begin(RE::Actor* actor, bool enabled,
     return true;
 }
 
-void mod::combat_tests::interference::und::Sample(RE::Actor* actor) {
+void mod::combat_tests::interference::und::Sample(RE::Actor* actor, bool recovering, bool emergency) {
     if (!Matches(actor))
         return;
     std::uint64_t epoch;
@@ -284,6 +333,8 @@ void mod::combat_tests::interference::und::Sample(RE::Actor* actor) {
     budget.cost = cost;
     budget.stamina = current;
     budget.maximum = maximum;
+    budget.recovering = recovering;
+    budget.emergency = emergency;
     budget.expires = valid ? GetTickCount64() + 250 : 0;
 }
 
@@ -319,5 +370,11 @@ mod::combat_tests::interference::und::Snapshot mod::combat_tests::interference::
             budget.snapshotDenied,
             budget.cost,
             budget.maximum * budget.fraction,
-            budget.stamina};
+            budget.stamina,
+            budget.recoveryDenied};
+}
+
+const yliwf::testing::EvadeBackend* mod::combat_tests::interference::und::DirectedBackend() {
+    static const yliwf::testing::EvadeBackend backend{sizeof(backend), DirectedCost, DirectedRequest};
+    return support == Support::Ready && !bypass.load() ? &backend : nullptr;
 }

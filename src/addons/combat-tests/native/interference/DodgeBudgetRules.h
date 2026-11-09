@@ -4,7 +4,7 @@
 #include <cstdint>
 
 namespace mod::combat_tests::interference::dodge_budget_rules {
-    enum class Denial { None, Snapshot, Reserve, Cooldown };
+    enum class Denial { None, Snapshot, Reserve, Cooldown, Recovery };
 
     inline bool Valid(float reserve, float cooldown) {
         return std::isfinite(reserve) && reserve >= 0 && reserve <= 0.75f && std::isfinite(cooldown) && cooldown >= 0 &&
@@ -12,10 +12,12 @@ namespace mod::combat_tests::interference::dodge_budget_rules {
     }
 
     inline Denial Check(std::uint64_t now, std::uint64_t expires, std::uint64_t next, float stamina, float maximum,
-                        float cost, float reserve) {
+                        float cost, float reserve, bool recovering = false, bool emergency = false) {
         if (now > expires || !std::isfinite(stamina) || !std::isfinite(maximum) || maximum <= 0 ||
             !std::isfinite(cost) || cost < 0 || !std::isfinite(reserve) || reserve < 0 || reserve > 0.75f)
             return Denial::Snapshot;
+        if (recovering && !emergency)
+            return Denial::Recovery;
         if (stamina < cost + maximum * reserve)
             return Denial::Reserve;
         return now < next ? Denial::Cooldown : Denial::None;

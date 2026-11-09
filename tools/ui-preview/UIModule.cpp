@@ -7,6 +7,7 @@
 #include "input/Hotkeys.h"
 #include "settings/PreferenceState.h"
 #include <cstdio>
+#include <set>
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx11.h>
 
@@ -138,6 +139,9 @@ namespace {
             for (int scenario = 0; scenario < 6; ++scenario) {
                 preview::Reset(static_cast<preview::Scenario>(scenario));
                 for (const auto& page : SKSEMenuFramework::Pages) {
+                    std::set<std::pair<ImGuiID, ImGuiID>> visitedTabs;
+                    bool remainingTabs = true;
+                    for (int selection = 0; remainingTabs && selection < 64; ++selection) {
                     for (int frame = 0; frame < 3; ++frame) {
                         ImGui::NewFrame();
                         ImGui::SetNextWindowSize(io.DisplaySize);
@@ -149,6 +153,23 @@ namespace {
                         if (!ImGui::GetDrawData()->Valid || ImGui::GetDrawData()->TotalVtxCount <= 0)
                             return 2;
                     }
+                    remainingTabs = false;
+                    auto& context = *ImGui::GetCurrentContext();
+                    for (int barIndex = 0; barIndex < context.TabBars.GetMapSize() && !remainingTabs; ++barIndex) {
+                        auto* bar = context.TabBars.TryGetMapData(barIndex);
+                        if (!bar || bar->CurrFrameVisible != context.FrameCount)
+                            continue;
+                        for (const auto& tab : bar->Tabs) {
+                            if (!visitedTabs.emplace(bar->ID, tab.ID).second)
+                                continue;
+                            bar->NextSelectedTabId = tab.ID;
+                            remainingTabs = true;
+                            break;
+                        }
+                    }
+                    }
+                    if (remainingTabs)
+                        return 11;
                 }
             }
         }
