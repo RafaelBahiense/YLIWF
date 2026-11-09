@@ -1,11 +1,13 @@
 #pragma once
 #include <cstdint>
+#include "DefenderTuning.h"
 
 // Combat-test backend services. Engine callbacks run on the main game thread.
 // No engine or STL objects cross the DLL boundary.
 namespace yliwf::testing {
     inline constexpr std::uint32_t Version = 1;
     inline constexpr char QueryExport[] = "YLIWF_GetCombatTestHost";
+    inline constexpr std::uint32_t DefenderControl = 3;
 
     enum class CommandState : std::uint32_t { Unknown, Pending, Succeeded, Failed };
 
@@ -19,6 +21,16 @@ namespace yliwf::testing {
     enum class BashAnimationEvent : std::uint32_t { Started, Ended, Interrupted };
 
     enum class PrimitiveAction : std::uint32_t { Guard, Release, Bash, PowerBash, RightAttack };
+    enum class EvadeDirection : std::uint32_t { Back, Left, Right };
+
+    struct EvadeBackend {
+        std::uint32_t size = sizeof(EvadeBackend);
+        // Main-thread callbacks. Negative cost means unavailable. The provider
+        // executes the animation and owns its stamina cost and immunity rules.
+        float (*cost)(std::uint32_t actor) = nullptr;
+        bool (*request)(std::uint32_t actor, EvadeDirection direction) = nullptr;
+        float clearance = 384;
+    };
 
     enum class AttackAnimationEvent : std::uint32_t {
         Started,
@@ -33,7 +45,8 @@ namespace yliwf::testing {
         std::uint32_t (*inspect)(std::uint32_t actor, Subject*) = nullptr;
         std::uint32_t (*setRole)(std::uint32_t actor, std::uint32_t role) = nullptr;
         std::uint32_t (*observe)(std::uint32_t actor, struct DefenderObservation*) = nullptr;
-        std::uint32_t (*beginDefense)(std::uint32_t actor, std::uint32_t mode, std::uint32_t token) = nullptr;
+        // control must be DefenderControl; other values are rejected.
+        std::uint32_t (*beginDefense)(std::uint32_t actor, std::uint32_t control, std::uint32_t token) = nullptr;
         std::uint32_t (*endDefense)(std::uint32_t actor, std::uint32_t token, std::uint32_t savedPhase) = nullptr;
         // Thread-safe, engine-free recovery state; permitted during co-save writing.
         std::uint32_t (*defenseState)(std::uint32_t actor, std::uint32_t token) = nullptr;
@@ -65,7 +78,17 @@ namespace yliwf::testing {
         // with an anchor/radius in the same area until teardown or revert.
         bool (*setMovementBounds)(std::uint32_t actor, std::uint32_t token, std::uint32_t anchor,
                                   float radius) = nullptr;
+        // Configure once, before combat, for the active actor/token only.
+        bool (*setDefenderTuning)(std::uint32_t actor, std::uint32_t token, const DefenderTuning*) = nullptr;
+        // Main-thread, read-only: first eligible core combat-role alias package,
+        // or zero. Excludes ordinary follow/sandbox packages and grants no permission.
+        std::uint32_t (*combatPackage)(std::uint32_t actor) = nullptr;
+        // Test actor/token only, configured before combat. Copied callbacks are
+        // discarded at scope end/revert; provider must outlive the scope.
+        bool (*setEvadeBackend)(std::uint32_t actor, std::uint32_t token, const EvadeBackend*) = nullptr;
     };
+
+    enum class ThreatKind : std::uint32_t { Unknown, Melee, HeavyMelee, Bow, Projectile, Concentration, Area };
 
     struct DefenderObservation {
         std::uint32_t size = sizeof(DefenderObservation), available = 0, requested = 0, owned = 0, yielded = 0;
@@ -114,8 +137,19 @@ namespace yliwf::testing {
         float guardLocomotionSpeed = -1;
         std::uint32_t guardLocomotionReady = 0;
         std::uint32_t threatVisible = 0, threatAttacking = 0, threatPreparing = 0;
+        std::uint32_t tauntAvailable = 0, tauntPhase = 0, tauntEnemy = 0, tauntSpell = 0;
+        std::uint32_t tauntRequests = 0, tauntObserved = 0, tauntUnobserved = 0, tauntReleased = 0, tauntCancelled = 0,
+                      tauntTargetRejections = 0, tauntEffectPresent = 0;
+        float tauntRemaining = 0, tauntCooldown = 0;
+        std::uint32_t precisionPreCallbacks = 0, precisionPreOutgoing = 0, precisionLastCandidate = 0;
+        std::int32_t precisionActorActive = -1, precisionThreatActive = -1, precisionThreatControllerHittable = -1;
+        std::uint32_t casterBashRequests = 0, casterBashCompleted = 0;
+        std::uint32_t flightReadable = 0, projectileGap = 0, incomingProjectiles = 0, projectilesExamined = 0;
+        std::uint32_t evadeAvailable = 0, evadePhase = 0, evadeRequests = 0, evadeAccepted = 0, evadeObserved = 0,
+                      evadeCompleted = 0, evadeRejected = 0, evadeTimeouts = 0;
+        float evadeDisplacement = 0;
     };
 
     using QueryHost = const Host* (*)(std::uint32_t);
-    static_assert(sizeof(Subject) == 404 && sizeof(Host) == 152);
+    static_assert(sizeof(Subject) == 404 && sizeof(Host) == 176);
 }

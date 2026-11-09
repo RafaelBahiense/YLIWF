@@ -2,7 +2,9 @@
 #include "HealerMovement.h"
 #include "DefenderMovementRules.h"
 #include "DefenderProgress.h"
+#include "DefenderTuning.h"
 #include "HealingGeometry.h"
+#include "DefenderObservation.h"
 #include <array>
 #include <cmath>
 
@@ -17,6 +19,8 @@ namespace mod::defender_movement {
             RE::FormID area = 0;
             defender_movement_rules::Progress progress;
             Observation observation;
+            defender_tactics::Motion motion = defender_tactics::Motion::None;
+            std::uint32_t threat = 0;
         };
 
         std::array<State, Slots> states{};
@@ -116,6 +120,31 @@ namespace mod::defender_movement {
         return true;
     }
 
+    bool ClearEvade(RE::Actor* actor, const RE::NiPoint3& destination) {
+        if (!actor || testBounds.actor != actor->GetFormID() || testBounds.area != Area(actor) ||
+            !defender_movement_rules::WithinBounds(testBounds.anchor, {destination.x, destination.y},
+                                                   testBounds.radius))
+            return false;
+        const auto ground = healer_movement::Ground(actor, {destination.x, destination.y, destination.z});
+        if (!ground || std::abs(ground->z - destination.z) > 48 ||
+            !healing_geometry::Corridor(actor, {ground->x, ground->y, ground->z}))
+            return false;
+        const auto origin = actor->GetPosition();
+        for (const float fraction : {.25f, .5f, .75f}) {
+            const auto sample =
+                healer_movement::Ground(actor, {origin.x + (destination.x - origin.x) * fraction,
+                                                origin.y + (destination.y - origin.y) * fraction, origin.z});
+            if (!sample || std::abs(sample->z - origin.z) > 48)
+                return false;
+        }
+        std::vector<defender_movement_rules::Point> opponents;
+        for (const auto& threat : defender_observation::Threats(actor))
+            if (auto* enemy = RE::TESForm::LookupByID<RE::Actor>(threat.actor))
+                opponents.push_back({enemy->GetPositionX(), enemy->GetPositionY()});
+        return defender_movement_rules::ClearStep({actor->GetPositionX(), actor->GetPositionY()},
+                                                  {ground->x, ground->y}, opponents, false);
+    }
+
     bool Move(RE::Actor* actor, RE::Actor* threat, std::size_t slot, defender_tactics::Motion motion,
               std::span<const defender_tactics::Threat> threats, bool guarded) {
         using defender_tactics::Motion;
@@ -137,29 +166,52 @@ namespace mod::defender_movement {
         if (!std::isfinite(distance) || distance < 1 || distance > 2400)
             return false;
         const float x = (target.x - origin.x) / distance, y = (target.y - origin.y) / distance;
+        const auto tuning = defender_tuning::TestScope.Read(actor->GetFormID());
         auto desired = origin;
         if (motion == Motion::Close || motion == Motion::Intercept) {
             if (distance <= 192)
                 return false;
-            const float step = defender_movement_rules::ApproachStep(distance);
+            const float step = defender_movement_rules::ApproachStep(distance, tuning.approachStep);
             desired.x += x * step;
             desired.y += y * step;
         } else if (motion == Motion::Retreat) {
-            desired.x -= x * 256;
-            desired.y -= y * 256;
+            desired.x -= x * tuning.retreatStep;
+            desired.y -= y * tuning.retreatStep;
         } else if (motion == Motion::Lateral) {
-            desired.x += y * 256;
-            desired.y -= x * 256;
+            desired.x += y * tuning.lateralStep;
+            desired.y -= x * tuning.lateralStep;
+        } else if (motion == Motion::AdvanceLateral) {
+            const auto step =
+                defender_movement_rules::AdvanceLateralStep(distance, tuning.approachStep, tuning.lateralStep);
+            desired.x += x * step.x + y * step.y;
+            desired.y += y * step.x - x * step.y;
         } else {
             return false;
         }
+        // A refresh validates the existing short waypoint rather than moving it
+        // away from an actor that has not reached it. Stalls still select detours.
+        const auto& previousDestination = state.observation;
+        const bool keep = defender_movement_rules::KeepWaypoint(
+            state.observation.active &&
+                (motion == Motion::Retreat || motion == Motion::Lateral || motion == Motion::AdvanceLateral),
+            state.motion == motion && state.threat == threat->GetFormID(), state.progress.Detouring(),
+            {origin.x, origin.y}, {previousDestination.x, previousDestination.y});
+        if (keep)
+            desired = {previousDestination.x, previousDestination.y, previousDestination.z};
         std::vector<defender_movement_rules::Point> opponents;
         for (const auto& candidate : threats)
             if (auto* enemy = RE::TESForm::LookupByID<RE::Actor>(candidate.actor))
                 opponents.push_back({enemy->GetPositionX(), enemy->GetPositionY()});
         const auto ground = [&](const RE::NiPoint3& requested, bool detour) -> std::optional<healer_movement::Point> {
             const auto projected = healer_movement::Ground(actor, {requested.x, requested.y, requested.z});
-            return projected && !state.progress.Blocked({projected->x, projected->y}) &&
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            const bool scoped = testBounds.actor == actor->GetFormID() && testBounds.area == Area(actor);
+            const bool inside =
+                projected && (scoped ? defender_movement_rules::WithinBounds(
+                                           testBounds.anchor, {projected->x, projected->y}, testBounds.radius)
+                                     : !player || std::hypot(projected->x - player->GetPositionX(),
+                                                             projected->y - player->GetPositionY()) <= 2400);
+            return inside && !state.progress.Blocked({projected->x, projected->y}) &&
                            healing_geometry::Corridor(actor, {projected->x, projected->y, projected->z}) &&
                            defender_movement_rules::ClearStep({origin.x, origin.y}, {projected->x, projected->y},
                                                               opponents, motion == Motion::Retreat, detour)
@@ -168,6 +220,35 @@ namespace mod::defender_movement {
         };
         auto point = state.progress.Detouring() ? std::optional<healer_movement::Point>{} : ground(desired, false);
         bool detour = !point;
+        if (motion == Motion::Retreat && (!keep || !point)) {
+            float best =
+                point ? defender_movement_rules::FormationScore({point->x, point->y}, {target.x, target.y}, opponents)
+                      : -100000;
+            for (const float angle : {.785398f, -.785398f, 1.570796f, -1.570796f}) {
+                const float dx = -x * tuning.retreatStep, dy = -y * tuning.retreatStep;
+                const auto candidate = ground({origin.x + std::cos(angle) * dx - std::sin(angle) * dy,
+                                               origin.y + std::sin(angle) * dx + std::cos(angle) * dy, origin.z},
+                                              true);
+                if (!candidate)
+                    continue;
+                const float score = defender_movement_rules::FormationScore({candidate->x, candidate->y},
+                                                                            {target.x, target.y}, opponents);
+                if (score > best) {
+                    point = candidate;
+                    best = score;
+                    detour = true;
+                }
+            }
+        }
+        if (!point && motion == Motion::AdvanceLateral) {
+            for (const auto side : {1.0f, -1.0f}) {
+                const RE::NiPoint3 lateral{origin.x + side * y * tuning.lateralStep,
+                                           origin.y - side * x * tuning.lateralStep, origin.z};
+                point = ground(lateral, true);
+                if (point)
+                    break;
+            }
+        }
         const float dx = desired.x - origin.x, dy = desired.y - origin.y;
         // A short lateral waypoint can open a route around a column. Keep the
         // first segment clear; Skyrim remains responsible for actual pathfinding.
@@ -202,6 +283,8 @@ namespace mod::defender_movement {
         const auto family = guarded ? Slots * 2 : 0;
         const int baseRank = static_cast<int>(slot + family);
         if (!changed && (previous == baseRank || previous == baseRank + static_cast<int>(Slots))) {
+            state.motion = motion;
+            state.threat = threat->GetFormID();
             if (!state.observation.active) {
                 state.observation.active = true;
                 state.observation.x = marker->GetPositionX();
@@ -215,6 +298,8 @@ namespace mod::defender_movement {
         actor->AddToFaction(activity, static_cast<std::int8_t>(rank));
         actor->EvaluatePackage(true, false);
         state.observation.active = true;
+        state.motion = motion;
+        state.threat = threat->GetFormID();
         state.observation.x = destination.x;
         state.observation.y = destination.y;
         state.observation.z = destination.z;

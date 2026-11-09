@@ -12,7 +12,7 @@ namespace mod::shield_defender_rules {
     inline constexpr float GuardCommitment = 0.8f;
     inline constexpr float CounterDistance = 192;
 
-    enum class Stance { Pressure, Guard, Recover, GuardRecover, Counter, Count };
+    enum class Stance { Pressure, Guard, Recover, GuardRecover, Counter, Intercept, Count };
 
     struct Threat {
         float distance = 0;
@@ -34,23 +34,25 @@ namespace mod::shield_defender_rules {
         return stance == Stance::Guard || stance == Stance::GuardRecover;
     }
 
-    inline bool Recovering(bool previous, float stamina, float maximum) {
+    inline bool Recovering(bool previous, float stamina, float maximum, float entry = ExhaustedFraction,
+                           float exit = RecoveredFraction) {
         if (!std::isfinite(stamina) || !std::isfinite(maximum) || maximum <= 0)
             return true;
         const float fraction = std::clamp(stamina / maximum, 0.0f, 1.0f);
-        return previous ? fraction < RecoveredFraction : fraction <= ExhaustedFraction;
+        return previous ? fraction < exit : fraction <= entry;
     }
 
     inline bool CounterOpportunity(float distance, bool recoiling, bool staggered) {
         return std::isfinite(distance) && distance >= 0 && distance <= CounterDistance && (recoiling || staggered);
     }
 
-    constexpr Stance ChooseStance(bool recovering, bool incomingMelee, bool counterOpportunity = false) {
+    constexpr Stance ChooseStance(bool recovering, bool incomingMelee, bool counterOpportunity = false,
+                                  bool intercept = false) {
         if (recovering)
             return incomingMelee ? Stance::GuardRecover : Stance::Recover;
         if (incomingMelee)
             return Stance::Guard;
-        return counterOpportunity ? Stance::Counter : Stance::Pressure;
+        return counterOpportunity ? Stance::Counter : intercept ? Stance::Intercept : Stance::Pressure;
     }
 
     constexpr std::string_view Description(Stance stance) {
@@ -65,6 +67,8 @@ namespace mod::shield_defender_rules {
                 return "Incoming melee: favoring blocks without bashing";
             case Stance::Counter:
                 return "Opponent recoiling or staggered: favoring a counterattack";
+            case Stance::Intercept:
+                return "Enemy threatens an ally: closing decisively and favoring offense";
             case Stance::Count:
                 break;
         }

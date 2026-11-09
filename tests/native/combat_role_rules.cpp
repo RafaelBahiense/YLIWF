@@ -182,3 +182,13 @@ namespace {
         CHECK_FALSE(Valid(static_cast<std::int32_t>(Role::Count)));
     }
 }
+
+TEST_CASE("Ally interception prefers offense while recovery and immediate guard retain priority") {
+    using namespace mod::shield_defender_rules;
+    CHECK(ChooseStance(false, false, false, true) == Stance::Intercept);
+    CHECK(ChooseStance(false, true, false, true) == Stance::Guard);
+    CHECK(ChooseStance(true, false, false, true) == Stance::Recover);
+    CHECK(ChooseStance(true, true, false, true) == Stance::GuardRecover);
+    CHECK(ChooseStance(false, false, true, true) == Stance::Counter);
+    CHECK(ChooseStance(false, false, false, false) == Stance::Pressure);
+}

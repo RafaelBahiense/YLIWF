@@ -52,7 +52,8 @@ namespace mod::combat_actions {
                 ++attacks;
             const auto decision = published.load();
             const bool handoff = externalAttack.BlocksNewAttacks();
-            const bool suppress = handoff || (decision && Milliseconds() <= expires.load() && !externalAttack.Active());
+            const bool suppress =
+                handoff || RejectNewOffense(decision, Milliseconds() <= expires.load(), externalAttack.Active());
             if (allowed && attack && !(data == issuedData && (issuingBash || issuingIntent == Intent::RightAttack)) &&
                 suppress) {
                 ++rejected;
@@ -82,6 +83,17 @@ namespace mod::combat_actions {
                 return allowed;
             const bool ownBash = data == issuedData && issuingBash;
             const bool ownAttack = data == issuedData && issuingIntent == Intent::RightAttack;
+            const auto policy = published.load();
+            const bool fresh = Milliseconds() <= expires.load();
+            const bool handoff = externalAttack.BlocksNewAttacks();
+            const bool suppress = handoff || RejectNewOffense(policy, fresh, externalAttack.Active());
+            if (allowed && !ownBash && !ownAttack && suppress &&
+                std::ranges::find(offensive, data->action) != offensive.end()) {
+                ++rejected;
+                if (handoff)
+                    ++handoffAttackRejections;
+                return false;
+            }
             if (data->action != leftAttack && !ownBash && !ownAttack)
                 return allowed;
 
@@ -101,9 +113,6 @@ namespace mod::combat_actions {
             } else if (!ownBash && !ownAttack)
                 ++unknownLeftRequests;
 
-            const bool handoff = externalAttack.BlocksNewAttacks();
-            const bool suppress =
-                handoff || (published.load() && Milliseconds() <= expires.load() && !externalAttack.Active());
             if (allowed && (ownGuard || ownBash || ownAttack) && externalAttack.Active()) {
                 evidence.externalBlocked = true;
                 evidence.rejectedBeforeDispatch = resolvedProtocol;
@@ -111,7 +120,8 @@ namespace mod::combat_actions {
             }
             if (allowed && ((ownBash && !AllowedBashEvent(event ? event : "", issuingIntent)) ||
                             (ownAttack && !AllowedRightAttackEvent(event ? event : "")) ||
-                            (!ownBash && !ownAttack && RejectLeftAction(action, ownGuard, suppress)))) {
+                            (!ownBash && !ownAttack && RejectLeftAction(action, ownGuard, suppress)) ||
+                            RejectDiscretionaryGuard(policy, fresh, ownGuard || ownBash || ownAttack, action))) {
                 if (ownGuard || ownBash || ownAttack)
                     evidence.rejectedBeforeDispatch = resolvedProtocol;
                 if (action == LeftAction::Bash)
@@ -288,9 +298,10 @@ namespace mod::combat_actions {
         SKSE::log::info("Experimental combat action validation hook installed (AE 1.6.1170)");
     }
 
-    void PublishSuppression(bool value) {
+    void PublishSuppression(bool value, bool recovering, bool safeRecoveryGap) {
         expires = Milliseconds() + 250;
-        published = value ? 1 : 0;
+        published =
+            (value ? SuppressOffense : 0) | (recovering ? RecoveryOffense : 0) | (safeRecoveryGap ? RecoveryGuard : 0);
     }
 
     Capabilities Available() {

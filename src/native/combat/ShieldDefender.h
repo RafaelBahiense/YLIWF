@@ -24,6 +24,8 @@ namespace mod::shield_defender {
         defender_movement::Observation movement;
         float weaponReach = 0;
         std::uint32_t precisionAvailable = 0, precisionCallbacks = 0, precisionIncoming = 0, precisionOutgoing = 0;
+        bool flightReadable = false, projectileGap = false;
+        std::uint32_t incomingProjectiles = 0, projectilesExamined = 0;
     };
 
     void Configure();

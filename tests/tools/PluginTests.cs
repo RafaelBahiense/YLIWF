@@ -10,6 +10,31 @@ namespace ModTools.Tests;
 public sealed partial class PluginTests : TestWorkspace
 {
     [Fact]
+    public void DefenderInterceptionCommitsToOffenseAndChallengeHasNoDamageOrPapyrusPayload()
+    {
+        using var loaded = SkyrimMod.CreateFromBinaryOverlay(CreatePlugin(), SkyrimRelease.SkyrimSE);
+        var intercept = loaded.CombatStyles.Single(style => style.EditorID == "YLIWF_ShieldDefenderInterceptStyle");
+        var pressure = loaded.CombatStyles.Single(style => style.EditorID == "YLIWF_ShieldDefenderStyle");
+        Assert.True(intercept.OffensiveMult > pressure.OffensiveMult);
+        Assert.True(intercept.GroupOffensiveMult > pressure.GroupOffensiveMult);
+        Assert.Equal(0, intercept.CloseRange!.CircleMult);
+        Assert.Equal(0, intercept.CloseRange.FallbackMult);
+        var spell = loaded.Spells.Single(spell => spell.EditorID == "YLIWF_DefenderChallenge");
+        Assert.Equal(SpellType.LesserPower, spell.Type);
+        Assert.Equal(CastType.FireAndForget, spell.CastType);
+        Assert.Equal(TargetType.TargetActor, spell.TargetType);
+        Assert.Equal(0u, spell.BaseCost);
+        var effect = Assert.Single(spell.Effects);
+        Assert.Equal(4, effect.Data!.Duration);
+        Assert.Equal(0, effect.Data.Magnitude);
+        Assert.Equal(0, effect.Data.Area);
+        var magicEffect = loaded.MagicEffects.Single(record => record.FormKey == effect.BaseEffect.FormKey);
+        Assert.Equal(MagicEffectArchetype.TypeEnum.Script, magicEffect.Archetype.Type);
+        Assert.True(magicEffect.Flags.HasFlag(MagicEffect.Flag.Hostile));
+        Assert.Null(magicEffect.VirtualMachineAdapter);
+    }
+
+    [Fact]
     public void ShieldDefenderUsesDefensiveMeleeStyle()
     {
         using var loaded = SkyrimMod.CreateFromBinaryOverlay(CreatePlugin(), SkyrimRelease.SkyrimSE);
@@ -78,7 +103,7 @@ public sealed partial class PluginTests : TestWorkspace
         var esp = CreatePlugin();
         Artifacts.ValidateEsp(esp);
         using var loaded = SkyrimMod.CreateFromBinaryOverlay(esp, SkyrimRelease.SkyrimSE);
-        Assert.Equal(228, loaded.EnumerateMajorRecords().Count());
+        Assert.Equal(231, loaded.EnumerateMajorRecords().Count());
         Assert.True(loaded.Factions.Single(faction => faction.FormKey == new FormKey(loaded.ModKey, 0x995)).Flags.HasFlag(Faction.FactionFlag.HiddenFromPC));
         Assert.Equal(ModInfo.Identity.Author, loaded.ModHeader.Author);
         Assert.Equal("DialogueFollower", loaded.Quests.Single(q => q.FormKey == FormKey.Factory("0750BA:Skyrim.esm")).EditorID);

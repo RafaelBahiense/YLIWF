@@ -1,11 +1,16 @@
 #include "followers/QuestPolicies.h"
 #include "ShieldDefender.h"
+#include "actions/Taunt.h"
+#include "actions/Evade.h"
 #include "ShieldDefenderRules.h"
 #include "DefenderActions.h"
 #include "CombatRoles.h"
 #include "CombatOrders.h"
 #include "DefenderObservation.h"
 #include "DefenderMovement.h"
+#include "DefenderTuning.h"
+#include "ProjectileObservation.h"
+#include "ProjectileRules.h"
 #include "integrations/Precision.h"
 #include "adapters/Adapters.h"
 #include "followers/ControllerRuntime.h"
@@ -38,6 +43,7 @@ namespace mod::shield_defender {
             Observation observation;
             std::size_t movementSlot = defender_movement::Slots;
             float movingFor = 0, movementRest = 0, movementRefresh = 0;
+            projectile_rules::QuietWindow flightWindow;
             std::string status = "Waiting for combat";
             std::string loggedStatus;
         };
@@ -59,6 +65,7 @@ namespace mod::shield_defender {
 
         void ObserveTactics(RE::Actor* actor, Control& control, float elapsed) {
             defender_movement::Sample(actor, elapsed);
+            const auto tuning = defender_tuning::TestScope.Read(actor->GetFormID());
             const bool blocking = actor->IsBlocking();
             const bool bashing = actor->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
             control.blockObservations += blocking && !control.blocking;
@@ -68,15 +75,37 @@ namespace mod::shield_defender {
             control.stamina = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kStamina);
             control.maximumStamina = control.stamina - actor->GetActorValueModifier(RE::ACTOR_VALUE_MODIFIER::kDamage,
                                                                                     RE::ActorValue::kStamina);
-            control.recovering =
-                shield_defender_rules::Recovering(control.recovering, control.stamina, control.maximumStamina);
-            const auto threats = defender_observation::Threats(actor);
-            const auto decision = defender_tactics::Choose({control.requested, control.recovering, false,
-                                                            defender_movement::Ready(control.movementSlot),
-                                                            control.stamina, control.maximumStamina, threats});
+            control.recovering = shield_defender_rules::Recovering(
+                control.recovering, control.stamina, control.maximumStamina, tuning.recoveryEnter, tuning.recoveryExit);
+            auto threats = defender_observation::Threats(actor);
+            const auto flight = projectile_observation::Read(actor);
+            for (auto& threat : threats) {
+                threat.flightKnown = flight.readable;
+                for (std::uint32_t i = 0; i < flight.count; ++i)
+                    if (flight.incoming[i].shooter == threat.actor) {
+                        threat.incomingProjectile = true;
+                        threat.impactSeconds = threat.impactSeconds < 0
+                                                   ? flight.incoming[i].seconds
+                                                   : std::min(threat.impactSeconds, flight.incoming[i].seconds);
+                    }
+            }
+            const bool projectileGap = control.flightWindow.Update(flight.readable, flight.count != 0, elapsed);
+            const bool closing = control.observation.moving &&
+                                 (control.observation.tactic.motion == defender_tactics::Motion::Close ||
+                                  control.observation.tactic.motion == defender_tactics::Motion::Intercept ||
+                                  control.observation.tactic.motion == defender_tactics::Motion::AdvanceLateral);
+            const auto decision = defender_tactics::Choose(
+                {control.requested, control.recovering, defender_movement::Ready(control.movementSlot),
+                 control.stamina, control.maximumStamina, threats, closing,
+                 control.observation.moving && control.observation.tactic.motion == defender_tactics::Motion::Retreat,
+                 control.observation.threat, projectileGap});
             control.lastDecision = Clock::now();
             auto& observation = control.observation;
             observation.available = true;
+            observation.flightReadable = flight.readable;
+            observation.incomingProjectiles = flight.count;
+            observation.projectilesExamined = flight.examined;
+            observation.projectileGap = projectileGap;
             observation.tactic = decision;
             observation.threat = decision.target;
             observation.threats = static_cast<std::uint32_t>(threats.size());
@@ -109,8 +138,9 @@ namespace mod::shield_defender {
             observation.precisionOutgoing = precision.outgoing;
             control.incomingMelee = observation.incoming;
             control.counterOpportunity = observation.counter;
-            control.stance =
-                shield_defender_rules::ChooseStance(control.recovering, decision.guard, observation.counter);
+            control.stance = shield_defender_rules::ChooseStance(
+                control.recovering, decision.guard, observation.counter,
+                decision.offense && !observation.targeting && observation.threat != 0);
             observation.stance = static_cast<std::uint32_t>(control.stance);
             control.status = decision.reason;
             // Bound each locomotion intervention, then give ordinary combat AI
@@ -119,24 +149,25 @@ namespace mod::shield_defender {
             control.movementRefresh = std::max(0.0f, control.movementRefresh - elapsed);
             control.movingFor = observation.moving ? control.movingFor + elapsed : 0;
             observation.guardPreparing = defender_actions::Inspect(actor->GetFormID()).prepareGuardMovement;
-            const bool expired = control.movingFor >= 2;
+            const bool expired = control.movingFor >= tuning.movementBurst;
             auto* target = RE::TESForm::LookupByID<RE::Actor>(decision.target);
             const bool displacing = decision.motion != defender_tactics::Motion::None;
-            if (!displacing || expired || control.movementRest > 0 || actor->IsAttacking()) {
+            if (!displacing || expired || control.movementRest > 0 || actor->IsAttacking() ||
+                combat_actions::evade::Busy(actor->GetFormID())) {
                 defender_movement::Release(actor);
                 observation.moving = false;
                 if (expired)
-                    control.movementRest = 0.6f;
+                    control.movementRest = tuning.movementRest;
             } else if (!observation.moving || control.movementRefresh <= 0 || observation.guardPreparing) {
                 if (!observation.moving)
                     ++observation.movementRequests;
                 observation.moving =
                     defender_movement::Move(actor, target, control.movementSlot, decision.motion, threats,
                                             actor->IsBlocking() || observation.guardPreparing);
-                control.movementRefresh = 0.35f;
+                control.movementRefresh = tuning.movementRefresh;
                 if (!observation.moving) {
                     ++observation.movementFailures;
-                    control.movementRest = 0.6f;
+                    control.movementRest = tuning.movementRest;
                     defender_movement::Release(actor);
                 }
             }
@@ -431,6 +462,7 @@ namespace mod::shield_defender {
     }
 
     void Invalidate() {
+        combat_actions::taunt::Clear();
         defender_actions::Invalidate();
         std::lock_guard lock(mutex);
         controls.clear();

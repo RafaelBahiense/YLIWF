@@ -12,7 +12,16 @@ public sealed class DefenderMovementTests : TestWorkspace
         for (var index = 0; index < 32; ++index)
         {
             var package = loaded.Packages.Single(record => record.FormKey.ID == 0xB00 + index);
-            Assert.True(package.Flags.HasFlag(Package.Flag.IgnoreCombat));
+            Assert.Equal(Package.Interrupt.Combat, package.InterruptOverride);
+            Assert.Equal(0x503D0u, package.PackageTemplate.FormKey.ID);
+            Assert.Equal("Skyrim.esm", package.PackageTemplate.FormKey.ModKey.FileName.String);
+            Assert.Empty(package.ProcedureTree);
+            Assert.Single(package.Data);
+            Assert.Equal((byte)5, package.DataInputVersion);
+            Assert.False(package.Flags.HasFlag(Package.Flag.IgnoreCombat));
+            Assert.False(package.Flags.HasFlag(Package.Flag.NoCombatAlert));
+            Assert.True(package.Flags.HasFlag(Package.Flag.PreferredSpeed));
+            Assert.Equal(Package.InterruptFlag.FriendlyFireComments | Package.InterruptFlag.AggroRadiusBehavior, package.InterruptFlags);
             Assert.False(package.Flags.HasFlag(Package.Flag.MustComplete));
             Assert.Equal(index >= 16 ? Package.Speed.Walk : Package.Speed.Run, package.PreferredSpeed);
             Assert.Contains(package.Conditions, condition => condition.Data is IIsInCombatConditionDataGetter);

@@ -45,8 +45,11 @@ namespace mod::defender_observation {
             if (threat.distance > 2400)
                 continue;
             const auto target = enemy->GetActorRuntimeData().currentCombatTarget.get();
-            threat.self = target.get() == actor;
-            threat.ally = target && (target.get() == player || target->IsPlayerTeammate());
+            const auto targeted =
+                defender_tactics::ClassifyTarget(actor->GetFormID(), target ? target->GetFormID() : 0,
+                                                 target.get() == player, target && target->IsPlayerTeammate());
+            threat.self = targeted == defender_tactics::PartyTarget::Self;
+            threat.ally = targeted == defender_tactics::PartyTarget::Ally;
             if (!threat.self && !threat.ally)
                 continue;
             threat.heading = actor->GetHeadingAngle(enemy->GetPosition(), false);
@@ -72,6 +75,8 @@ namespace mod::defender_observation {
                 if (precision.reach > 0)
                     threat.reach = precision.reach + 96;
             }
+            auto selectedActivity = defender_casting_rules::Activity::Idle;
+            bool selectedSpell = false;
             for (const auto hand :
                  {RE::MagicSystem::CastingSource::kRightHand, RE::MagicSystem::CastingSource::kLeftHand}) {
                 const auto* caster = enemy->GetMagicCaster(hand);
@@ -81,6 +86,16 @@ namespace mod::defender_observation {
                                                                             : nullptr;
                 if (!Hostile(spell))
                     continue;
+                const auto activity =
+                    defender_casting_rules::Observe(caster && caster->currentSpell == spell,
+                                                    caster ? static_cast<std::uint32_t>(caster->state.get()) : 0);
+                if (selectedSpell && !defender_casting_rules::Prefer(activity, selectedActivity))
+                    continue;
+                // Preserve a live melee attack over idle magic in the other hand.
+                if (activity == defender_casting_rules::Activity::Idle && (threat.attacking || threat.windup))
+                    continue;
+                selectedSpell = true;
+                selectedActivity = activity;
                 threat.kind = spell->GetCastingType() == RE::MagicSystem::CastingType::kConcentration
                                   ? Kind::Concentration
                                   : Kind::Projectile;
@@ -88,12 +103,8 @@ namespace mod::defender_observation {
                     std::ranges::any_of(spell->effects,
                                         [](const auto* effect) { return effect && effect->effectItem.area > 0; }))
                     threat.kind = Kind::Area;
-                const auto activity =
-                    defender_casting_rules::Observe(caster && caster->currentSpell == spell,
-                                                    caster ? static_cast<std::uint32_t>(caster->state.get()) : 0);
                 threat.attacking = activity == defender_casting_rules::Activity::Casting && threat.visible;
                 threat.windup = activity == defender_casting_rules::Activity::Preparing && threat.visible;
-                break;
             }
             result.push_back(threat);
         }

@@ -55,3 +55,20 @@ TEST_CASE("Power bash keeps a larger budget and accepts only the power bash idle
     CHECK_FALSE(AllowedEvent("attackPowerStartInPlace", Kind::Power));
     CHECK_FALSE(AllowedEvent("bashPowerStart", Kind::Off));
 }
+
+TEST_CASE("Tactical bash selection falls back safely and preserves recovery") {
+    Opportunity value{true, true, true, true, false, false, false, true, 100, 0, 150, 390, 0};
+    CHECK(Select(value, true, true) == Kind::Power);
+    CHECK(Select(value, true, false) == Kind::Normal);
+    CHECK(Select(value, false, true) == Kind::Normal);
+    value.stamina = 130;
+    CHECK(Select(value, true, true) == Kind::Normal);
+    value.stamina = 100;
+    CHECK(Select(value, true, true) == Kind::Off);
+    value.stamina = 390;
+    value.recovering = true;
+    CHECK(Select(value, true, true) == Kind::Off);
+    value.recovering = false;
+    value.targetWindingUp = false;
+    CHECK(Select(value, true, true) == Kind::Off);
+}

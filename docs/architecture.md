@@ -40,14 +40,33 @@ and regeneration steps. `combat/Healer.cpp` coordinates execution and receipts.
 repositioning from ordinary snapshots. `ShieldDefender` coordinates each follower's
 style and movement; the combat worker hook reconciles style ownership against a
 fresh published decision. Ordinary attacks and combos remain with combat AI.
+Recovery takes priority over pursuit and counterattacks. Without an imminent
+attack it creates breathing room, then stops retreating and lowers the shield;
+committed attacks retain their defensive response. Tactical bashes preserve the
+recovery state, stamina reserve and cooldown. Power bash requires heavy melee
+preparation and live engine eligibility, with normal bash as the fallback.
+Recovery permission blocks new offensive selections through external attack
+handoffs while preserving the current action. Safe gaps reject discretionary
+shield raises. Neither filter cancels an accepted action or invents completion.
+
+`combat/actions/Taunt` coordinates a targeted challenge using effect application
+and the observed combat target as acknowledgement. `TauntRules.h` owns eligibility,
+duration, cooldown and failure rules. The isolated `integrations/TargetPreference`
+backend chains the engine's target eligibility check and consumes an expiring
+immutable snapshot. It never makes an otherwise invalid target eligible or writes
+combat target fields directly. Ending ownership clears the preference.
 
 `DefenderMovement` owns eight independent marker/package slots. It checks loaded
 navmesh, direct clearance and other threats before applying a bounded movement
 intent. Skyrim performs route finding. Failed movement yields to ordinary combat
 AI; neither navmesh projection nor a selected package proves arrival. Movement
 releases on restrictions, role changes and loss of combat eligibility.
-Actor displacement drives progress checks. Stalled destinations are temporarily
-excluded; bounded lateral waypoints can open a route around an obstruction, and
+Movement destinations use the engine's combat HoldPosition procedure. Approach
+requests start beyond 256 units and release within 192 to avoid threshold churn.
+Actor displacement drives progress checks. Retreat and lateral refreshes revalidate
+an unfinished waypoint rather than continuously moving it ahead of the actor. Recovery spacing
+has a release margin to reduce acquisition churn. Stalled destinations are
+temporarily excluded; bounded lateral waypoints can open a route around an obstruction, and
 repeated failure yields to ordinary AI. Body-width rays at two heights screen
 clearance without claiming a capsule sweep. Guard preparation and observed guards
 use walking packages. Acquisition checks actual displacement speed, sprint state
@@ -55,6 +74,12 @@ and weapon readiness; releasing a package does not prove that the actor stopped.
 Hostile spells with a live current spell in startup/ready/charging states count
 as preparation. Idle equipped spells and unknown/interrupt states do not establish
 an imminent cast, and release does not establish projectile-flight timing.
+
+`include/DefenderTuning.h` defines the sized test-profile transport and validation rules.
+The main-thread `combat/DefenderTuning.h` scope binds one immutable profile to an actor/run token
+before combat. Movement, recovery and guard eligibility read that scope; other
+actors use the default parameters. Teardown and game-state invalidation release
+the scope. Test reports capture the applied profile independently of later edits.
 
 `combat/actions/Dispatch` owns experimental native action dispatch, resolved
 intent validation and dispatch receipts for guard, release and bashes. Its hooks

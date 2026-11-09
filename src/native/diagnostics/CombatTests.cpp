@@ -5,6 +5,11 @@
 #include "combat/CombatOrders.h"
 #include "combat/ShieldDefender.h"
 #include "combat/DefenderActions.h"
+#include "combat/actions/Evade.h"
+#include "combat/actions/Taunt.h"
+#include "combat/DefenderMovement.h"
+#include "combat/HealerPackages.h"
+#include "RE/E/ExtraAliasInstanceArray.h"
 #include "combat/integrations/Precision.h"
 #include "followers/ControllerRuntime.h"
 #include "settings/Settings.h"
@@ -12,6 +17,21 @@
 
 namespace mod::debug {
     namespace {
+        static_assert(static_cast<std::uint32_t>(defender_tactics::Kind::Unknown) ==
+                      static_cast<std::uint32_t>(yliwf::testing::ThreatKind::Unknown));
+        static_assert(static_cast<std::uint32_t>(defender_tactics::Kind::Melee) ==
+                      static_cast<std::uint32_t>(yliwf::testing::ThreatKind::Melee));
+        static_assert(static_cast<std::uint32_t>(defender_tactics::Kind::HeavyMelee) ==
+                      static_cast<std::uint32_t>(yliwf::testing::ThreatKind::HeavyMelee));
+        static_assert(static_cast<std::uint32_t>(defender_tactics::Kind::Bow) ==
+                      static_cast<std::uint32_t>(yliwf::testing::ThreatKind::Bow));
+        static_assert(static_cast<std::uint32_t>(defender_tactics::Kind::Projectile) ==
+                      static_cast<std::uint32_t>(yliwf::testing::ThreatKind::Projectile));
+        static_assert(static_cast<std::uint32_t>(defender_tactics::Kind::Concentration) ==
+                      static_cast<std::uint32_t>(yliwf::testing::ThreatKind::Concentration));
+        static_assert(static_cast<std::uint32_t>(defender_tactics::Kind::Area) ==
+                      static_cast<std::uint32_t>(yliwf::testing::ThreatKind::Area));
+
         RE::BGSRefAlias* TestAlias(RE::Actor* actor) {
             auto* data = RE::TESDataHandler::GetSingleton();
             auto* quest = data ? data->LookupForm<RE::TESQuest>(0x750BA, "Skyrim.esm") : nullptr;
@@ -134,7 +154,7 @@ namespace mod::debug {
             output->heading = state.heading;
             output->stamina = state.stamina;
             output->maximumStamina = state.maximumStamina;
-            output->guardRemaining = state.guardRemaining;
+            output->guardRemaining = 0;  // Preserve the transport slot; tactics have no guard-hold timer.
             output->age = state.age;
             output->intent = static_cast<std::uint32_t>(state.tactic.intent);
             output->motion = static_cast<std::uint32_t>(state.tactic.motion);
@@ -143,6 +163,20 @@ namespace mod::debug {
             output->threatVisible = state.threatVisible;
             output->threatAttacking = state.threatAttacking;
             output->threatPreparing = state.threatPreparing;
+            output->flightReadable = state.flightReadable;
+            output->projectileGap = state.projectileGap;
+            output->incomingProjectiles = state.incomingProjectiles;
+            output->projectilesExamined = state.projectilesExamined;
+            const auto evade = combat_actions::evade::Inspect(id);
+            output->evadeAvailable = evade.available;
+            output->evadePhase = evade.phase;
+            output->evadeRequests = evade.requests;
+            output->evadeAccepted = evade.accepted;
+            output->evadeObserved = evade.observed;
+            output->evadeCompleted = evade.completed;
+            output->evadeRejected = evade.rejected;
+            output->evadeTimeouts = evade.timeouts;
+            output->evadeDisplacement = evade.displacement;
             output->moving = state.moving;
             output->movementStalls = state.movement.stalls;
             output->movementDetours = state.movement.detours;
@@ -167,9 +201,32 @@ namespace mod::debug {
             output->weaponReach = contacts.reach;
             output->precisionIncoming = contacts.incoming;
             output->precisionOutgoing = contacts.outgoing;
+            output->precisionPreCallbacks = contacts.preCallbacks;
+            output->precisionPreOutgoing = contacts.preOutgoing;
+            output->precisionLastCandidate = contacts.lastCandidate;
+            output->precisionActorActive = contacts.active;
+            const auto body = precision::Observe(RE::TESForm::LookupByID<RE::Actor>(state.threat));
+            output->precisionThreatActive = body.active;
+            output->precisionThreatControllerHittable = body.controllerHittable;
+            const auto taunt = combat_actions::taunt::Inspect(id);
+            output->tauntAvailable = taunt.available;
+            output->tauntPhase = static_cast<std::uint32_t>(taunt.state.phase);
+            output->tauntEnemy = taunt.state.enemy;
+            output->tauntSpell = taunt.spell;
+            output->tauntRequests = taunt.state.requests;
+            output->tauntObserved = taunt.state.observed;
+            output->tauntUnobserved = taunt.state.unobserved;
+            output->tauntReleased = taunt.state.released;
+            output->tauntCancelled = taunt.state.cancelled;
+            output->tauntTargetRejections = taunt.targetRejections;
+            output->tauntEffectPresent = taunt.effectPresent;
+            output->tauntRemaining = taunt.state.remaining;
+            output->tauntCooldown = taunt.state.cooldown;
             const auto* controller = actor ? actor->GetActorRuntimeData().combatController : nullptr;
             output->liveStyle = controller && controller->combatStyle ? controller->combatStyle->GetFormID() : 0;
             const auto actions = defender_actions::Inspect(id);
+            output->casterBashRequests = actions.casterBashRequests;
+            output->casterBashCompleted = actions.casterBashCompleted;
             output->actionAvailable = actions.available;
             output->actionMode = actions.mode;
             output->guardPhase = actions.phase;
@@ -259,10 +316,33 @@ namespace mod::debug {
     }
 
     namespace {
-        std::uint32_t BeginDefense(std::uint32_t actor, std::uint32_t mode, std::uint32_t token) {
-            if (!IsCurrentGame(Generation()) || !TestAlias(RE::TESForm::LookupByID<RE::Actor>(actor)))
+        std::uint32_t CombatPackage(std::uint32_t id) {
+            auto* actor = RE::TESForm::LookupByID<RE::Actor>(id);
+            auto* alias = TestAlias(actor);
+            auto* instances = actor ? actor->extraList.GetByType<RE::ExtraAliasInstanceArray>() : nullptr;
+            if (!IsCurrentGame(Generation()) || !alias || !instances)
                 return 0;
-            return defender_actions::Begin(actor, mode, token);
+            std::vector<RE::TESPackage*> candidates;
+            {
+                RE::BSReadLockGuard guard(instances->lock);
+                for (const auto* instance : instances->aliases)
+                    if (instance && instance->alias == alias && instance->instancedPackages)
+                        for (auto* package : *instance->instancedPackages)
+                            if (package && candidates.size() < 128 &&
+                                (defender_movement::Owned(package) || healer_packages::OwnsPackage(package)))
+                                candidates.push_back(package);
+            }
+            for (auto* package : candidates)
+                if (package->packConditions.IsTrue(actor, RE::PlayerCharacter::GetSingleton()))
+                    return package->GetFormID();
+            return 0;
+        }
+
+        std::uint32_t BeginDefense(std::uint32_t actor, std::uint32_t mode, std::uint32_t token) {
+            if (mode != yliwf::testing::DefenderControl || !IsCurrentGame(Generation()) ||
+                !TestAlias(RE::TESForm::LookupByID<RE::Actor>(actor)))
+                return 0;
+            return defender_actions::Begin(actor, token);
         }
 
         std::uint32_t BeginDirect(std::uint32_t actor, std::uint32_t token) {
@@ -296,7 +376,10 @@ namespace mod::debug {
                                                defender_actions::AttackRequest,
                                                defender_actions::AttackAnimation,
                                                sizeof(yliwf::testing::DefenderObservation),
-                                               defender_actions::SetMovementBounds};
+                                               defender_actions::SetMovementBounds,
+                                               defender_actions::SetTuning,
+                                               CombatPackage,
+                                               defender_actions::SetEvadeBackend};
         return &host;
     }
 }

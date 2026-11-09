@@ -1,10 +1,14 @@
 #include "DefenderActions.h"
+#include "actions/Evade.h"
+#include "actions/Taunt.h"
 #include "DefenderActionRules.h"
 #include "DefensiveBashRules.h"
+#include "DefenderCastingRules.h"
 #include "actions/Samples.h"
 #include "actions/Dispatch.h"
 #include "ShieldDefender.h"
 #include "DefenderMovement.h"
+#include "DefenderTuning.h"
 #include "CombatRoles.h"
 #include "CombatOrders.h"
 #include "followers/QuestPolicies.h"
@@ -28,12 +32,13 @@ namespace mod::defender_actions {
 
         struct Lease {
             std::uint32_t actor = 0, token = 0, readyEpoch = 0;
-            Mode mode = Mode::Styles;
             combat_actions::GuardExecution guard;
             bool closing = false, armed = true, fault = false;
             bool direct = false, directGuard = false, directBash = false, directAttack = false;
             bool dodgeDeferred = false, dodgeInterrupted = false, dodgeCleanupCompleted = false;
             bool attackDeferred = false, attackInterrupted = false, attackCleanupCompleted = false;
+            bool recoverySuppression = false, safeRecoveryGap = false;
+            bool casterBash = false;
             float cooldown = 0, bashCooldown = 0;
             MovementHandoff movementHandoff;
             RE::NiPoint3 previousPosition{};
@@ -41,6 +46,7 @@ namespace mod::defender_actions {
             Clock::time_point lastTick{};
             Observation observation;
             defensive_bash_rules::Kind bashKind = defensive_bash_rules::Kind::Off;
+            defensive_bash_rules::Kind bashCapability = defensive_bash_rules::Kind::Off;
             std::uint32_t bashIdle = 0, bashGate = 0;
         } lease;
 
@@ -125,6 +131,8 @@ namespace mod::defender_actions {
                             "Native bash interrupted; cleanup confirmed and control returned.";
                     } else {
                         ++lease.observation.nativeBashCompleted;
+                        if (lease.casterBash)
+                            ++lease.observation.casterBashCompleted;
                         if (lease.bashKind == defensive_bash_rules::Kind::Power)
                             ++lease.observation.powerBashCompleted;
                         lease.observation.bashStatus = "Native defensive bash completed; control returned.";
@@ -147,7 +155,8 @@ namespace mod::defender_actions {
         }
 
         void Publish(bool value) {
-            combat_actions::PublishSuppression(value);
+            combat_actions::PublishSuppression(value, lease.recoverySuppression && !lease.closing && !lease.fault,
+                                               lease.safeRecoveryGap && !lease.closing && !lease.fault);
         }
 
         bool Managed(RE::Actor* actor) {
@@ -167,6 +176,7 @@ namespace mod::defender_actions {
 
         void Pump() {
             lease.observation.prepareGuardMovement = false;
+            lease.recoverySuppression = lease.safeRecoveryGap = false;
             if (!combat_actions::Active())
                 return;
             if (lease.guard.Read().phase == Phase::Fault) {
@@ -203,12 +213,22 @@ namespace mod::defender_actions {
                               : combat_roles::Read(actor) == combat_roles::Role::ShieldDefender && defender.requested &&
                                     defender.owned && !defender.yielded && defender.age >= 0 && defender.age <= 0.25f);
             const bool live = valid && !lease.closing && !lease.fault;
+            const bool challengeEnabled = defender_tuning::TestScope.Read(lease.actor).challengeEnabled != 0;
+            combat_actions::taunt::Update(actor, defender, delta, live && !lease.direct && challengeEnabled);
+            lease.recoverySuppression = live && !lease.direct && defender.recovering;
+            lease.safeRecoveryGap = lease.recoverySuppression && !defender.committed && defender.threatVisible &&
+                                    !defender.threatAttacking && !defender.threatPreparing;
             if (!live)
                 Publish(false);
             bool dodgeValue = false;
             const bool dodgeReadable = actor && actor->GetGraphVariableBool("bIsDodging", dodgeValue);
-            const bool dodging = ActiveDodge(dodgeReadable, dodgeValue);
             const bool external = combat_actions::ExternalActive();
+            const bool evading = combat_actions::evade::Update(
+                actor, defender, delta, live && !lease.direct,
+                lease.guard.Read().phase == Phase::Idle && !external &&
+                    bashExecution.Phase() == combat_actions::bash_rules::Phase::Idle &&
+                    attackExecution.Phase() == combat_actions::attack_rules::Phase::Idle && !lease.dodgeInterrupted);
+            const bool dodging = ActiveDodge(dodgeReadable, dodgeValue);
             if (GuardInterrupted(lease.guard.Read().phase, dodging) && !lease.dodgeInterrupted) {
                 lease.dodgeInterrupted = true;
                 lease.dodgeCleanupCompleted = false;
@@ -220,12 +240,12 @@ namespace mod::defender_actions {
                 ++lease.observation.attackInterruptions;
             }
             const bool guardOpportunity =
-                live && Guard(lease.mode) && !lease.observation.guardSuspended &&
+                live && !lease.observation.guardSuspended &&
                 (lease.direct ? lease.directGuard
                               : defender.committed && defender.targeting && defender.distance >= 0 &&
                                     std::abs(defender.heading) <= 80);
-            const bool wanted =
-                guardOpportunity && !dodging && !lease.dodgeInterrupted && !external && !lease.attackInterrupted;
+            const bool wanted = guardOpportunity && !dodging && !evading && !lease.dodgeInterrupted && !external &&
+                                !lease.attackInterrupted;
             float speed = -1;
             if (actor && lease.positionKnown && delta > 0)
                 speed = actor->GetPosition().GetDistance(lease.previousPosition) / delta;
@@ -234,12 +254,13 @@ namespace mod::defender_actions {
                 lease.positionKnown = true;
             }
             lease.observation.locomotionSpeed = speed;
+            const auto tuning = defender_tuning::TestScope.Read(lease.actor);
             lease.observation.locomotionReady =
                 actor && GuardLocomotionReady(speed, actor->AsActorState()->IsSprinting(),
-                                              actor->AsActorState()->IsWeaponDrawn());
+                                              actor->AsActorState()->IsWeaponDrawn(), tuning.guardSpeed);
             const auto guardPhase = lease.guard.Read().phase;
             lease.movementHandoff.Update(delta, live, lease.direct, wanted, lease.armed, lease.cooldown == 0,
-                                         guardPhase, !lease.observation.locomotionReady);
+                                         guardPhase, !lease.observation.locomotionReady, tuning.guardSettle);
             lease.observation.prepareGuardMovement = lease.movementHandoff.Preparing();
             const bool deferred = guardOpportunity && dodging && lease.guard.Read().phase == Phase::Idle;
             if (deferred && !lease.dodgeDeferred)
@@ -267,11 +288,11 @@ namespace mod::defender_actions {
                 return;
             }
             if (ObserveAttack(actor, delta)) {
-                Publish(!lease.fault && Gate(lease.mode) && !dodging && !external);
+                Publish(!lease.fault && !dodging && !external);
                 return;
             }
             if (ObserveBash(actor, delta)) {
-                Publish(!lease.fault && Gate(lease.mode) && !dodging && !external);
+                Publish(!lease.fault && !dodging && !external);
                 return;
             }
             const auto sample = combat_actions::ReadGuard(actor);
@@ -350,18 +371,35 @@ namespace mod::defender_actions {
                     lease.observation.status = lease.observation.rightAttackStatus =
                         "Right-hand dispatch unconfirmed; no request replayed.";
                 }
-                Publish(!lease.fault && Gate(lease.mode));
+                Publish(!lease.fault);
                 return;
             }
             auto target = RE::TESForm::LookupByID<RE::Actor>(defender.threat);
-            const bool windingUp = target && target->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kDraw;
+            bool castingWindup = false;
+            if (target && target->GetActorRuntimeData().currentCombatTarget.get().get() == actor &&
+                defender.threatPreparing && defender.tactic.interrupt &&
+                defender_tactics::Magic(static_cast<defender_tactics::Kind>(defender.threatKind)))
+                for (const auto hand :
+                     {RE::MagicSystem::CastingSource::kLeftHand, RE::MagicSystem::CastingSource::kRightHand})
+                    if (const auto* caster = target->GetMagicCaster(hand);
+                        caster && caster->currentSpell &&
+                        (caster->currentSpell->IsHostile() ||
+                         std::ranges::any_of(caster->currentSpell->effects,
+                                             [](const auto* effect) {
+                                                 return effect && effect->baseEffect && effect->baseEffect->IsHostile();
+                                             })) &&
+                        defender_casting_rules::Observe(true, static_cast<std::uint32_t>(caster->state.get())) ==
+                            defender_casting_rules::Activity::Preparing)
+                        castingWindup = true;
+            const bool windingUp =
+                target && (target->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kDraw || castingWindup);
             auto* values = actor->AsActorValueOwner();
             const float bashStamina = values->GetActorValue(RE::ActorValue::kStamina);
             const float bashMaximum =
                 values->GetPermanentActorValue(RE::ActorValue::kStamina) +
                 actor->GetActorValueModifier(RE::ACTOR_VALUE_MODIFIER::kTemporary, RE::ActorValue::kStamina);
             const defensive_bash_rules::Opportunity bash{
-                lease.bashKind != defensive_bash_rules::Kind::Off,
+                lease.bashCapability != defensive_bash_rules::Kind::Off,
                 live,
                 lease.guard.Read().phase == Phase::Holding,
                 blockReadable && blocking,
@@ -374,13 +412,33 @@ namespace mod::defender_actions {
                 bashStamina,
                 bashMaximum,
                 lease.bashCooldown,
-                lease.bashKind};
+                lease.bashKind,
+                defender.recovering};
             const bool directBashReady = lease.directBash && live && lease.guard.Read().phase == Phase::Holding &&
                                          blockReadable && blocking && !reacting && !actor->IsAttacking() && !dodging &&
                                          !external && !lease.dodgeInterrupted && !lease.attackInterrupted;
-            if (lease.direct ? directBashReady : defensive_bash_rules::CanRequest(bash)) {
+            auto selectedBash = lease.bashKind;
+            if (!lease.direct) {
+                const bool powerEnabled =
+                    lease.bashCapability == defensive_bash_rules::Kind::Power &&
+                    defender.threatKind == static_cast<std::uint32_t>(defender_tactics::Kind::HeavyMelee);
+                auto powerOpportunity = bash;
+                powerOpportunity.kind = defensive_bash_rules::Kind::Power;
+                auto* powerIdle = RE::TESForm::LookupByID<RE::TESIdleForm>(lease.bashIdle);
+                auto* powerGate = RE::TESForm::LookupByID<RE::TESIdleForm>(lease.bashGate);
+                selectedBash = defensive_bash_rules::Select(
+                    bash, powerEnabled,
+                    powerEnabled && defensive_bash_rules::CanRequest(powerOpportunity) && powerIdle && powerGate &&
+                        powerGate->conditions.IsTrue(actor, nullptr) &&
+                        powerIdle->CheckConditions(actor, nullptr, false));
+            }
+            if (lease.direct ? directBashReady : selectedBash != defensive_bash_rules::Kind::Off) {
+                lease.bashKind = selectedBash;
                 lease.directBash = false;
                 ++lease.observation.nativeBashRequests;
+                lease.casterBash = !lease.direct && castingWindup;
+                if (lease.casterBash)
+                    ++lease.observation.casterBashRequests;
                 if (lease.bashKind == defensive_bash_rules::Kind::Power)
                     ++lease.observation.powerBashRequests;
                 lease.bashCooldown = defensive_bash_rules::Cooldown;
@@ -418,7 +476,7 @@ namespace mod::defender_actions {
                         lease.observation.status = "Native bash dispatch unconfirmed; no request replayed.";
                         lease.observation.bashStatus = lease.observation.status;
                     }
-                    Publish(!lease.fault && Gate(lease.mode));
+                    Publish(!lease.fault);
                     return;
                 }
             }
@@ -534,37 +592,41 @@ namespace mod::defender_actions {
             }
             const bool guardActive = blocking || lease.guard.Read().phase == Phase::StartPending ||
                                      lease.guard.Read().phase == Phase::Holding;
-            Publish(lease.direct
-                        ? live && !dodging && !external
-                        : Suppress(lease.mode, valid && !lease.closing && !lease.fault, defender.recovering,
-                                   !lease.observation.guardSuspended && defender.committed && guardActive, true,
-                                   dodging || lease.dodgeInterrupted || external || lease.attackInterrupted));
+            Publish(evading ||
+                    (lease.direct
+                         ? live && !dodging && !external
+                         : Suppress(valid && !lease.closing && !lease.fault, defender.recovering,
+                                    !lease.observation.guardSuspended && defender.committed && guardActive, true,
+                                    dodging || lease.dodgeInterrupted || external || lease.attackInterrupted)));
         }
     }
 
     void Install() {
         combat_actions::Install();
+        combat_actions::taunt::Configure();
     }
 
-    bool Begin(std::uint32_t actor, std::uint32_t mode, std::uint32_t token) {
+    bool Begin(std::uint32_t actor, std::uint32_t token) {
         std::lock_guard lock(mutex);
-        if (!actor || !token || !ValidMode(mode) || combat_actions::Active() ||
-            (mode && !combat_actions::Available().installed) || ((mode & 2) && !combat_actions::Available().process))
+        if (!actor || !token || combat_actions::Active() || !combat_actions::Available().installed ||
+            !combat_actions::Available().process)
             return false;
         lease = {};
         defender_movement::ClearTestBounds();
         bashExecution.Reset();
+        defender_tuning::TestScope.Begin(actor, token);
+        combat_actions::evade::Reset();
         attackExecution.Reset();
         lease.actor = actor;
         lease.token = token;
-        lease.mode = static_cast<Mode>(mode);
+        combat_actions::taunt::Begin(actor, token);
         lease.lastTick = Clock::now();
         combat_actions::Begin(actor, token);
         return true;
     }
 
     bool BeginDirect(std::uint32_t actor, std::uint32_t token) {
-        if (!Begin(actor, 3, token))
+        if (!Begin(actor, token))
             return false;
         std::lock_guard lock(mutex);
         lease.direct = true;
@@ -642,6 +704,9 @@ namespace mod::defender_actions {
         if (lease.actor != actor || lease.token != token)
             return 2;
         lease.closing = true;
+        combat_actions::taunt::End(actor, token);
+        combat_actions::evade::End(actor, token);
+        defender_tuning::TestScope.End(actor, token);
         defender_movement::ClearTestBounds();
         lease.directBash = lease.directGuard = lease.directAttack = false;
         if (bashExecution.Phase() != combat_actions::bash_rules::Phase::Idle)
@@ -669,7 +734,7 @@ namespace mod::defender_actions {
         Pump();
         if (lease.guard.Read().phase == Phase::Fault)
             return 2;
-        if (lease.guard.Read().phase != Phase::Idle ||
+        if (lease.guard.Read().phase != Phase::Idle || combat_actions::evade::Busy(actor) ||
             bashExecution.Phase() != combat_actions::bash_rules::Phase::Idle ||
             attackExecution.Phase() != combat_actions::attack_rules::Phase::Idle)
             return 0;
@@ -682,7 +747,8 @@ namespace mod::defender_actions {
     std::uint32_t SavedPhase(std::uint32_t actor, std::uint32_t token) {
         std::lock_guard lock(mutex);
         return lease.actor == actor && lease.token == token
-                   ? static_cast<std::uint32_t>((bashExecution.Phase() != combat_actions::bash_rules::Phase::Idle ||
+                   ? static_cast<std::uint32_t>((combat_actions::evade::Busy(actor) ||
+                                                 bashExecution.Phase() != combat_actions::bash_rules::Phase::Idle ||
                                                  attackExecution.Phase() != combat_actions::attack_rules::Phase::Idle)
                                                     ? Phase::Fault
                                                     : lease.guard.Read().phase)
@@ -695,7 +761,7 @@ namespace mod::defender_actions {
         if (!combat_actions::Active() || lease.actor != actor || lease.token != token || lease.closing ||
             lease.guard.Read().phase != Phase::Idle ||
             bashExecution.Phase() != combat_actions::bash_rules::Phase::Idle ||
-            attackExecution.Phase() != combat_actions::attack_rules::Phase::Idle || (kind && !Guard(lease.mode)) ||
+            attackExecution.Phase() != combat_actions::attack_rules::Phase::Idle ||
             kind > static_cast<std::uint32_t>(defensive_bash_rules::Kind::Power))
             return false;
         if (kind == static_cast<std::uint32_t>(defensive_bash_rules::Kind::Power)) {
@@ -708,6 +774,7 @@ namespace mod::defender_actions {
         } else if (idle || gate)
             return false;
         lease.bashKind = static_cast<defensive_bash_rules::Kind>(kind);
+        lease.bashCapability = lease.bashKind;
         lease.bashIdle = idle;
         lease.bashGate = gate;
         return true;
@@ -719,7 +786,7 @@ namespace mod::defender_actions {
         if (actor == lease.actor) {
             const auto counters = combat_actions::Inspect();
             result = lease.observation;
-            result.mode = static_cast<std::uint32_t>(lease.mode);
+            result.mode = yliwf::testing::DefenderControl;
             result.phase = static_cast<std::uint32_t>(lease.guard.Read().phase);
             result.bashPhase = static_cast<std::uint32_t>(bashExecution.Phase());
             result.rightAttackPhase = static_cast<std::uint32_t>(attackExecution.Phase());
@@ -750,6 +817,8 @@ namespace mod::defender_actions {
 
     void Invalidate() {
         std::lock_guard lock(mutex);
+        defender_tuning::TestScope = {};
+        combat_actions::evade::Reset();
         defender_movement::ClearTestBounds();
         combat_actions::Clear();
         bashExecution.Reset();
@@ -763,6 +832,23 @@ namespace mod::defender_actions {
             return false;
         return defender_movement::SetTestBounds(RE::TESForm::LookupByID<RE::Actor>(actor),
                                                 RE::TESForm::LookupByID<RE::TESObjectREFR>(anchor), radius);
+    }
+
+    bool SetTuning(std::uint32_t actor, std::uint32_t token, const yliwf::testing::DefenderTuning* value) {
+        std::lock_guard lock(mutex);
+        auto* subject = RE::TESForm::LookupByID<RE::Actor>(actor);
+        if (!value || !combat_actions::Active() || lease.actor != actor || lease.token != token || lease.closing ||
+            lease.fault || !subject || subject->IsInCombat())
+            return false;
+        return defender_tuning::TestScope.Configure(actor, token, *value);
+    }
+
+    bool SetEvadeBackend(std::uint32_t actor, std::uint32_t token, const yliwf::testing::EvadeBackend* value) {
+        std::lock_guard lock(mutex);
+        auto* subject = RE::TESForm::LookupByID<RE::Actor>(actor);
+        return value && combat_actions::Active() && lease.actor == actor && lease.token == token && !lease.closing &&
+               !lease.fault && subject && !subject->IsInCombat() &&
+               combat_actions::evade::Configure(actor, token, *value);
     }
 
     bool SetAttackCommitment(std::uint32_t actor, std::uint32_t token, std::uint32_t sequence,

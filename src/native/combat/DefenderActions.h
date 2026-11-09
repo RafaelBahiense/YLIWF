@@ -34,6 +34,7 @@ namespace mod::defender_actions {
                       powerBashRejected = 0, powerBashTimeouts = 0;
         std::uint32_t handoffAttackRejections = 0;
         std::uint32_t nativeBashInterrupted = 0, powerBashInterrupted = 0;
+        std::uint32_t casterBashRequests = 0, casterBashCompleted = 0;
         std::uint32_t bashGraphStarts = 0, bashGraphEnds = 0, bashNativeStarts = 0;
         std::uint32_t rightAttackRequests = 0, rightAttackAccepted = 0, rightAttackObserved = 0,
                       rightAttackCompleted = 0, rightAttackInterrupted = 0, rightAttackRejected = 0,
@@ -50,7 +51,7 @@ namespace mod::defender_actions {
     void Install();
     bool BeginDirect(std::uint32_t actor, std::uint32_t token);
     bool RequestDirect(std::uint32_t actor, std::uint32_t token, yliwf::testing::PrimitiveAction action);
-    bool Begin(std::uint32_t actor, std::uint32_t mode, std::uint32_t token);
+    bool Begin(std::uint32_t actor, std::uint32_t token);
     // 0 waiting, 1 finished, 2 unconfirmed release requiring manual review.
     std::uint32_t End(std::uint32_t actor, std::uint32_t token, std::uint32_t savedPhase);
     // Thread-safe and engine-free; may be read by a co-save callback.
@@ -60,6 +61,8 @@ namespace mod::defender_actions {
     bool HasWork();
     void Invalidate();
     bool SetMovementBounds(std::uint32_t actor, std::uint32_t token, std::uint32_t anchor, float radius);
+    bool SetTuning(std::uint32_t actor, std::uint32_t token, const yliwf::testing::DefenderTuning* value);
+    bool SetEvadeBackend(std::uint32_t actor, std::uint32_t token, const yliwf::testing::EvadeBackend* value);
     bool SetAttackCommitment(std::uint32_t actor, std::uint32_t token, std::uint32_t sequence,
                              yliwf::testing::AttackCommitment phase);
     bool SetDefensiveBash(std::uint32_t actor, std::uint32_t token, std::uint32_t kind, std::uint32_t idle,

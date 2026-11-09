@@ -10,7 +10,9 @@ namespace mod::precision {
     namespace {
         using Clock = std::chrono::steady_clock;
         PRECISION_API::IVPrecision1* api = nullptr;
+        PRECISION_API::IVPrecision3* bodyApi = nullptr;
         bool registered = false;
+        bool preRegistered = false;
 
         struct Entry {
             std::uint32_t actor = 0;
@@ -28,6 +30,19 @@ namespace mod::precision {
                 PRECISION_API::RequestPluginAPI(PRECISION_API::InterfaceVersion::V1));
         if (!api || registered)
             return;
+        bodyApi = static_cast<PRECISION_API::IVPrecision3*>(
+            PRECISION_API::RequestPluginAPI(PRECISION_API::InterfaceVersion::V3));
+        preRegistered = api->AddPreHitCallback(SKSE::GetPluginHandle(), [](const PRECISION_API::PrecisionHitData& hit) {
+            const auto source = hit.attacker ? hit.attacker->GetFormID() : 0;
+            const auto target = hit.target ? hit.target->GetFormID() : 0;
+            std::lock_guard lock(mutex);
+            for (auto& entry : entries)
+                if (entry.actor && entry.actor == source) {
+                    ++entry.observation.preOutgoing;
+                    entry.observation.lastCandidate = target;
+                }
+            return PRECISION_API::PreHitCallbackReturn{};
+        }) == PRECISION_API::APIResult::OK;
         const auto result = api->AddPostHitCallback(
             SKSE::GetPluginHandle(), [](const PRECISION_API::PrecisionHitData& hit, const RE::HitData&) {
                 const auto source = hit.attacker ? hit.attacker->GetFormID() : 0;
@@ -69,11 +84,17 @@ namespace mod::precision {
         selected->sampled = now;
         selected->observation.available = true;
         selected->observation.callbacks = registered;
+        selected->observation.preCallbacks = preRegistered;
         lock.unlock();
         const auto length = api->GetAttackCollisionCapsuleLength(
             actor->GetHandle(), PRECISION_API::RequestedAttackCollisionType::RightWeapon);
+        const auto active = bodyApi ? static_cast<std::int32_t>(bodyApi->IsActorActive(actor->GetHandle())) : -1;
+        const auto hittable =
+            bodyApi ? static_cast<std::int32_t>(bodyApi->IsActorCharacterControllerHittable(actor->GetHandle())) : -1;
         lock.lock();
         selected->observation.reach = std::isfinite(length) && length > 0 ? length : 0;
+        selected->observation.active = active;
+        selected->observation.controllerHittable = hittable;
         return selected->observation;
     }
 

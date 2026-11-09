@@ -8,6 +8,16 @@ namespace mod::combat_actions {
     enum class Dispatch : std::uint32_t { Accepted, Rejected, Unconfirmed };
     enum class LeftAction : std::uint32_t { Unknown, Block, Bash };
 
+    enum Suppression : std::uint32_t { SuppressOffense = 1, RecoveryOffense = 2, RecoveryGuard = 4 };
+
+    constexpr bool RejectNewOffense(std::uint32_t policy, bool fresh, bool externalActive) {
+        return fresh && ((policy & RecoveryOffense) || ((policy & SuppressOffense) && !externalActive));
+    }
+
+    constexpr bool RejectDiscretionaryGuard(std::uint32_t policy, bool fresh, bool owned, LeftAction action) {
+        return fresh && !owned && action == LeftAction::Block && (policy & RecoveryGuard);
+    }
+
     enum ValidationEvidence : std::uint32_t {
         InitialRejected = 1,
         InitialAllowed = 2,

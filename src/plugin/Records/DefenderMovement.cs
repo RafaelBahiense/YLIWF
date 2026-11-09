@@ -1,5 +1,6 @@
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
+using Noggog;
 
 internal static partial class FollowerPlugin
 {
@@ -15,12 +16,25 @@ internal static partial class FollowerPlugin
         });
         for (var index = 0; index < DefenderMovementSlots * 4; ++index)
         {
-            var package = CreateFormationTravelPackage(index % DefenderMovementSlots, alternate: false, id: 0xB00 + (uint)index);
-            package.EditorID = "YLIWF_DefenderMovement" + index;
-            package.Unknown = 3;
-            package.Flags |= Package.Flag.IgnoreCombat;
-            package.PreferredSpeed = index >= DefenderMovementSlots * 2 ? Package.Speed.Walk : Package.Speed.Run;
-            package.Conditions.Clear();
+            // HoldPosition gives the combat planner a destination. Travel/Wait
+            // takes locomotion away from that planner, including combat facing.
+            var package = new Package(OwnForm(0xB00 + (uint)index), SkyrimRelease.SkyrimSE)
+            {
+                EditorID = "YLIWF_DefenderMovement" + index,
+                Type = Package.Types.Package,
+                PackageTemplate = new FormLinkNullable<IPackageGetter>(SkyrimForm(0x503D0)),
+                InterruptOverride = Package.Interrupt.Combat,
+                Unknown = 130,
+                Flags = Package.Flag.PreferredSpeed | Package.Flag.AllowSwimming,
+                InterruptFlags = Package.InterruptFlag.FriendlyFireComments | Package.InterruptFlag.AggroRadiusBehavior,
+                PreferredSpeed = index >= DefenderMovementSlots * 2 ? Package.Speed.Walk : Package.Speed.Run,
+                ScheduleMonth = -1,
+                ScheduleDayOfWeek = Package.DayOfWeek.Any,
+                ScheduleHour = -1,
+                ScheduleMinute = -1,
+                DataInputVersion = 5,
+                XnamMarker = new MemorySlice<byte>([7])
+            }.WithUnusedScheduleBytes();
             package.Conditions.Add(new ConditionFloat
             {
                 Data = new GetFactionRankConditionData { Faction = { Link = { FormKey = DefenderMovementFaction } } },
@@ -45,11 +59,14 @@ internal static partial class FollowerPlugin
                 Data = new GetGlobalValueConditionData { Global = { Link = { FormKey = StandDownGlobalForm } } },
                 ComparisonValue = 0
             });
-            ((PackageDataLocation)package.Data[0]).Location = new LocationTargetRadius
+            package.Data.Add(0, new PackageDataLocation
             {
-                Target = new LocationTarget { Link = new FormLink<IPlacedGetter>(OwnForm(0xB20 + (uint)(index % DefenderMovementSlots))) },
-                Radius = 64
-            };
+                Location = new LocationTargetRadius
+                {
+                    Target = new LocationTarget { Link = new FormLink<IPlacedGetter>(OwnForm(0xB20 + (uint)(index % DefenderMovementSlots))) },
+                    Radius = 64
+                }
+            });
             mod.Packages.Add(package);
         }
     }

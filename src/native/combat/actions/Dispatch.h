@@ -43,7 +43,7 @@ namespace mod::combat_actions {
     Receipt Send(RE::Actor* actor, std::uint32_t token, Intent intent, std::uint32_t idle = 0, std::uint32_t gate = 0);
     Counters Inspect();
     std::uint32_t ForeignGuardEpoch();
-    void PublishSuppression(bool value);
+    void PublishSuppression(bool value, bool recovering = false, bool safeRecoveryGap = false);
 
     // Engine-free callback mailbox; never takes the caller's controller mutex.
     bool ExternalActive();

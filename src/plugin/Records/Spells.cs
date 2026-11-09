@@ -7,6 +7,7 @@ internal static partial class FollowerPlugin
     private static void AddSpells(SkyrimMod mod)
     {
         mod.Spells.Add(CreateCompanionProtectionAbility());
+        AddDefenderTaunt(mod);
     }
 
     private static Spell CreateCompanionProtectionAbility()

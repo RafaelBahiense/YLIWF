@@ -6,6 +6,7 @@ namespace RE {
     class Actor;
     class TESPackage;
     class TESObjectREFR;
+    class NiPoint3;
 }
 
 namespace mod::defender_movement {
@@ -30,4 +31,5 @@ namespace mod::defender_movement {
     bool SetTestBounds(RE::Actor* actor, RE::TESObjectREFR* anchor, float radius);
     void ClearTestBounds();
     void Release(RE::Actor* actor);
+    bool ClearEvade(RE::Actor* actor, const RE::NiPoint3& destination);
 }
